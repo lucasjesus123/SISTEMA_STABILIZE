@@ -130,6 +130,48 @@ REVOKE ALL ON FUNCTION auth_register_login_attempt(uuid, boolean, integer, integ
 GRANT EXECUTE ON FUNCTION auth_register_login_attempt(uuid, boolean, integer, integer) TO stabilize_app;
 
 -- ---------------------------------------------------------------------
+-- Resolve a sessão a partir do hash do refresh token.
+--
+-- Mesmo problema de ordem do login, e pela mesma razão: para definir
+-- `app.tenant_id` é preciso saber a empresa, e essa informação está em
+-- `user_sessions`, que é protegida por RLS justamente por tenant.
+--
+-- Sem esta função, a consulta roda sem contexto, a RLS devolve zero
+-- linhas e TODO refresh falha com 401 — o usuário é deslogado a cada 15
+-- minutos, quando o access token expira. O sintoma parece bug de sessão;
+-- a causa é a RLS funcionando exatamente como projetada.
+--
+-- Recebe o HASH, nunca o token: quem chama já calculou o SHA-256, então
+-- o valor original não transita até o banco nem aparece em log de query.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION auth_lookup_session(p_token_hash text)
+RETURNS TABLE (
+  session_id  uuid,
+  user_id     uuid,
+  tenant_id   uuid,
+  family_id   uuid,
+  expires_at  timestamptz,
+  revoked_at  timestamptz,
+  role        user_role,
+  is_active   boolean
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT s.id, s.user_id, s.tenant_id, s.family_id, s.expires_at, s.revoked_at,
+         u.role, (u.is_active AND t.is_active)
+    FROM user_sessions s
+    JOIN users u   ON u.id = s.user_id
+    JOIN tenants t ON t.id = s.tenant_id
+   WHERE s.token_hash = p_token_hash
+   LIMIT 1
+$$;
+
+REVOKE ALL ON FUNCTION auth_lookup_session(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION auth_lookup_session(text) TO stabilize_app;
+
+-- ---------------------------------------------------------------------
 -- Rotação de refresh token com detecção de reuso.
 --
 -- Se um refresh token JÁ USADO for apresentado de novo, a leitura mais
