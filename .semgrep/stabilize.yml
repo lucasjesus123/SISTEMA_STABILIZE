@@ -1,0 +1,181 @@
+# =====================================================================
+# Regras de análise estática específicas da Stabilize.
+#
+# Estas regras não substituem as do registry público — elas cobrem os
+# invariantes DESTE sistema, que nenhuma regra genérica conhece:
+# "toda query passa por withTenant", "nada de SQL montado por
+# concatenação", "escopo não é opcional".
+#
+# São o guarda-corpo que impede a arquitetura de segurança de ser
+# desfeita por engano seis meses depois, quando o contexto se perdeu.
+#
+# Uso:  semgrep --config .semgrep/stabilize.yml --metrics=off .
+# =====================================================================
+
+rules:
+  # -------------------------------------------------------------------
+  - id: sql-concatenado-com-variavel
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Query SQL montada por concatenação ou template string com variável.
+      Use parâmetros posicionais ($1, $2) e passe os valores no segundo
+      argumento de query(). Concatenar é injeção de SQL, e neste sistema
+      seria injeção no caminho que decide autorização.
+    patterns:
+      - pattern-either:
+          - pattern: "$CLIENT.query(`...${$X}...`, ...)"
+          - pattern: $CLIENT.query("..." + $X, ...)
+          - pattern: $CLIENT.query($A + $B, ...)
+      # Os fragmentos de escopo interpolam apenas o ÍNDICE do parâmetro e
+      # o alias da tabela, nunca dado do usuário — são a exceção legítima.
+      - pattern-not-inside: |
+          function studentScopeSql(...) { ... }
+      - pattern-not-inside: |
+          function professionalScopeSql(...) { ... }
+
+  # -------------------------------------------------------------------
+  - id: query-fora-do-contexto-de-tenant
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Query direto no pool, fora de withTenant(). Sem o contexto de
+      tenant definido, a RLS devolve zero linhas — ou, pior, se alguém
+      "consertar" isso conectando com papel privilegiado, devolve os
+      dados de todas as empresas. Use withTenant(); se a operação
+      realmente antecede a identificação do tenant, use
+      withoutTenantContext() e justifique.
+    patterns:
+      - pattern-either:
+          - pattern: getPool().query(...)
+          - pattern: pool.query(...)
+      - pattern-not-inside: |
+          export async function withTenant(...) { ... }
+      - pattern-not-inside: |
+          export async function withoutTenantContext(...) { ... }
+    paths:
+      exclude:
+        - '*.test.ts'
+
+  # -------------------------------------------------------------------
+  - id: set-de-tenant-em-escopo-de-sessao
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Contexto de tenant sendo definido em escopo de SESSÃO. Com o pool
+      de conexões, esse valor sobrevive ao request e passa a valer para
+      o próximo usuário que pegar a mesma conexão — vazamento entre
+      empresas, intermitente e quase impossível de reproduzir. Use
+      set_config(..., true) ou SET LOCAL.
+    pattern-either:
+      - pattern: $C.query("SET app.tenant_id = ...", ...)
+      - pattern: $C.query(`SET app.tenant_id...`, ...)
+      - pattern: $C.query('SELECT set_config($NAME, $VAL, false)', ...)
+
+  # -------------------------------------------------------------------
+  - id: segredo-com-valor-padrao
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Segredo com valor padrão. É assim que sistemas chegam em produção
+      com JWT_SECRET=changeme: funciona, ninguém percebe. O processo deve
+      recusar subir sem o segredo, não inventar um.
+    pattern-either:
+      - pattern: process.env.$KEY || "..."
+      - pattern: process.env[$KEY] || "..."
+      - pattern: process.env.$KEY ?? "..."
+      - pattern: process.env[$KEY] ?? "..."
+
+  # -------------------------------------------------------------------
+  - id: erro-original-na-resposta
+    languages: [typescript]
+    severity: WARNING
+    message: >-
+      Erro interno sendo enviado ao cliente. Stack trace, texto de query
+      e caminho de arquivo são mapa para quem está sondando o sistema.
+      Devolva uma mensagem escrita por nós e registre o original no log.
+    pattern-either:
+      - pattern: "$REPLY.send({ ..., error: $ERR.message, ... })"
+      - pattern: "$REPLY.send({ ..., stack: $ERR.stack, ... })"
+      - pattern: $REPLY.send($ERR)
+
+  # -------------------------------------------------------------------
+  - id: tenant-vindo-do-cliente
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      tenant_id sendo lido do request. O tenant vem SEMPRE do token
+      verificado. Aceitá-lo do corpo, da query string, do parâmetro de
+      rota ou de um cabeçalho permite ao usuário escolher de qual
+      empresa quer ler.
+    pattern-either:
+      - pattern: $REQ.body.tenantId
+      - pattern: $REQ.body.tenant_id
+      - pattern: $REQ.query.tenantId
+      - pattern: $REQ.query.tenant_id
+      - pattern: $REQ.params.tenantId
+      - pattern: $REQ.params.tenant_id
+      - pattern: $REQ.headers["x-tenant-id"]
+    paths:
+      exclude:
+        - '*.test.ts'
+
+  # -------------------------------------------------------------------
+  - id: caminho-de-arquivo-com-nome-do-usuario
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Caminho de arquivo composto com nome enviado pelo usuário. Um nome
+      como "../../etc/passwd" escapa do diretório de armazenamento. Use a
+      storage_key opaca gerada pelo servidor; o nome original serve só
+      como rótulo de exibição.
+    pattern-either:
+      - pattern: path.join($DIR, $REQ.body.filename, ...)
+      - pattern: path.join($DIR, $F.filename, ...)
+      - pattern: path.resolve($DIR, $F.originalname, ...)
+      - pattern: fs.$METHOD($DIR + $F.filename, ...)
+
+  # -------------------------------------------------------------------
+  - id: cors-liberado-para-qualquer-origem
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      CORS aberto para qualquer origem. Combinado com credenciais, isso
+      permite que qualquer site leia respostas autenticadas da API em
+      nome do usuário logado.
+    pattern-either:
+      - pattern: "{ ..., origin: true, ... }"
+      - pattern: "{ ..., origin: \"*\", ... }"
+    paths:
+      include:
+        - '*cors*'
+        - '*security*'
+        - '*app.ts'
+
+  # -------------------------------------------------------------------
+  - id: comparacao-de-segredo-sem-tempo-constante
+    languages: [typescript]
+    severity: WARNING
+    message: >-
+      Comparação de segredo com === . O tempo de resposta varia conforme
+      quantos caracteres coincidem, o que permite descobrir o valor byte
+      a byte. Use crypto.timingSafeEqual.
+    pattern-either:
+      - pattern: $A.token === $B
+      - pattern: $A.secret === $B
+      - pattern: $A.apiKey === $B
+      - pattern: $A.signature === $B
+
+  # -------------------------------------------------------------------
+  - id: dado-sensivel-em-log
+    languages: [typescript]
+    severity: WARNING
+    message: >-
+      Possível dado sensível em log. Senha, token e prontuário não podem
+      ir para o agregador de logs — de onde costumam vazar sem que
+      ninguém perceba, porque log não parece um banco de dados.
+    pattern-either:
+      - pattern: "$LOG.$LEVEL({ ..., password: $P, ... })"
+      - pattern: "$LOG.$LEVEL({ ..., passwordHash: $P, ... })"
+      - pattern: "$LOG.$LEVEL({ ..., token: $T, ... })"
+      - pattern: console.log($X.password)
