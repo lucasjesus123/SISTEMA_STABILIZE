@@ -1,0 +1,12 @@
+{
+  "name": "@stabilize/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "migrate": "./scripts/migrate.sh",
+    "test": "./scripts/test-isolation.sh",
+    "typecheck": "echo 'sem TypeScript neste pacote'",
+    "build": "echo 'sem build neste pacote'"
+  }
+}
