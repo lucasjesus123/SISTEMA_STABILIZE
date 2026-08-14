@@ -1,0 +1,24 @@
+{
+  "name": "stabilize",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de gestão da Stabilize — Clínica do Músculo",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "dev": "pnpm -r --parallel dev",
+    "db:up": "docker compose up -d postgres",
+    "db:migrate": "pnpm --filter @stabilize/db migrate",
+    "db:seed": "pnpm --filter @stabilize/db seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

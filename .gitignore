@@ -1,0 +1,43 @@
+# Dependências
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# Ambiente — NUNCA commitar segredos reais
+.env
+.env.*
+!.env.example
+
+# Uploads locais (anexos de alunos, exames) — dados sensíveis de saúde
+storage/
+uploads/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Cobertura e testes
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Editores / SO
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Prisma
+packages/db/prisma/*.db
+packages/db/prisma/*.db-journal
+
+# Relatórios PDF gerados em runtime
+tmp/
