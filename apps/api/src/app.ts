@@ -7,6 +7,7 @@ import authPlugin from './http/plugins/authenticate.js';
 import { registerErrorHandler } from './http/error-handler.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { studentsRoutes } from './modules/students/students.routes.js';
+import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
 import { withoutTenantContext } from './db/pool.js';
 
 /**
@@ -121,6 +122,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   // ------------------------------------------------------------------
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(studentsRoutes, { prefix: '/api/students' });
+  await app.register(scheduleRoutes, { prefix: '/api/schedule' });
 
   return app;
 }

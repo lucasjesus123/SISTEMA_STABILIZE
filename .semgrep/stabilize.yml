@@ -33,6 +33,19 @@ rules:
           function studentScopeSql(...) { ... }
       - pattern-not-inside: |
           function professionalScopeSql(...) { ... }
+      # Embutir o fragmento de escopo na cláusula WHERE é a forma prevista
+      # de usá-lo, então quem chama também precisa da exceção.
+      #
+      # LIMITAÇÃO CONHECIDA: estas duas exclusões valem para a query
+      # INTEIRA. Uma query que interpole o fragmento de escopo E, no mesmo
+      # texto, algum dado do usuário deixa de ser acusada. A convenção que
+      # segura isso é: `escopo.sql`, `where` e `condicoes` são os ÚNICOS
+      # nomes autorizados a entrar num template de SQL, e são sempre
+      # construídos no servidor. Qualquer outro valor vai como parâmetro
+      # posicional. Revisão de código verifica essa convenção; a regra
+      # cobre o resto.
+      - pattern-not: $CLIENT.query(`...${escopo.sql}...`, ...)
+      - pattern-not: $CLIENT.query(`...${where}...`, ...)
 
   # -------------------------------------------------------------------
   - id: query-fora-do-contexto-de-tenant
