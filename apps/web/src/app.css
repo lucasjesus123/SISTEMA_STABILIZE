@@ -1317,3 +1317,87 @@
   .prontuario-medidas-leitura { gap: var(--e-4); }
   .prontuario-imc { margin-left: 0; }
 }
+
+/* --- anexos --- */
+
+.anexo-envio {
+  padding-bottom: var(--e-5);
+  border-bottom: 1px solid var(--fio);
+  margin-bottom: var(--e-6);
+}
+
+/* O input de arquivo nativo é feio e inconsistente entre navegadores;
+   o <label> vira o alvo clicável e o input fica só para leitor de tela,
+   que continua anunciando "escolher arquivo" corretamente. */
+.anexo-alvo {
+  display: grid;
+  place-items: center;
+  gap: var(--e-1);
+  padding: var(--e-5);
+  border: 1px dashed var(--fio-forte);
+  border-radius: var(--raio);
+  color: var(--texto);
+  cursor: pointer;
+  transition: border-color var(--rapido) var(--saida), background var(--rapido) var(--saida);
+}
+.anexo-alvo:hover {
+  border-color: var(--teal-vivo);
+  background: var(--superficie-alta);
+}
+/* O foco fica no input escondido; sem isto, quem navega por teclado não
+   vê onde está. */
+#anexo-arquivo:focus-visible + .anexo-alvo {
+  outline: none;
+  border-color: var(--teal-vivo);
+  box-shadow: 0 0 0 3px var(--realce-teclado);
+}
+.anexo-alvo-dica { font-size: var(--t-xs); color: var(--texto-apoio); }
+
+.anexo-lista { list-style: none; margin: 0; padding: 0; }
+
+.anexo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-4);
+  padding: var(--e-4) 0;
+  border-bottom: 1px solid var(--fio);
+}
+.anexo-item:last-child { border-bottom: 0; }
+
+.anexo-icone { color: var(--menta-vivo); font-size: var(--t-lg); line-height: 1.2; }
+.anexo-corpo { display: grid; gap: 2px; flex: 1; min-width: 0; }
+
+.anexo-nome {
+  justify-self: start;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--texto);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--fio-forte);
+  text-underline-offset: 3px;
+  /* Nome longo não pode empurrar o botão de excluir para fora da tela. */
+  overflow-wrap: anywhere;
+}
+.anexo-nome:hover { text-decoration-color: var(--teal-vivo); }
+.anexo-nome:disabled { color: var(--texto-apoio); cursor: default; }
+
+.anexo-detalhe { font-size: var(--t-sm); color: var(--texto-apoio); }
+.anexo-descricao { font-size: var(--t-sm); color: var(--texto); }
+
+.anexo-confirma {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: var(--t-sm);
+  color: var(--erro);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 700px) {
+  .anexo-item { flex-wrap: wrap; }
+}

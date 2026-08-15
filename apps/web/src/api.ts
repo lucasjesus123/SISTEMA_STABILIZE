@@ -74,7 +74,12 @@ interface RespostaErro {
 
 async function bruto<T>(caminho: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body !== undefined) headers.set('Content-Type', 'application/json');
+  /* FormData define o próprio Content-Type, com a fronteira do
+     multipart embutida. Escrever "application/json" por cima faria o
+     servidor não achar a fronteira e recusar o upload inteiro. */
+  if (init.body !== undefined && !(init.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (accessToken !== null) headers.set('Authorization', `Bearer ${accessToken}`);
 
   const resposta = await fetch(caminho, {
@@ -405,3 +410,81 @@ export const editarEvolucao = (
     method: 'PATCH',
     body: JSON.stringify(dados),
   });
+
+/* --------------------------------------------------------------------
+ * Anexos
+ * ------------------------------------------------------------------ */
+
+export interface Anexo {
+  id: string;
+  nome: string;
+  tipo: string;
+  tamanhoBytes: number;
+  categoria: string | null;
+  descricao: string | null;
+  criadoEm: string;
+  enviadoPor: string | null;
+}
+
+export const buscarAnexos = (alunoId: string) =>
+  api<{ data: Anexo[] }>(`/api/students/${alunoId}/anexos`);
+
+export const enviarAnexo = (
+  alunoId: string,
+  arquivo: File,
+  extras: { categoria?: string; descricao?: string } = {},
+) => {
+  const corpo = new FormData();
+  if (extras.categoria !== undefined) corpo.append('categoria', extras.categoria);
+  if (extras.descricao !== undefined) corpo.append('descricao', extras.descricao);
+  // O arquivo por último: o servidor lê os campos de texto enquanto o
+  // fluxo caminha, e precisa deles antes de decidir o que fazer com os
+  // bytes.
+  corpo.append('arquivo', arquivo);
+
+  return api<{ data: { id: string } }>(`/api/students/${alunoId}/anexos`, {
+    method: 'POST',
+    body: corpo,
+  });
+};
+
+export const excluirAnexo = (alunoId: string, anexoId: string) =>
+  api<{ ok: boolean }>(`/api/students/${alunoId}/anexos/${anexoId}`, { method: 'DELETE' });
+
+/**
+ * Baixa o anexo.
+ *
+ * Não dá para usar um `<a href>` simples: o access token vive em
+ * memória e viaja no cabeçalho Authorization, que um link do navegador
+ * não envia. Então buscamos os bytes, montamos um endereço temporário
+ * e clicamos nele por baixo dos panos.
+ *
+ * O endereço é revogado logo depois — um blob vivo segura o arquivo
+ * inteiro na memória da aba, e prontuário não é coisa para ficar
+ * pendurada ali.
+ */
+export async function baixarAnexo(alunoId: string, anexoId: string, nome: string): Promise<void> {
+  const resposta = await fetch(`/api/students/${alunoId}/anexos/${anexoId}/conteudo`, {
+    headers: accessToken === null ? {} : { Authorization: `Bearer ${accessToken}` },
+    credentials: 'same-origin',
+  });
+
+  if (!resposta.ok) {
+    if (resposta.status === 401 && (await renovar())) {
+      return baixarAnexo(alunoId, anexoId, nome);
+    }
+    throw new ApiError(resposta.status, 'ERRO', 'Não foi possível baixar o anexo.');
+  }
+
+  const blob = await resposta.blob();
+  const endereco = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = endereco;
+    link.download = nome;
+    link.click();
+  } finally {
+    // setTimeout porque revogar no mesmo tick cancela o download no Safari.
+    setTimeout(() => URL.revokeObjectURL(endereco), 10_000);
+  }
+}

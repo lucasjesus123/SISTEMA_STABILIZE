@@ -118,6 +118,14 @@ rules:
       - metavariable-regex:
           metavariable: $REPLY
           regex: ^(reply|res|response)$
+      # `send` também é como se devolve um fluxo de arquivo, e a regra
+      # acusava `reply.send(ler(...))` no download de anexo — o argumento
+      # precisa PARECER um erro para valer a acusação. A precisão importa:
+      # uma regra que grita em código correto é uma regra que as pessoas
+      # aprendem a ignorar, e aí ela não protege mais nada.
+      - metavariable-regex:
+          metavariable: $ERR
+          regex: ^(e|err|erro|error|exception|falha|ex)$
       # error-handler.ts é o ÚNICO lugar autorizado a formatar resposta de
       # erro, e tem teste dedicado garantindo que nenhuma resposta contém
       # stack trace, caminho de arquivo ou texto de SQL. Sem esta exclusão

@@ -21,7 +21,7 @@ import {
 } from './api.js';
 import { Carregando, Erro, GraficoLinha, Indicador, Vazio, reais, type Ponto } from './ui.jsx';
 import { Marca } from './Marca.jsx';
-import { AbaAnamnese, AbaEvolucao } from './Prontuario.jsx';
+import { AbaAnamnese, AbaAnexos, AbaEvolucao } from './Prontuario.jsx';
 import { SeletorTema, useTema } from './tema.jsx';
 
 /**
@@ -796,7 +796,7 @@ function Ficha({
   const [ficha, setFicha] = useState<FichaAluno | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [secao, setSecao] = useState<'cadastro' | 'anamnese' | 'evolucao'>('cadastro');
+  const [secao, setSecao] = useState<'cadastro' | 'anamnese' | 'evolucao' | 'anexos'>('cadastro');
 
   const pode = (p: string): boolean => principal.permissions.includes(p);
 
@@ -956,6 +956,13 @@ function Ficha({
       {secao === 'evolucao' && (
         <AbaEvolucao alunoId={f.id} podeEscrever={pode('evolution:write')} />
       )}
+      {secao === 'anexos' && (
+        <AbaAnexos
+          alunoId={f.id}
+          podeEnviar={pode('attachment:write')}
+          podeExcluir={pode('attachment:delete')}
+        />
+      )}
 
       {secao === 'cadastro' && (
       <div className="ficha-blocos">
@@ -1015,13 +1022,14 @@ function Ficha({
    interface, não segurança: as rotas exigem a permissão de qualquer
    forma, e quem chamar direto recebe 403. */
 const SECOES_FICHA: {
-  id: 'cadastro' | 'anamnese' | 'evolucao';
+  id: 'cadastro' | 'anamnese' | 'evolucao' | 'anexos';
   nome: string;
   permissao: string | null;
 }[] = [
   { id: 'cadastro', nome: 'Cadastro', permissao: null },
   { id: 'anamnese', nome: 'Anamnese', permissao: 'anamnesis:read' },
   { id: 'evolucao', nome: 'Evolução', permissao: 'evolution:read' },
+  { id: 'anexos', nome: 'Anexos', permissao: 'attachment:read' },
 ];
 
 function Campo({ rotulo, valor }: { rotulo: string; valor: string | null }): ReactNode {

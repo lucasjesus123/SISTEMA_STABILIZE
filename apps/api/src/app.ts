@@ -8,6 +8,8 @@ import { registerErrorHandler } from './http/error-handler.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { studentsRoutes } from './modules/students/students.routes.js';
 import { recordsRoutes } from './modules/records/records.routes.js';
+import { attachmentsRoutes } from './modules/attachments/attachments.routes.js';
+import multipart from '@fastify/multipart';
 import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
 import { financeRoutes } from './modules/finance/finance.routes.js';
 import { insightsRoutes } from './modules/insights/insights.routes.js';
@@ -83,6 +85,21 @@ export async function buildApp(): Promise<FastifyInstance> {
     parseOptions: {},
   });
 
+  /* Upload de anexos.
+     Os limites são a primeira linha de defesa, e são baratos: sem eles
+     um cliente manda um corpo de 4 GB ou 50 mil campos e derruba o
+     processo antes de qualquer código nosso rodar. Um arquivo por
+     requisição porque o prontuário anexa um documento de cada vez. */
+  await app.register(multipart, {
+    limits: {
+      fileSize: config.UPLOAD_MAX_BYTES,
+      files: 1,
+      fields: 8,
+      fieldSize: 2_000,
+      headerPairs: 200,
+    },
+  });
+
   await app.register(authPlugin);
 
   // Devolve o id da requisição para o cliente poder citá-lo no suporte.
@@ -128,6 +145,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   /* O prontuário vive sob /api/students porque uma anamnese não existe
      solta — existe DE um aluno, e é o aluno que passa pelo escopo. */
   await app.register(recordsRoutes, { prefix: '/api/students' });
+  await app.register(attachmentsRoutes, { prefix: '/api/students' });
   await app.register(scheduleRoutes, { prefix: '/api/schedule' });
   await app.register(financeRoutes, { prefix: '/api/finance' });
   await app.register(insightsRoutes, { prefix: '/api/insights' });

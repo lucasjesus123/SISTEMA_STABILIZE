@@ -1,13 +1,18 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Carregando, Vazio } from './ui.jsx';
 import {
   ApiError,
+  baixarAnexo,
   buscarAnamnese,
+  buscarAnexos,
+  enviarAnexo,
+  excluirAnexo,
   buscarEvolucoes,
   criarEvolucao,
   editarEvolucao,
   gravarAnamnese,
   type Anamnese,
+  type Anexo,
   type Evolucao,
   type VersaoAnamnese,
 } from './api.js';
@@ -557,4 +562,227 @@ function faixaDor(v: number): 'leve' | 'media' | 'alta' {
   if (v <= 3) return 'leve';
   if (v <= 6) return 'media';
   return 'alta';
+}
+
+/* ====================================================================
+ * Anexos
+ * ================================================================== */
+
+const CATEGORIAS: { valor: string; rotulo: string }[] = [
+  { valor: 'EXAME', rotulo: 'Exame' },
+  { valor: 'LAUDO', rotulo: 'Laudo' },
+  { valor: 'FOTO', rotulo: 'Foto' },
+  { valor: 'TERMO', rotulo: 'Termo' },
+  { valor: 'OUTRO', rotulo: 'Outro' },
+];
+
+export function AbaAnexos({
+  alunoId,
+  podeEnviar,
+  podeExcluir,
+}: {
+  alunoId: string;
+  podeEnviar: boolean;
+  podeExcluir: boolean;
+}): ReactNode {
+  const [itens, setItens] = useState<Anexo[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [categoria, setCategoria] = useState('EXAME');
+  const [descricao, setDescricao] = useState('');
+  const [baixando, setBaixando] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState<string | null>(null);
+  const entrada = useRef<HTMLInputElement>(null);
+
+  const carregar = async (): Promise<void> => {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const r = await buscarAnexos(alunoId);
+      setItens(r.data);
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Não foi possível carregar os anexos.');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  useEffect(() => {
+    void carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alunoId]);
+
+  const enviar = async (arquivo: File): Promise<void> => {
+    setEnviando(true);
+    setErro(null);
+    try {
+      await enviarAnexo(alunoId, arquivo, {
+        categoria,
+        ...(descricao.trim() === '' ? {} : { descricao: descricao.trim() }),
+      });
+      setDescricao('');
+      /* Limpa o input para que enviar O MESMO arquivo de novo dispare o
+         evento: sem isso, o `change` não ocorre e a segunda tentativa
+         parece travada. */
+      if (entrada.current !== null) entrada.current.value = '';
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Não foi possível enviar o arquivo.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const baixar = async (a: Anexo): Promise<void> => {
+    setBaixando(a.id);
+    setErro(null);
+    try {
+      await baixarAnexo(alunoId, a.id, a.nome);
+    } catch {
+      setErro('Não foi possível baixar o anexo.');
+    } finally {
+      setBaixando(null);
+    }
+  };
+
+  const excluir = async (a: Anexo): Promise<void> => {
+    setErro(null);
+    try {
+      await excluirAnexo(alunoId, a.id);
+      setConfirmando(null);
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Não foi possível excluir o anexo.');
+    }
+  };
+
+  return (
+    <section className="prontuario">
+      {erro !== null && (
+        <p className="mensagem-erro" role="alert">
+          {erro}
+        </p>
+      )}
+
+      {podeEnviar && (
+        <div className="anexo-envio formulario">
+          <label className="campo campo-terco">
+            <span className="campo-rotulo">Tipo</span>
+            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+              {CATEGORIAS.map((c) => (
+                <option key={c.valor} value={c.valor}>
+                  {c.rotulo}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Descrição</span>
+            <input
+              value={descricao}
+              placeholder="Ressonância de coluna, jan/2026"
+              onChange={(e) => setDescricao(e.target.value)}
+            />
+          </label>
+
+          <div className="campo campo-cheia">
+            <input
+              ref={entrada}
+              type="file"
+              className="apenas-leitor-de-tela"
+              id="anexo-arquivo"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+              onChange={(e) => {
+                const arquivo = e.target.files?.[0];
+                if (arquivo !== undefined) void enviar(arquivo);
+              }}
+            />
+            <label htmlFor="anexo-arquivo" className="anexo-alvo">
+              {enviando ? 'Enviando…' : 'Escolher arquivo'}
+              <span className="anexo-alvo-dica">PDF, Word ou imagem — até 20 MB</span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {carregando ? (
+        <Carregando rotulo="Carregando anexos" />
+      ) : itens.length === 0 ? (
+        <Vazio
+          titulo="Nenhum anexo."
+          descricao="Exames, laudos e fotos de avaliação ficam aqui, junto do prontuário."
+        />
+      ) : (
+        <ul className="anexo-lista">
+          {itens.map((a) => (
+            <li key={a.id} className="anexo-item">
+              <span className="anexo-icone" aria-hidden="true">
+                {a.tipo.startsWith('image/') ? '▣' : '▤'}
+              </span>
+
+              <div className="anexo-corpo">
+                <button
+                  type="button"
+                  className="anexo-nome"
+                  disabled={baixando === a.id}
+                  onClick={() => void baixar(a)}
+                >
+                  {baixando === a.id ? 'Baixando…' : a.nome}
+                </button>
+                <span className="anexo-detalhe">
+                  {a.categoria !== null && `${rotuloCategoria(a.categoria)} · `}
+                  {tamanho(a.tamanhoBytes)}
+                  {a.enviadoPor !== null && ` · ${a.enviadoPor}`}
+                  {` · ${formatarData(a.criadoEm)}`}
+                </span>
+                {a.descricao !== null && <span className="anexo-descricao">{a.descricao}</span>}
+              </div>
+
+              {podeExcluir &&
+                (confirmando === a.id ? (
+                  /* Confirmação inline, e com o nome do arquivo no texto:
+                     apagar aqui remove os bytes do disco, não manda para
+                     uma lixeira. Quem confirma precisa ler o que vai
+                     perder. */
+                  <span className="anexo-confirma">
+                    Apagar “{a.nome}” em definitivo?
+                    <button type="button" className="botao-texto" onClick={() => void excluir(a)}>
+                      apagar
+                    </button>
+                    <button
+                      type="button"
+                      className="botao-texto"
+                      onClick={() => setConfirmando(null)}
+                    >
+                      cancelar
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="botao-texto"
+                    onClick={() => setConfirmando(a.id)}
+                  >
+                    excluir
+                  </button>
+                ))}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function rotuloCategoria(v: string): string {
+  return CATEGORIAS.find((c) => c.valor === v)?.rotulo ?? v;
+}
+
+/** Tamanho legível. KB e MB bastam — anexo tem teto de 20 MB. */
+function tamanho(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
