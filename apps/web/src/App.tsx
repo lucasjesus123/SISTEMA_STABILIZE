@@ -446,14 +446,14 @@ function Gestao({ dados }: { dados: IndicadoresGestao }): ReactNode {
       <section className="bloco" aria-labelledby="titulo-risco">
         <h2 id="titulo-risco">Alunos que pararam de vir</h2>
         <p className="bloco-apoio">
-          Tinham frequência estabelecida e sumiram há mais de duas semanas, sem horário
-          marcado à frente. É a lista para ligar hoje.
+          Tinham frequência estabelecida e sumiram há mais de duas semanas. Quem já
+          remarcou aparece sinalizado — marcar não é comparecer.
         </p>
 
         {dados.emRisco.length === 0 ? (
           <Vazio
             titulo="Ninguém sumido no momento"
-            descricao="Todos os alunos com frequência estabelecida vieram nas últimas duas semanas ou já têm horário marcado."
+            descricao="Todos os alunos com frequência estabelecida vieram nas últimas duas semanas."
           />
         ) : (
           <ol className="lista-risco">
@@ -464,6 +464,7 @@ function Gestao({ dados }: { dados: IndicadoresGestao }): ReactNode {
                   <span className="risco-detalhe">
                     {a.presencasAnteriores} presenças nos últimos 90 dias
                     {a.profissional !== null && ` · ${a.profissional}`}
+                    {a.temHorarioMarcado && ' · já tem horário marcado'}
                   </span>
                 </div>
                 <span className="risco-dias tabular">

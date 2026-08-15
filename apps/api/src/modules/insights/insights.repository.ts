@@ -192,6 +192,8 @@ export interface AlunoEmRisco {
   presencasAnteriores: number;
   profissional: string | null;
   whatsapp: string | null;
+  /** Já tem horário marcado à frente. Baixa a urgência, não elimina. */
+  temHorarioMarcado: boolean;
 }
 
 /**
@@ -218,6 +220,7 @@ export async function alunosEmRisco(
     anteriores: number;
     profissional: string | null;
     whatsapp: string | null;
+    tem_horario: boolean;
   }>(
     `
     WITH historico AS (
@@ -239,7 +242,20 @@ export async function alunosEmRisco(
            (EXTRACT(EPOCH FROM (now() - h.ultima)) / 86400)::int AS dias,
            h.presencas_90d AS anteriores,
            u.full_name AS profissional,
-           s.whatsapp
+           s.whatsapp,
+           /* Horário marcado à frente BAIXA a urgência, mas não tira o
+              aluno da lista. A primeira versão excluía esses alunos, com
+              o raciocínio de que "quem marcou já voltou" — está errado:
+              marcar um horário não é comparecer, e a recepção às vezes
+              agenda por otimismo. Alguém sumido há 52 dias com aula
+              semana que vem continua sendo o telefonema mais importante
+              do dia; quem tria decide, com a informação na mão. */
+           EXISTS (
+             SELECT 1 FROM appointments f
+              WHERE f.student_id = s.id
+                AND f.status IN ('SCHEDULED', 'CONFIRMED')
+                AND lower(f.period) > now()
+           ) AS tem_horario
       FROM students s
       JOIN historico h ON h.student_id = s.id
       LEFT JOIN student_professionals sp
@@ -249,14 +265,6 @@ export async function alunosEmRisco(
        AND h.ultima IS NOT NULL
        AND h.presencas_90d >= 3
        AND h.ultima < now() - ($1 || ' days')::interval
-       /* Quem já tem horário marcado à frente não está sumido: está de
-          volta. Alertar sobre ele gastaria a atenção do dono à toa. */
-       AND NOT EXISTS (
-         SELECT 1 FROM appointments f
-          WHERE f.student_id = s.id
-            AND f.status IN ('SCHEDULED', 'CONFIRMED')
-            AND lower(f.period) > now()
-       )
      ORDER BY h.ultima ASC
      LIMIT 50
     `,
@@ -270,6 +278,7 @@ export async function alunosEmRisco(
     presencasAnteriores: Number(x.anteriores),
     profissional: x.profissional,
     whatsapp: x.whatsapp,
+    temHorarioMarcado: x.tem_horario === true,
   }));
 }
 

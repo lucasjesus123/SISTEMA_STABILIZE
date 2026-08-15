@@ -232,6 +232,7 @@ export interface AlunoEmRisco {
   presencasAnteriores: number;
   profissional: string | null;
   whatsapp: string | null;
+  temHorarioMarcado: boolean;
 }
 
 export interface IndicadoresGestao {
