@@ -395,3 +395,64 @@ button {
 .pular-para-conteudo:focus {
   top: var(--e-4);
 }
+
+/* =====================================================================
+   Tokens exclusivos da tela de entrada
+
+   Ficam separados porque a entrada é a única superfície do sistema com
+   licença para vidro, gradiente e brilho. Isolar evita que esses
+   valores vazem para as telas de trabalho por descuido.
+   ===================================================================== */
+
+:root {
+  /* CLARO — a mesma cena, em luz de dia. A aurora vira aquarela sobre
+     papel: mesma composição, mesma marca, sem virar um tema escuro
+     desbotado. */
+  --cena-fundo: #eef4f4;
+  --cartao-fundo: rgba(253, 254, 254, 0.82);
+  --cartao-borda: rgba(16, 22, 23, 0.08);
+  --pilula-fundo: rgba(255, 255, 255, 0.7);
+  --pilula-fundo-ativo: #ffffff;
+  --pilula-borda: #c3d2d2;
+  --pilula-borda-ativa: #8fb3b3;
+  --botao-entrar-texto: #08312f;
+
+  --aurora-opacidade: 0.55;
+  --aurora-1: #4bc1c8;
+  --aurora-2: #85cebd;
+  --aurora-3: #a9d9e0;
+}
+
+:root[data-tema='escuro'] {
+  --cena-fundo: #05090a;
+  --cartao-fundo: rgba(18, 26, 28, 0.72);
+  --cartao-borda: rgba(160, 220, 225, 0.14);
+  --pilula-fundo: rgba(255, 255, 255, 0.03);
+  --pilula-fundo-ativo: rgba(255, 255, 255, 0.06);
+  --pilula-borda: rgba(226, 245, 246, 0.42);
+  --pilula-borda-ativa: rgba(226, 245, 246, 0.7);
+  --botao-entrar-texto: #04211f;
+
+  --aurora-opacidade: 0.42;
+  --aurora-1: #1fb6a6;
+  --aurora-2: #2e7f8c;
+  --aurora-3: #14d1c4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema='claro']) {
+    --cena-fundo: #05090a;
+    --cartao-fundo: rgba(18, 26, 28, 0.72);
+    --cartao-borda: rgba(160, 220, 225, 0.14);
+    --pilula-fundo: rgba(255, 255, 255, 0.03);
+    --pilula-fundo-ativo: rgba(255, 255, 255, 0.06);
+    --pilula-borda: rgba(226, 245, 246, 0.42);
+    --pilula-borda-ativa: rgba(226, 245, 246, 0.7);
+    --botao-entrar-texto: #04211f;
+
+    --aurora-opacidade: 0.42;
+    --aurora-1: #1fb6a6;
+    --aurora-2: #2e7f8c;
+    --aurora-3: #14d1c4;
+  }
+}

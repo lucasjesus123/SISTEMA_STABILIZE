@@ -62,68 +62,207 @@
 }
 
 /* ---------------------------------------------------------------------
-   Entrada
+   Entrada — a cena
+
+   Um cartão flutuando sobre uma aurora. A luz aqui é permitida a mais
+   do que no resto do sistema, e de propósito: o login é um momento, não
+   uma tela de trabalho. Ninguém fica cinco horas nele.
+
+   A aurora é feita de três elipses MUITO desfocadas que derivam
+   devagar. Um gradiente radial parado — o atalho óbvio — sempre parece
+   adesivo colado no fundo; o que dá a sensação de fumaça é a
+   sobreposição de camadas com deslocamentos e tempos diferentes.
    ------------------------------------------------------------------- */
 
 .entrada {
+  position: relative;
   min-height: 100dvh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+  place-items: center;
+  padding: var(--e-5);
+  background: var(--cena-fundo);
+  overflow: hidden;
+  isolation: isolate;
 }
 
-.entrada-painel {
-  display: flex;
-  flex-direction: column;
+.aurora {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.aurora-faixa {
+  position: absolute;
+  border-radius: 50%;
+  /* O desfoque é grande o bastante para nunca se ler como "uma forma".
+     Abaixo de uns 70px começa a aparecer a elipse e o efeito morre. */
+  filter: blur(90px);
+  opacity: var(--aurora-opacidade);
+  will-change: transform;
+}
+
+.aurora-a {
+  width: 46vmax;
+  height: 34vmax;
+  right: -6vmax;
+  top: -10vmax;
+  background: var(--aurora-1);
+  animation: derivar-a 34s var(--saida-suave) infinite alternate;
+}
+
+.aurora-b {
+  width: 38vmax;
+  height: 44vmax;
+  right: 4vmax;
+  bottom: -14vmax;
+  background: var(--aurora-2);
+  animation: derivar-b 41s var(--saida-suave) infinite alternate;
+}
+
+.aurora-c {
+  width: 30vmax;
+  height: 30vmax;
+  left: -8vmax;
+  bottom: -4vmax;
+  background: var(--aurora-3);
+  animation: derivar-c 47s var(--saida-suave) infinite alternate;
+}
+
+/* Só transform: animar posição ou tamanho forçaria recálculo de layout
+   a cada quadro, e com blur de 90px isso derruba o quadro por segundo. */
+@keyframes derivar-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-7vmax, 6vmax, 0) scale(1.15); }
+}
+@keyframes derivar-b {
+  from { transform: translate3d(0, 0, 0) scale(1.1); }
+  to   { transform: translate3d(-10vmax, -7vmax, 0) scale(0.92); }
+}
+@keyframes derivar-c {
+  from { transform: translate3d(0, 0, 0) scale(0.95); }
+  to   { transform: translate3d(6vmax, -5vmax, 0) scale(1.2); }
+}
+
+/* A aurora fica PARADA para quem pediu menos movimento — o movimento
+   contínuo e periférico é justamente o que provoca desconforto. A cena
+   continua bonita: as camadas ficam nas posições iniciais. */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-faixa { animation: none; }
+}
+
+.entrada-cartao {
+  position: relative;
+  width: min(30rem, 100%);
+  padding: var(--e-7) clamp(var(--e-5), 6vw, var(--e-8)) var(--e-8);
+  border-radius: 22px;
+  background: var(--cartao-fundo);
+  border: 1px solid var(--cartao-borda);
+  box-shadow: var(--sombra-3);
+  /* Vidro de verdade, e só aqui: o cartão precisa deixar a aurora
+     passar por baixo para parecer apoiado sobre ela, e não colado por
+     cima. No resto do sistema não há blur nenhum. */
+  backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  text-align: center;
+}
+
+.entrada-cartao .marca {
   justify-content: center;
-  padding: var(--e-8) clamp(var(--e-6), 8vw, var(--e-9));
-  max-width: 34rem;
-  width: 100%;
+  width: fit-content;
   margin-inline: auto;
 }
 
 .entrada-titulo {
-  font-size: var(--t-xl);
-  /* Mais espaço acima do título do que abaixo: ele pertence ao que
-     introduz, não ao que veio antes. */
-  margin-top: var(--e-7);
-  margin-bottom: var(--e-2);
+  font-size: var(--t-lg);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-top: var(--e-6);
+  margin-bottom: var(--e-6);
+  color: var(--texto);
 }
 
-.entrada-apoio {
-  color: var(--texto-apoio);
+.entrada-tema {
+  display: flex;
+  justify-content: center;
   margin-bottom: var(--e-6);
 }
 
-/* A lateral é uma superfície de cor chapada com um único fio vertical
-   — a assinatura da marca sem recorrer a gradiente decorativo. */
-.entrada-lateral {
-  background: var(--superficie-baixa);
-  border-left: 1px solid var(--fio);
-  position: relative;
-}
-.entrada-lateral::after {
-  content: '';
-  box-shadow: var(--brilho-2);
-  position: absolute;
-  inset-block: 12%;
-  left: clamp(2rem, 18%, 8rem);
-  width: 1px;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    var(--teal-vivo) 18%,
-    var(--menta-vivo) 82%,
-    transparent
-  );
+/* ---------------------------------------------------------------------
+   Campo em pílula
+   ------------------------------------------------------------------- */
+
+.campo-pilula {
+  display: block;
+  margin-bottom: var(--e-4);
 }
 
-@media (max-width: 900px) {
-  .entrada {
-    grid-template-columns: 1fr;
-  }
-  .entrada-lateral {
-    display: none;
-  }
+.campo-pilula input {
+  width: 100%;
+  padding: var(--e-3) var(--e-5);
+  border: 1px solid var(--pilula-borda);
+  border-radius: 999px;
+  background: var(--pilula-fundo);
+  color: var(--texto);
+  font-size: var(--t-base);
+  text-align: left;
+  transition:
+    border-color var(--medio) var(--saida),
+    box-shadow var(--medio) var(--saida),
+    background var(--medio) var(--saida);
+}
+
+.campo-pilula input::placeholder {
+  color: var(--texto-apoio);
+}
+
+.campo-pilula input:hover {
+  border-color: var(--pilula-borda-ativa);
+}
+
+.campo-pilula input:focus {
+  outline: none;
+  border-color: var(--teal-vivo);
+  background: var(--pilula-fundo-ativo);
+  box-shadow: var(--brilho-1);
+}
+
+/* ---------------------------------------------------------------------
+   Botão de entrar
+
+   Gradiente teal → menta, o único do sistema. Num botão ele é
+   aceitável: a superfície é pequena, o texto por cima é curto, e a
+   forma comunica "aperte aqui". Em texto ou título seria decoração.
+   ------------------------------------------------------------------- */
+
+.botao-entrar {
+  min-width: 9rem;
+  margin-top: var(--e-5);
+  padding: var(--e-2) var(--e-6);
+  border-radius: 999px;
+  background: linear-gradient(105deg, var(--teal-vivo), var(--menta-vivo));
+  color: var(--botao-entrar-texto);
+  font-size: var(--t-base);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: var(--brilho-2);
+  transition:
+    filter var(--rapido) var(--saida),
+    transform var(--rapido) var(--saida),
+    box-shadow var(--medio) var(--saida);
+}
+.botao-entrar:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: var(--brilho-forte);
+}
+.botao-entrar:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.botao-entrar:disabled {
+  filter: grayscale(0.5) brightness(0.85);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 /* ---------------------------------------------------------------------

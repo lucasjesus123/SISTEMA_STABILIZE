@@ -91,23 +91,34 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
 
   return (
     <main className="entrada">
-      <div className="entrada-painel">
+      {/* A aurora é decoração pura, então some para leitor de tela. São
+          três camadas desfocadas que derivam lentamente — não um
+          gradiente radial parado, que é o atalho que sempre parece
+          adesivo colado no fundo. */}
+      <div className="aurora" aria-hidden="true">
+        <span className="aurora-faixa aurora-a" />
+        <span className="aurora-faixa aurora-b" />
+        <span className="aurora-faixa aurora-c" />
+      </div>
+
+      <div className="entrada-cartao">
         {/* O tema é escolhível ANTES de entrar: quem trabalha no escuro
             não deveria ter que atravessar uma tela clara para chegar lá. */}
         <div className="entrada-tema">
           <SeletorTema tema={tema} definir={definir} />
         </div>
 
-        <Marca tamanho={40} />
+        <Marca tamanho={34} />
 
         <h1 className="entrada-titulo">Acesso ao sistema</h1>
-        <p className="entrada-apoio">
-          Gestão da clínica, agenda e acompanhamento dos alunos.
-        </p>
 
         <form onSubmit={(e) => void enviar(e)} noValidate>
-          <label className="campo">
-            <span className="campo-rotulo">E-mail</span>
+          {/* O rótulo existe para leitor de tela mesmo com o campo em
+              pílula usando placeholder. Placeholder NÃO é rótulo: ele
+              some quando a pessoa começa a digitar, e quem usa leitor de
+              tela nunca o ouve como nome do campo. */}
+          <label className="campo-pilula">
+            <span className="apenas-leitor-de-tela">E-mail</span>
             <input
               type="email"
               value={email}
@@ -115,19 +126,19 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
               autoComplete="username"
               required
               autoFocus
-              placeholder="seu@email.com"
+              placeholder="E-mail"
             />
           </label>
 
-          <label className="campo">
-            <span className="campo-rotulo">Senha</span>
+          <label className="campo-pilula">
+            <span className="apenas-leitor-de-tela">Senha</span>
             <input
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               autoComplete="current-password"
               required
-              placeholder="••••••••••"
+              placeholder="Senha"
             />
           </label>
 
@@ -137,13 +148,11 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
             </p>
           )}
 
-          <button type="submit" className="botao-principal" disabled={enviando}>
-            {enviando ? 'Entrando…' : 'Entrar'}
+          <button type="submit" className="botao-entrar" disabled={enviando}>
+            {enviando ? 'entrando…' : 'entrar'}
           </button>
         </form>
       </div>
-
-      <aside className="entrada-lateral" aria-hidden="true" />
     </main>
   );
 }
