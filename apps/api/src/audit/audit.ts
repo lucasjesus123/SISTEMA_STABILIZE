@@ -36,6 +36,9 @@ export type AuditAction =
   | 'attachment.read'
   | 'attachment.upload'
   | 'attachment.delete'
+  // treino
+  | 'exercise.write'
+  | 'workout.write'
   // agenda
   | 'appointment.create'
   | 'appointment.update'

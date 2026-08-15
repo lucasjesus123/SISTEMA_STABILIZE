@@ -488,3 +488,91 @@ export async function baixarAnexo(alunoId: string, anexoId: string, nome: string
     setTimeout(() => URL.revokeObjectURL(endereco), 10_000);
   }
 }
+
+/* --------------------------------------------------------------------
+ * Treino
+ * ------------------------------------------------------------------ */
+
+export interface Exercicio {
+  id: string;
+  nome: string;
+  grupo: string;
+  equipamento: string | null;
+  instrucoes: string | null;
+  video: string | null;
+  ativo: boolean;
+}
+
+export interface ItemTreino {
+  id: string;
+  exercicioId: string;
+  exercicio: string;
+  grupo: string;
+  equipamento: string | null;
+  video: string | null;
+  dia: string;
+  posicao: number;
+  series: number | null;
+  repeticoes: string | null;
+  cargaG: number | null;
+  descansoSegundos: number | null;
+  observacoes: string | null;
+}
+
+export interface Treino {
+  id: string;
+  nome: string;
+  objetivo: string | null;
+  status: string;
+  inicioEm: string;
+  fimEm: string | null;
+  observacoes: string | null;
+  criadoEm: string;
+  profissional: { id: string; nome: string };
+  itens: ItemTreino[];
+}
+
+export const buscarExercicios = (busca?: string, grupo?: string) => {
+  const q = new URLSearchParams();
+  if (busca !== undefined && busca !== '') q.set('busca', busca);
+  if (grupo !== undefined && grupo !== '') q.set('grupo', grupo);
+  return api<{ data: Exercicio[] }>(`/api/exercises?${q.toString()}`);
+};
+
+export const buscarTreinos = (alunoId: string) =>
+  api<{ data: Omit<Treino, 'itens'>[] }>(`/api/students/${alunoId}/treinos`);
+
+export const buscarTreino = (alunoId: string, treinoId: string) =>
+  api<{ data: Treino }>(`/api/students/${alunoId}/treinos/${treinoId}`);
+
+export const criarTreino = (alunoId: string, dados: { nome: string; objetivo?: string }) =>
+  api<{ data: { id: string } }>(`/api/students/${alunoId}/treinos`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const adicionarItemTreino = (
+  alunoId: string,
+  treinoId: string,
+  dados: {
+    exercicioId: string;
+    dia?: string;
+    posicao?: number;
+    series?: number;
+    repeticoes?: string;
+    cargaKg?: number;
+    descansoSegundos?: number;
+  },
+) =>
+  api<{ data: { id: string } }>(`/api/students/${alunoId}/treinos/${treinoId}/itens`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const removerItemTreino = (alunoId: string, treinoId: string, itemId: string) =>
+  api<{ ok: boolean }>(`/api/students/${alunoId}/treinos/${treinoId}/itens/${itemId}`, {
+    method: 'DELETE',
+  });
+
+export const publicarTreino = (alunoId: string, treinoId: string) =>
+  api<{ ok: boolean }>(`/api/students/${alunoId}/treinos/${treinoId}/ativar`, { method: 'POST' });

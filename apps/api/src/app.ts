@@ -9,6 +9,7 @@ import { authRoutes } from './modules/auth/auth.routes.js';
 import { studentsRoutes } from './modules/students/students.routes.js';
 import { recordsRoutes } from './modules/records/records.routes.js';
 import { attachmentsRoutes } from './modules/attachments/attachments.routes.js';
+import { exercisesRoutes, workoutsRoutes } from './modules/workouts/workouts.routes.js';
 import multipart from '@fastify/multipart';
 import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
 import { financeRoutes } from './modules/finance/finance.routes.js';
@@ -146,6 +147,10 @@ export async function buildApp(): Promise<FastifyInstance> {
      solta — existe DE um aluno, e é o aluno que passa pelo escopo. */
   await app.register(recordsRoutes, { prefix: '/api/students' });
   await app.register(attachmentsRoutes, { prefix: '/api/students' });
+  await app.register(workoutsRoutes, { prefix: '/api/students' });
+  /* A biblioteca tem raiz própria porque é da EMPRESA, não de um aluno.
+     A URL diz de quem é a coisa, e isso determina como ela é protegida. */
+  await app.register(exercisesRoutes, { prefix: '/api/exercises' });
   await app.register(scheduleRoutes, { prefix: '/api/schedule' });
   await app.register(financeRoutes, { prefix: '/api/finance' });
   await app.register(insightsRoutes, { prefix: '/api/insights' });

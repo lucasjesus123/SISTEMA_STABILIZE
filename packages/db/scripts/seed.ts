@@ -21,9 +21,15 @@
  *    fica "cheia" e ninguém percebe que a conta não fecha.
  */
 import pg from 'pg';
+import { CARGA_PLAUSIVEL, CATALOGO } from './exercicios.js';
 import argon2 from 'argon2';
 
 const SLUG_DEMO = 'stabilize-demo';
+
+/* Id fixo para a academia de demonstração. Ver o comentário da limpeza:
+   é o que permite definir o contexto de RLS antes de qualquer leitura,
+   sem precisar de exceção na política nem de credencial privilegiada. */
+const TENANT_DEMO = '5742411a-0000-4000-8000-000000000001';
 const SENHA_DEMO = 'stabilize-demo-2026';
 
 const url = process.env['DATABASE_URL'];
@@ -78,6 +84,15 @@ const brl = (centavos: number): string =>
   });
 const inteiro = (min: number, max: number): number => min + Math.floor(rnd() * (max - min + 1));
 
+/** Carga em gramas, ou null quando o exercício não usa carga externa. */
+const cargaDe = (nome: string): number | null => {
+  const faixa = CARGA_PLAUSIVEL[nome];
+  if (faixa === undefined) return null;
+  // Arredondado para 2,5 kg, que é como as anilhas existem no mundo.
+  const kg = Math.round(inteiro(faixa[0], faixa[1]) / 2.5) * 2.5;
+  return Math.round(kg * 1000);
+};
+
 async function main(): Promise<void> {
   const client = await pool.connect();
 
@@ -99,23 +114,38 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
+    /* A LIMPEZA USA UM ID FIXO, e não uma busca por slug.
+       
+       A versão anterior fazia `SELECT id FROM tenants WHERE slug = $1`
+       ANTES de definir o contexto — e `tenants` tem RLS. Sem contexto,
+       `current_tenant_id()` é NULL, a política não casa com nada e a
+       consulta devolvia ZERO linhas. O laço não rodava, nada era
+       apagado, e a criação seguinte batia em "duplicate key".
+       Funcionava na primeira execução, quando não havia o que limpar, e
+       quebrava em toda reexecução. É o mesmo ovo-e-galinha do login
+       (preciso do tenant para ter contexto, preciso de contexto para
+       ler o tenant), que lá é resolvido com uma função SECURITY
+       DEFINER.
+       
+       Aqui não precisa de função nenhuma: dado de demonstração pode ter
+       id conhecido. Com o id na mão, o contexto é definido antes de
+       qualquer leitura e a RLS deixa de ser um obstáculo — sem abrir
+       exceção nenhuma na política. */
     console.log('==> limpando dados de demonstração anteriores');
     await client.query('BEGIN');
-    const antigo = await client.query<{ id: string }>(
-      'SELECT id FROM tenants WHERE slug = $1',
-      [SLUG_DEMO],
-    );
-    for (const t of antigo.rows) {
-      await client.query('SELECT set_config($1,$2,true)', ['app.tenant_id', t.id]);
-      await client.query('DELETE FROM tenants WHERE id = $1', [t.id]);
-    }
+    await client.query('SELECT set_config($1,$2,true)', ['app.tenant_id', TENANT_DEMO]);
+    /* Os treinos saem primeiro. `workout_plans.professional_id` é
+       RESTRICT de propósito — prescrição sem autor não vale — e isso
+       faria a cascata do tenant esbarrar nos usuários. */
+    await client.query('DELETE FROM workout_plans');
+    await client.query('DELETE FROM tenants WHERE id = $1', [TENANT_DEMO]);
     await client.query('COMMIT');
 
     // -----------------------------------------------------------------
     console.log('==> criando a academia');
     await client.query('BEGIN');
 
-    const tenantId = crypto.randomUUID();
+    const tenantId = TENANT_DEMO;
     await client.query('SELECT set_config($1,$2,true)', ['app.tenant_id', tenantId]);
     await client.query(
       `INSERT INTO tenants (id, name, slug, timezone) VALUES ($1,$2,$3,'America/Sao_Paulo')`,
@@ -352,6 +382,114 @@ async function main(): Promise<void> {
     await client.query('COMMIT');
 
     // -----------------------------------------------------------------
+    console.log('==> biblioteca de exercícios e prescrição');
+    await client.query('BEGIN');
+    await client.query('SELECT set_config($1,$2,true)', ['app.tenant_id', tenantId]);
+
+    const exercicioIds = new Map<string, string>();
+    for (const e of CATALOGO) {
+      const r = await client.query<{ id: string }>(
+        `INSERT INTO exercises (tenant_id, name, muscle_group, equipment, instructions)
+         VALUES ($1,$2,$3::muscle_group,$4,$5) RETURNING id`,
+        [tenantId, e.nome, e.grupo, e.equipamento ?? null, e.instrucoes ?? null],
+      );
+      exercicioIds.set(e.nome, r.rows[0]!.id);
+    }
+
+    /* Um treino ativo de verdade para os primeiros alunos: uma tela de
+       prescrição vazia não deixa ninguém avaliar se o módulo serve. */
+    const divisao: { dia: string; exercicios: string[] }[] = [
+      {
+        dia: 'A — Empurrar',
+        exercicios: [
+          'Supino reto com barra',
+          'Supino inclinado com halteres',
+          'Desenvolvimento com halteres',
+          'Elevação lateral',
+          'Tríceps na polia com barra',
+        ],
+      },
+      {
+        dia: 'B — Puxar',
+        exercicios: [
+          'Puxada frontal na polia alta',
+          'Remada curvada com barra',
+          'Remada unilateral com halter',
+          'Face pull',
+          'Rosca direta com barra',
+        ],
+      },
+      {
+        dia: 'C — Pernas',
+        exercicios: [
+          'Agachamento livre',
+          'Levantamento terra romeno',
+          'Leg press 45°',
+          'Elevação pélvica com barra',
+          'Panturrilha em pé',
+          'Prancha isométrica',
+        ],
+      },
+    ];
+
+    let treinosCriados = 0;
+    for (let i = 0; i < Math.min(alunos.length, 14); i++) {
+      const aluno = alunos[i]!;
+      const plano = await client.query<{ id: string }>(
+        `INSERT INTO workout_plans
+           (tenant_id, student_id, professional_id, name, goal, status, starts_on, notes)
+         VALUES ($1,$2,$3,$4,$5,'ACTIVE',CURRENT_DATE - $6::int, $7)
+         RETURNING id`,
+        [
+          tenantId,
+          aluno.id,
+          aluno.profId,
+          'Treino ABC — hipertrofia',
+          escolha([
+            'Hipertrofia geral com ênfase em membros inferiores',
+            'Recomposição corporal',
+            'Retorno gradual após lesão',
+            'Ganho de força nos básicos',
+          ]),
+          inteiro(5, 60),
+          'Progredir carga quando completar todas as séries no topo da faixa.',
+        ],
+      );
+
+      for (const bloco of divisao) {
+        let posicao = 0;
+        for (const nome of bloco.exercicios) {
+          const exercicioId = exercicioIds.get(nome);
+          if (exercicioId === undefined) continue;
+          await client.query(
+            `INSERT INTO workout_items
+               (tenant_id, plan_id, exercise_id, day_label, position, sets, reps,
+                load_g, rest_seconds)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [
+              tenantId,
+              plano.rows[0]!.id,
+              exercicioId,
+              bloco.dia,
+              posicao++,
+              inteiro(3, 4),
+              escolha(['8-12', '10-12', '12-15', '6-8']),
+              // Carga em gramas, dentro da faixa plausível do exercício.
+              // Sem faixa = peso corporal, mobilidade ou cardio.
+              cargaDe(nome),
+              escolha([45, 60, 90]),
+            ],
+          );
+        }
+      }
+      treinosCriados++;
+    }
+    await client.query('COMMIT');
+    console.log(
+      `    ${CATALOGO.length} exercícios na biblioteca, ${treinosCriados} treinos ativos`,
+    );
+
+    // -----------------------------------------------------------------
     console.log('==> financeiro: mensalidades, despesas e recebimentos');
     await client.query('BEGIN');
     await client.query('SELECT set_config($1,$2,true)', ['app.tenant_id', tenantId]);
@@ -503,6 +641,26 @@ async function main(): Promise<void> {
 }
 
 main().catch((erro: unknown) => {
-  console.error('falha ao popular:', erro instanceof Error ? erro.message : erro);
+  const mensagem = erro instanceof Error ? erro.message : String(erro);
+
+  /* Caso legado com nome próprio: um banco semeado por uma versão
+     anterior tem a academia de demonstração com id ALEATÓRIO, que a
+     limpeza por id fixo não alcança — e o erro que sai é uma violação
+     de unicidade, que não diz nada a quem está tentando resetar a demo.
+     Melhor gastar seis linhas explicando do que deixar a pessoa
+     procurando. */
+  if (mensagem.includes('tenants_slug_key')) {
+    console.error(
+      '\nfalha ao popular: já existe uma academia de demonstração criada por uma\n' +
+        'versão anterior deste script, com id aleatório — a limpeza por id fixo não\n' +
+        'a alcança porque `tenants` tem RLS.\n\n' +
+        'Remova-a uma única vez, com a credencial de migração:\n\n' +
+        "  psql \"$DATABASE_MIGRATION_URL\" -c \"SET app.tenant_id = '<id>'; DELETE FROM tenants WHERE slug = 'stabilize-demo'\"\n\n" +
+        'ou recrie o banco. Depois deste ponto, reexecutar o seed funciona sempre.\n',
+    );
+    process.exit(1);
+  }
+
+  console.error('falha ao popular:', mensagem);
   process.exit(1);
 });

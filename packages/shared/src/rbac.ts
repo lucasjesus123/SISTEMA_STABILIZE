@@ -37,6 +37,15 @@ export const PERMISSIONS = [
   'attachment:write',
   'attachment:delete',
 
+  /* Treino. A BIBLIOTECA e a PRESCRIÇÃO são permissões separadas de
+     propósito: escrever um treino para o próprio aluno é rotina do
+     professor; mexer no catálogo da academia muda o vocabulário de
+     todo mundo, e é decisão de quem administra. */
+  'exercise:read',
+  'exercise:write',
+  'workout:read',
+  'workout:write',
+
   // Agenda, salas e presença
   'schedule:read',
   'schedule:write',
@@ -130,6 +139,11 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
       'evolution:read',
       'attachment:read',
       'attachment:write',
+      'exercise:read',
+      'exercise:write',
+      /* Lê a prescrição, não escreve: quem responde pela conduta técnica
+         é o profissional, como na anamnese. */
+      'workout:read',
       'schedule:read',
       'schedule:write',
       'schedule:cancel',
@@ -175,10 +189,14 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
       'attendance:write',
       'commission:read',
       'finance:payment:write',
+      'workout:read',
+      'workout:write',
     ),
     // A agenda dos colegas é visível apenas como ocupação (o serviço devolve
     // blocos anonimizados), o que é necessário para não marcar em cima.
-    ...grants('ALL', 'availability:read', 'room:read'),
+    // A biblioteca de exercícios é da academia, então é lida por inteiro —
+    // mas escrita só por quem administra.
+    ...grants('ALL', 'availability:read', 'room:read', 'exercise:read'),
   ],
 
   RECEPTION: [
@@ -197,7 +215,10 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
     ),
   ],
 
-  STUDENT: [...grants('SELF', 'self:read', 'self:write', 'self:booking'), ...grants('ALL', 'availability:read')],
+  STUDENT: [
+    ...grants('SELF', 'self:read', 'self:write', 'self:booking', 'workout:read'),
+    ...grants('ALL', 'availability:read'),
+  ],
 };
 
 /** Índice pré-computado para consulta O(1) no caminho quente das requisições. */

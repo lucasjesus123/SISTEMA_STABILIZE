@@ -1401,3 +1401,149 @@
 @media (max-width: 700px) {
   .anexo-item { flex-wrap: wrap; }
 }
+
+/* --- treino --- */
+
+.treino-versoes {
+  display: flex;
+  gap: var(--e-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--e-5);
+}
+.treino-versao {
+  background: none;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio);
+  padding: var(--e-2) var(--e-3);
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  cursor: pointer;
+}
+.treino-versao.ativa { border-color: var(--teal-vivo); color: var(--texto); }
+
+.treino-acoes { margin-bottom: var(--e-5); }
+.treino-novo { margin-bottom: var(--e-5); }
+
+.treino-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding-bottom: var(--e-4);
+  border-bottom: 1px solid var(--fio);
+  margin-bottom: var(--e-5);
+}
+.treino-nome {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  font-size: var(--t-lg);
+  font-weight: 500;
+  margin: 0 0 var(--e-1);
+}
+.treino-meta { font-size: var(--t-sm); color: var(--texto-apoio); }
+
+.treino-selo {
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px var(--e-2);
+  border-radius: 999px;
+  border: 1px solid var(--ok);
+  color: var(--ok);
+}
+.treino-selo.rascunho { border-color: var(--fio-forte); color: var(--texto-apoio); }
+
+.treino-dia { margin-bottom: var(--e-6); }
+.treino-dia-titulo {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--menta-vivo);
+  margin: 0 0 var(--e-3);
+}
+.treino-dia-vazio { font-size: var(--t-sm); color: var(--texto-apoio); margin: 0 0 var(--e-3); }
+
+.treino-itens { list-style: none; margin: 0 0 var(--e-3); padding: 0; counter-reset: exercicio; }
+.treino-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e-4);
+  padding: var(--e-3) 0;
+  border-bottom: 1px solid var(--fio);
+}
+/* A numeração vem do CSS: a ordem é a ordem de execução, e renumerar no
+   banco a cada arrasto seria caro e propenso a deadlock. */
+.treino-item::before {
+  counter-increment: exercicio;
+  content: counter(exercicio);
+  min-width: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-apoio);
+  font-size: var(--t-sm);
+}
+.treino-item-corpo { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.treino-exercicio { color: var(--texto); }
+.treino-item-meta { font-size: var(--t-sm); color: var(--texto-apoio); }
+.treino-prescricao { font-size: var(--t-sm); color: var(--texto); white-space: nowrap; }
+
+.treino-adicionar, .treino-novo-dia { font-size: var(--t-sm); }
+
+.seletor-exercicio {
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  padding: var(--e-4);
+  margin-top: var(--e-3);
+  background: var(--superficie-alta);
+}
+.seletor-filtros { display: flex; gap: var(--e-3); align-items: center; margin-bottom: var(--e-3); }
+.seletor-filtros .campo-busca { flex: 1; }
+
+.seletor-opcoes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Rolagem interna: a lista tem setenta itens e não pode empurrar o
+     resto da prescrição para fora da tela. */
+  max-height: 17rem;
+  overflow-y: auto;
+}
+.seletor-item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-4);
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--fio);
+  padding: var(--e-3) var(--e-2);
+  font: inherit;
+  color: var(--texto);
+  text-align: left;
+  cursor: pointer;
+}
+.seletor-item:hover { background: var(--superficie-baixa); }
+.seletor-item-meta { font-size: var(--t-sm); color: var(--texto-apoio); white-space: nowrap; }
+
+.seletor-escolhido {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e-3);
+  margin: 0 0 var(--e-2);
+}
+.seletor-instrucao {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  margin: 0 0 var(--e-4);
+  border-left: 2px solid var(--fio-forte);
+  padding-left: var(--e-3);
+}
+.seletor-prescricao { margin-top: var(--e-3); }
+
+@media (max-width: 700px) {
+  .treino-item { flex-wrap: wrap; }
+  .treino-prescricao { white-space: normal; }
+  .seletor-filtros { flex-wrap: wrap; }
+}
