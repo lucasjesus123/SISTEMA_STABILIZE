@@ -15,11 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Segredos de CI, descartáveis e sem valor fora daqui. O banco só
-  # existe durante a execução e some junto com o runner.
+  # Senha do PostgreSQL efêmero do runner. Não é segredo: o banco existe
+  # durante a execução e some com o runner, e nada fora do job o alcança.
   POSTGRES_PASSWORD: ci_only_nao_usar_fora_daqui
-  JWT_ACCESS_SECRET: ci-acesso-descartavel-com-tamanho-suficiente-01
-  JWT_REFRESH_SECRET: ci-refresh-descartavel-com-tamanho-suficiente-02
 
 jobs:
   verificar:
@@ -73,6 +71,21 @@ jobs:
             echo "--> $(basename "$f")"
             psql -h localhost -U postgres -d stabilize_test -v ON_ERROR_STOP=1 -q -f "$f"
           done
+
+      # Segredos GERADOS a cada execução, não escritos no arquivo.
+      #
+      # Na primeira versão eles estavam fixos aqui, e o próprio passo do
+      # gitleaks logo abaixo acusava — com razão. Segredo versionado
+      # ensina o time a conviver com segredo versionado, e um dia o que
+      # está no arquivo não é mais descartável. Gerar em runtime custa
+      # uma linha e elimina a discussão.
+      - name: Gerar segredos efêmeros do job
+        run: |
+          {
+            echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
+            echo "JWT_REFRESH_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
+            echo "ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')"
+          } >> "$GITHUB_ENV"
 
       - name: Verificação de tipos
         run: pnpm -r typecheck
