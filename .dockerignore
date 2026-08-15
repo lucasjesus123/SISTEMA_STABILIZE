@@ -1,0 +1,21 @@
+# O contexto de build vai inteiro para o daemon: tudo que entra aqui é
+# tempo de deploy e, no caso do .env, risco de segredo dentro da imagem.
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.github
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# NUNCA. Segredo dentro de imagem fica em toda cópia dela, para sempre.
+.env
+.env.*
+!.env.example
+
+storage
+uploads
+*.log
+.semgrep
+brand/*.pdf

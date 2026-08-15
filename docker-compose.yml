@@ -1,36 +1,126 @@
+# =====================================================================
+# Stabilize em produção, numa VPS.
+#
+# Três serviços e nada mais: banco, API e um proxy que termina TLS e
+# serve o front. Cada peça a mais é uma peça a manter, atualizar e
+# vigiar — com trinta empresas e noventa usuários simultâneos, isto
+# aqui sobra.
+#
+# O QUE NÃO ESTÁ EXPOSTO: o PostgreSQL não publica porta. Ele fala com a
+# API pela rede interna do compose e ponto. Publicar 5432 "para
+# facilitar o acesso pelo DBeaver" é como a maioria dos vazamentos de
+# banco começa. Para administrar, use um túnel SSH.
+# =====================================================================
+
+name: stabilize
+
 services:
   postgres:
-    image: postgres:16-alpine
-    container_name: stabilize-postgres
+    image: postgres:16-bookworm
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-stabilize}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      # Sem valor padrão de propósito: a ausência da variável deve
-      # quebrar o start, não subir um banco com senha previsível.
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
-      TZ: America/Sao_Paulo
-    ports:
-      # Só no loopback. Publicar 5432 na interface pública expõe o banco
-      # à internet, e é assim que a maioria dos vazamentos de VPS começa.
-      - '127.0.0.1:5432:5432'
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-stabilize}']
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: "${POSTGRES_SUPERUSER_PASSWORD:?defina no .env}"
+      # Locale pt_BR para ordenação de nomes com acento sair certa.
+      LANG: pt_BR.UTF-8
     command:
       - postgres
+      # Nunca 'all': o 002_roles.sql executa CREATE ROLE ... PASSWORD, e
+      # com log_statement=all a senha do banco vai parar no log em texto
+      # claro. 'ddl' teria o mesmo problema.
+      - -c
+      - log_statement=none
+      - -c
+      - log_min_duration_statement=500
       - -c
       - max_connections=100
       - -c
       - shared_buffers=256MB
-      - -c
-      - log_min_duration_statement=500
-      - -c
-      - timezone=America/Sao_Paulo
+    volumes:
+      - dados-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # Sem `ports:` — ver o cabeçalho.
+    networks: [interna]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3333
+      DATABASE_URL: "${DATABASE_URL:?defina no .env}"
+      JWT_ACCESS_SECRET: "${JWT_ACCESS_SECRET:?defina no .env}"
+      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:?defina no .env}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?defina no .env}"
+      CORS_ORIGINS: "${CORS_ORIGINS:?defina no .env}"
+      STORAGE_DIR: /app/storage
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      UAZAPI_BASE_URL: ${UAZAPI_BASE_URL:-}
+      UAZAPI_ADMIN_TOKEN: ${UAZAPI_ADMIN_TOKEN:-}
+    volumes:
+      - anexos:/app/storage
+    # Endurecimento do contêiner. Nada aqui é teórico: cada linha fecha
+    # um caminho que já foi usado em incidente real.
+    read_only: true              # nada escreve fora dos volumes
+    tmpfs:
+      - /tmp:size=64m,mode=1777  # uploads em trânsito
+    security_opt:
+      - no-new-privileges:true   # nem via binário setuid
+    cap_drop: [ALL]              # a API não precisa de capability nenhuma
+    healthcheck:
+      # Forma exec (CMD, não CMD-SHELL): sem shell no meio, não há aspas
+      # para escapar. A imagem slim não tem curl nem wget; o próprio node
+      # faz a requisição.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks: [interna, borda]
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'   # HTTP/3
+    environment:
+      DOMINIO: "${DOMINIO:?defina no .env, ex. sistema.stabilize.com.br}"
+      EMAIL_TLS: "${EMAIL_TLS:?defina no .env, o Let's Encrypt avisa de expiração nele}"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./apps/web/dist:/srv:ro
+      - caddy-dados:/data      # certificados — PERDER ISSO refaz a emissão
+      - caddy-config:/config
+    networks: [borda]
 
 volumes:
-  pgdata:
+  dados-postgres:
+  anexos:
+  caddy-dados:
+  caddy-config:
+
+networks:
+  # O banco só existe na rede interna; o proxy só na de borda. A API é a
+  # única nas duas, porque é a única que precisa das duas.
+  interna:
+    internal: true
+  borda:

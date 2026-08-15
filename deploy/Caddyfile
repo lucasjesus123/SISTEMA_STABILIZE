@@ -1,0 +1,66 @@
+# =====================================================================
+# Proxy de borda.
+#
+# O Caddy foi escolhido no lugar do nginx por uma razão específica: TLS
+# automático, com renovação, sem cron e sem certbot. A causa mais comum
+# de sistema pequeno cair não é ataque — é certificado vencido.
+# =====================================================================
+
+{
+	email {$EMAIL_TLS}
+	# Servidor não anuncia o que é. Não impede ataque nenhum, mas tira
+	# o sistema das buscas por versão vulnerável.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$DOMINIO} {
+	encode zstd gzip
+
+	header {
+		# HSTS com preload: depois disto o navegador RECUSA http para
+		# este domínio, mesmo que alguém digite. Um ano.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# O sistema não usa câmera, microfone nem geolocalização. Negar
+		# de antemão fecha o que uma dependência comprometida tentaria.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		-Server
+	}
+
+	# --- API ---
+	handle /api/* {
+		reverse_proxy api:3333 {
+			header_up X-Real-IP {remote_host}
+			# O rate limit e a auditoria dependem do IP verdadeiro. Sem
+			# isto, todo mundo vira o IP do proxy e o limite por IP passa
+			# a valer para a academia inteira.
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	handle /health {
+		reverse_proxy api:3333
+	}
+
+	# --- front ---
+	handle {
+		root * /srv
+
+		# Os arquivos com hash no nome são imutáveis: cache longo.
+		@comHash path_regexp \-[A-Za-z0-9_-]{8,}\.(js|css|woff2)$
+		header @comHash Cache-Control "public, max-age=31536000, immutable"
+
+		# O index NÃO: é ele que aponta para os arquivos novos depois de
+		# um deploy. Em cache, o usuário fica preso na versão anterior.
+		header /index.html Cache-Control "no-cache"
+
+		# SPA: qualquer rota desconhecida devolve o index.
+		try_files {path} /index.html
+		file_server
+	}
+}

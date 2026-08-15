@@ -17,20 +17,70 @@
 --   stabilize_app      — usado pela API, sem DDL, sem BYPASSRLS
 -- =====================================================================
 
--- ATENÇÃO: troque as senhas abaixo. Elas são placeholders de instalação;
--- as senhas reais devem vir do gerenciador de segredos da VPS e nunca
--- entrar no repositório.
+-- AS SENHAS VÊM DE FORA, e o script se recusa a rodar sem elas.
+--
+-- A versão anterior trazia 'TROQUE_ESTA_SENHA_APP' embutido. O problema
+-- de um placeholder não é ele existir — é que FUNCIONA: o banco sobe, a
+-- aplicação conecta, ninguém vê erro, e a senha padrão fica em produção
+-- até o dia em que alguém a encontra no repositório. Um segredo que só
+-- um comentário protege não está protegido.
+--
+-- Uso:
+--   psql -v app_password="$X" -v migrator_password="$Y" -f 002_roles.sql
+--
+-- CUIDADO COM DOLLAR-QUOTING: o psql NÃO substitui `:'variavel'` dentro
+-- de $$...$$. A primeira versão deste arquivo lia as senhas dentro do
+-- bloco DO e o texto `:'app_password'` chegava LITERAL ao servidor —
+-- falhava sempre, inclusive no caminho feliz. Por isso as senhas entram
+-- por `set_config` aqui fora, onde a substituição acontece, e o bloco
+-- as lê com `current_setting`.
+\if :{?app_password}
+\else
+  \echo 'ERRO: falta -v app_password=... (senha do papel de runtime)'
+  \quit
+\endif
+
+\if :{?migrator_password}
+\else
+  \echo 'ERRO: falta -v migrator_password=... (senha do papel de migração)'
+  \quit
+\endif
+
+SELECT set_config('stabilize.app_password', :'app_password', false);
+SELECT set_config('stabilize.migrator_password', :'migrator_password', false);
 
 DO $$
+DECLARE
+  senha_app text := current_setting('stabilize.app_password');
+  senha_mig text := current_setting('stabilize.migrator_password');
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stabilize_app') THEN
-    CREATE ROLE stabilize_app LOGIN PASSWORD 'TROQUE_ESTA_SENHA_APP';
+  /* Recusa os placeholders que já circularam neste repositório. Um
+     placeholder conhecido é pior que senha fraca: está escrito,
+     versionado, e é o primeiro palpite de quem procura. */
+  IF senha_app LIKE 'TROQUE%' OR senha_mig LIKE 'TROQUE%'
+     OR length(senha_app) < 16 OR length(senha_mig) < 16 THEN
+    RAISE EXCEPTION
+      'senha de banco inválida: use segredos gerados (>= 16 caracteres), nunca os placeholders';
   END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stabilize_app') THEN
+    EXECUTE format('CREATE ROLE stabilize_app LOGIN PASSWORD %L', senha_app);
+  ELSE
+    -- Reexecutar a migration atualiza a senha: é assim que se faz rotação.
+    EXECUTE format('ALTER ROLE stabilize_app PASSWORD %L', senha_app);
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stabilize_migrator') THEN
-    CREATE ROLE stabilize_migrator LOGIN PASSWORD 'TROQUE_ESTA_SENHA_MIGRATOR';
+    EXECUTE format('CREATE ROLE stabilize_migrator LOGIN PASSWORD %L', senha_mig);
+  ELSE
+    EXECUTE format('ALTER ROLE stabilize_migrator PASSWORD %L', senha_mig);
   END IF;
 END
 $$;
+
+-- Tira as senhas da sessão assim que os papéis existem.
+SELECT set_config('stabilize.app_password', '', false);
+SELECT set_config('stabilize.migrator_password', '', false);
 
 -- Nenhum dos dois pode ignorar RLS nem criar bancos/papéis.
 ALTER ROLE stabilize_app        NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
