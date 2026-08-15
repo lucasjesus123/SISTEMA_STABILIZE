@@ -5,8 +5,17 @@
   "type": "module",
   "scripts": {
     "migrate": "./scripts/migrate.sh",
+    "seed": "tsx scripts/seed.ts",
     "test": "./scripts/test-isolation.sh",
-    "typecheck": "echo 'sem TypeScript neste pacote'",
+    "typecheck": "tsc --noEmit --strict --module esnext --moduleResolution bundler --target es2023 --types node scripts/seed.ts",
     "build": "echo 'sem build neste pacote'"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "argon2": "^0.41.1",
+    "pg": "^8.13.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
   }
 }
