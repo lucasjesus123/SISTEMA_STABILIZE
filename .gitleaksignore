@@ -1,0 +1,37 @@
+# Exceções aceitas do gitleaks.
+#
+# Cada linha é uma impressão digital (fingerprint) de um achado que foi
+# ANALISADO e considerado aceitável. Este arquivo não serve para calar o
+# gitleaks: serve para que a decisão fique escrita, com data e motivo, e
+# possa ser contestada por quem revisar.
+#
+# Se você está prestes a adicionar uma linha aqui, a pergunta certa é
+# "por que este segredo existe?", não "como faço o aviso sumir?".
+
+# -------------------------------------------------------------------
+# 2026-08-15 — segredos de teste do workflow de CI
+#
+# O commit f31b5b0 introduziu o CI com JWT_ACCESS_SECRET e
+# JWT_REFRESH_SECRET escritos direto no arquivo. Eram valores
+# descartáveis, usados apenas para o processo subir dentro do job.
+#
+# Por que é aceitável:
+#   - nunca protegeram dado nenhum: o job cria um PostgreSQL efêmero,
+#     roda os testes e o runner é destruído;
+#   - nunca foram usados fora do CI;
+#   - o workflow nunca chegou a executar com esses valores.
+#
+# Por que NÃO reescrevemos o histórico:
+#   - o branch já estava publicado, e reescrever histórico compartilhado
+#     quebra o clone de quem já baixou — custo maior que o risco, que
+#     aqui é zero.
+#
+# O que foi feito:
+#   - o commit seguinte passou a gerar os segredos com openssl a cada
+#     execução, então o arquivo não contém mais nenhum valor.
+#
+# Se um segredo REAL tivesse vazado, a resposta seria outra e nesta
+# ordem: revogar primeiro, reescrever o histórico depois. Um segredo
+# vazado continua vazado mesmo após a reescrita — o que resolve é a
+# revogação.
+f31b5b0f0812f2a6f82a46fc35dc0d4516f59fa1:.github/workflows/ci.yml:generic-api-key:21
