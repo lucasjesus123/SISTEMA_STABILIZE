@@ -14,6 +14,7 @@ import {
 } from './api.js';
 import { Carregando, Erro, GraficoLinha, Indicador, Vazio, reais, type Ponto } from './ui.jsx';
 import { Marca } from './Marca.jsx';
+import { SeletorTema, useTema } from './tema.jsx';
 
 /**
  * Primeira letra maiúscula, o resto intocado.
@@ -65,6 +66,7 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const { tema, definir } = useTema();
 
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -90,6 +92,12 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
   return (
     <main className="entrada">
       <div className="entrada-painel">
+        {/* O tema é escolhível ANTES de entrar: quem trabalha no escuro
+            não deveria ter que atravessar uma tela clara para chegar lá. */}
+        <div className="entrada-tema">
+          <SeletorTema tema={tema} definir={definir} />
+        </div>
+
         <Marca tamanho={40} />
 
         <h1 className="entrada-titulo">Acesso ao sistema</h1>
@@ -152,6 +160,7 @@ function Sistema({
   aoSair: () => void;
 }): ReactNode {
   const [aba, setAba] = useState<Aba>('painel');
+  const { tema, definir } = useTema();
 
   /* O menu é montado a partir das permissões do papel. Isto é
      conveniência de interface, NÃO segurança: esconder um botão não
@@ -190,6 +199,7 @@ function Sistema({
         </nav>
 
         <div className="topo-conta">
+          <SeletorTema tema={tema} definir={definir} />
           <span className="conta-papel">{principal.roleLabel}</span>
           <button
             type="button"
@@ -329,8 +339,13 @@ function Painel({ principal }: { principal: Principal }): ReactNode {
         </p>
         <GraficoLinha
           series={[
-            { nome: 'Recebido', cor: 'var(--teal-forte)', pontos: historico.recebido },
-            { nome: 'Pago', cor: 'var(--grafite)', pontos: historico.pago },
+            /* Os nomes dos tokens são conferidos contra theme.css. Uma
+               variável CSS inexistente não é erro: o navegador
+               simplesmente não pinta, e a linha some sem aviso nenhum
+               — foi o que aconteceu ao renomear os tokens para o tema
+               escuro. */
+            { nome: 'Recebido', cor: 'var(--teal-vivo)', pontos: historico.recebido },
+            { nome: 'Pago', cor: 'var(--texto-apoio)', pontos: historico.pago },
           ]}
         />
       </section>

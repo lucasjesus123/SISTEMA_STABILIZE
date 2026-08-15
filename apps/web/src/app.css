@@ -29,15 +29,16 @@
   /* A logo original tem terminações abertas e letras generosas; o
      tracking levemente aberto aproxima o desenho. */
   letter-spacing: 0.01em;
-  color: var(--grafite-forte);
+  color: var(--marca-nome-cor);
 }
 
 .marca-fio {
+  box-shadow: var(--brilho-1);
   grid-column: 2;
   grid-row: 1 / 3;
   align-self: end;
   height: 1px;
-  background: var(--menta);
+  background: var(--menta-vivo);
   margin-bottom: calc(var(--marca-tamanho, 32px) * 0.12);
 }
 
@@ -47,7 +48,7 @@
   font-family: var(--fonte-display);
   font-size: calc(var(--marca-tamanho, 32px) * 0.3);
   font-weight: 400;
-  color: var(--menta-forte);
+  color: var(--marca-tagline-cor);
   letter-spacing: 0.01em;
   margin-top: calc(var(--marca-tamanho, 32px) * 0.16);
   white-space: nowrap;
@@ -96,12 +97,13 @@
 /* A lateral é uma superfície de cor chapada com um único fio vertical
    — a assinatura da marca sem recorrer a gradiente decorativo. */
 .entrada-lateral {
-  background: var(--papel-fundo);
+  background: var(--superficie-baixa);
   border-left: 1px solid var(--fio);
   position: relative;
 }
 .entrada-lateral::after {
   content: '';
+  box-shadow: var(--brilho-2);
   position: absolute;
   inset-block: 12%;
   left: clamp(2rem, 18%, 8rem);
@@ -109,8 +111,8 @@
   background: linear-gradient(
     to bottom,
     transparent,
-    var(--teal) 18%,
-    var(--menta) 82%,
+    var(--teal-vivo) 18%,
+    var(--menta-vivo) 82%,
     transparent
   );
 }
@@ -147,7 +149,7 @@
   padding: var(--e-3) var(--e-4);
   border: 1px solid var(--fio-forte);
   border-radius: var(--raio);
-  background: var(--papel-alto);
+  background: var(--superficie-alta);
   font-size: var(--t-base);
   color: var(--texto);
   transition:
@@ -163,22 +165,25 @@
 
 .campo input:hover,
 .campo-busca input:hover {
-  border-color: var(--grafite);
+  border-color: var(--texto-apoio);
 }
 
 .campo input:focus {
   outline: none;
-  border-color: var(--teal-forte);
+  border-color: var(--teal-vivo);
   /* Anel de foco desenhado com box-shadow sem desfoque colorido
      espalhado: é indicação de estado, não brilho decorativo. */
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 22%, transparent);
+  box-shadow: 0 0 0 3px var(--realce-teclado), var(--brilho-1);
 }
 
 .botao-principal {
   width: 100%;
   padding: var(--e-3) var(--e-5);
   background: var(--teal-fundo);
-  color: #fff;
+  /* Texto do botão calculado a partir do próprio fundo: no claro o
+     fundo é escuro e o texto sai claro; no escuro o fundo é neon e o
+     texto sai quase-preto. Um `#fff` fixo ficaria ilegível no escuro. */
+  color: var(--superficie-baixa);
   border-radius: var(--raio);
   font-weight: 600;
   font-size: var(--t-base);
@@ -188,7 +193,8 @@
     transform var(--rapido) var(--saida);
 }
 .botao-principal:hover:not(:disabled) {
-  background: var(--teal-forte);
+  background: var(--teal-vivo);
+  box-shadow: var(--brilho-2);
 }
 .botao-principal:active:not(:disabled) {
   transform: translateY(1px);
@@ -203,7 +209,7 @@
   padding: var(--e-2) var(--e-4);
   border: 1px solid var(--fio-forte);
   border-radius: var(--raio);
-  background: var(--papel-alto);
+  background: var(--superficie-alta);
   font-size: var(--t-sm);
   font-weight: 500;
   color: var(--texto);
@@ -212,8 +218,8 @@
     background var(--rapido) var(--saida);
 }
 .botao-secundario:hover {
-  border-color: var(--grafite);
-  background: var(--papel-fundo);
+  border-color: var(--texto-apoio);
+  background: var(--superficie-baixa);
 }
 
 .botao-texto {
@@ -236,7 +242,7 @@
   background: var(--erro-fundo);
   /* Texto no tom escuro da própria cor de fundo, nunca cinza: cinza
      sobre superfície colorida fica lavado. */
-  color: #8f2f28;
+  color: var(--erro-texto);
   border-radius: var(--raio);
   font-size: var(--t-sm);
   margin-bottom: var(--e-3);
@@ -258,7 +264,7 @@
   gap: var(--e-7);
   padding: var(--e-4) clamp(var(--e-4), 4vw, var(--e-7));
   border-bottom: 1px solid var(--fio);
-  background: var(--papel-alto);
+  background: var(--superficie-alta);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -294,7 +300,10 @@
   right: var(--e-3);
   bottom: -13px;
   height: 2px;
-  background: var(--teal);
+  background: var(--teal-vivo);
+  /* O fio da aba ativa ACENDE no tema escuro. No claro, --brilho-1 é
+     `none` e sobra o fio sólido — mesma regra, resultado certo nos dois. */
+  box-shadow: var(--brilho-1);
 }
 
 .topo-conta {
@@ -341,7 +350,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--teal-fundo);
-  background: color-mix(in srgb, var(--teal) 14%, transparent);
+  background: color-mix(in srgb, var(--teal-vivo) 14%, transparent);
   border-radius: var(--raio);
 }
 
@@ -381,6 +390,8 @@
   margin-bottom: var(--e-3);
 }
 
+/* O valor do indicador é o dado mais importante da tela; é ele que
+   ganha luz no escuro, não o container em volta. */
 .indicador-valor {
   font-family: var(--fonte-display);
   /* Tamanho que ACOMPANHA a coluna. Fixo em 2,75rem, "R$ 2.749,10"
@@ -486,7 +497,11 @@
 /* O ÚNICO momento de movimento autoral: a linha se desenha uma vez, na
    entrada. Usa stroke-dashoffset (não width/height), então não há
    recálculo de layout a cada quadro. */
+/* A linha do gráfico acende como traço de instrumento. drop-shadow no
+   SVG segue a forma do traço — box-shadow desenharia um retângulo
+   luminoso em volta, que é o efeito errado. */
 .grafico-linha {
+  filter: var(--linha-grafico-filtro);
   stroke-dasharray: 2000;
   stroke-dashoffset: 2000;
   transition: stroke-dashoffset 1100ms var(--saida-suave);
@@ -510,7 +525,7 @@
   flex-direction: column;
   gap: var(--e-1);
   padding: var(--e-3) var(--e-4);
-  background: var(--papel-alto);
+  background: var(--superficie-alta);
   border: 1px solid var(--fio);
   border-radius: var(--raio);
   box-shadow: var(--sombra-2);
@@ -591,7 +606,7 @@
   transition: background var(--rapido) var(--saida);
 }
 .tabela tbody tr:hover {
-  background: var(--papel-fundo);
+  background: var(--superficie-baixa);
 }
 
 .celula-forte {
@@ -617,17 +632,17 @@
 .selo-attended,
 .selo-confirmed {
   background: var(--ok-fundo);
-  color: #146b49;
+  color: var(--ok-texto);
 }
 .selo-inactive,
 .selo-scheduled {
-  background: var(--papel-fundo);
+  background: var(--superficie-baixa);
   color: var(--texto-corpo);
 }
 .selo-suspended,
 .selo-no_show {
   background: var(--atencao-fundo);
-  color: #8a5c08;
+  color: var(--atencao-texto);
 }
 .selo-lead {
   background: color-mix(in srgb, var(--teal) 14%, transparent);
@@ -659,7 +674,7 @@
   transition: background var(--rapido) var(--saida);
 }
 .agenda-item:hover {
-  background: var(--papel-fundo);
+  background: var(--superficie-baixa);
 }
 
 .agenda-hora {
@@ -715,9 +730,9 @@
   border-radius: var(--raio);
   background: linear-gradient(
     90deg,
-    var(--papel-fundo) 0%,
-    var(--fio) 50%,
-    var(--papel-fundo) 100%
+    var(--superficie-baixa) 0%,
+    var(--superficie-realce) 50%,
+    var(--superficie-baixa) 100%
   );
   background-size: 200% 100%;
   animation: deslizar 1.4s ease-in-out infinite;
@@ -750,4 +765,56 @@
 .vazio {
   color: var(--texto-apoio);
   padding: var(--e-6) 0;
+}
+
+/* ---------------------------------------------------------------------
+   Seletor de tema
+
+   Grupo de três, não interruptor de dois: um switch binário não
+   consegue representar "siga o sistema", e é por isso que tantos
+   aplicativos perdem essa opção pelo caminho.
+   ------------------------------------------------------------------- */
+
+.seletor-tema {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-baixa);
+}
+
+.seletor-opcao {
+  padding: 3px var(--e-3);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--texto-apoio);
+  border-radius: calc(var(--raio-md) - 2px);
+  transition:
+    color var(--rapido) var(--saida),
+    background var(--rapido) var(--saida);
+}
+.seletor-opcao:hover {
+  color: var(--texto);
+}
+.seletor-opcao.ativa {
+  background: var(--superficie-alta);
+  color: var(--teal);
+  box-shadow: var(--sombra-1);
+}
+
+.entrada-tema {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--e-6);
+}
+
+/* No tema escuro o topo ganha um fio aceso na base, como a linha de luz
+   de um painel de instrumentos. É a única cor decorativa do sistema, e
+   está num lugar onde não compete com dado nenhum. */
+.topo {
+  border-bottom-color: var(--fio);
+}
+:root[data-tema='escuro'] .topo,
+:root:not([data-tema='claro']) .topo {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--teal-vivo) 14%, transparent);
 }

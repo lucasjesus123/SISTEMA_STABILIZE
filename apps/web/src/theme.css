@@ -1,72 +1,227 @@
 /* =====================================================================
    Stabilize — sistema visual
 
-   MUNDO VISUAL: prancha anatômica. A logo é um corpo desenhado em traço
-   fino e contínuo; a interface segue a mesma lógica. Fios de 1px em vez
-   de caixas, respiro generoso em vez de bordas, e o teal usado como
-   TINTA sobre o dado — não como decoração de fundo.
+   DOIS TEMAS, um sistema só. Todo valor de cor vive aqui como token; os
+   componentes nunca escrevem hexadecimal. Trocar de tema troca os
+   tokens, e nada mais precisa saber disso.
 
-   O que este arquivo recusa, deliberadamente:
-   - card dentro de card (a hierarquia vem de espaço e tipografia)
-   - halo/glow colorido (profundidade vem de sombra neutra com offset)
-   - gradiente em texto (ênfase vem de peso e tamanho)
-   - bounce/elástico (objetos reais desaceleram, não quicam)
+   CLARO  — papel técnico. Branco com fundo de teal, nunca #FFF chapado.
+   ESCURO — instrumento ligado no escuro. Quase-preto com fundo
+            azul-esverdeado, nunca #000 chapado, e a marca acesa em
+            neon sobre ele.
+
+   O neon vem do TEAL DA MARCA (#4BC1C8) e do menta (#85CEBD). Não é
+   detalhe: o par roxo-e-ciano é o default automático de todo tema
+   escuro gerado, e usar a cor que já é da Stabilize faz a tela parecer
+   dela, não de um template.
+
+   Onde o brilho aparece — e onde não aparece:
+     SIM  no dado (linha do gráfico, valor do indicador), no estado
+          ativo e no foco. Ali a luz carrega informação.
+     NÃO  atrás de título, sob card, como névoa de fundo. Ali seria
+          decoração, e decoração luminosa em tela de trabalho cansa a
+          vista em uma tarde.
    ===================================================================== */
 
+/* ---------------------------------------------------------------------
+   TEMA CLARO (padrão)
+   ------------------------------------------------------------------- */
 :root {
-  /* -- Marca. Extraídas do arquivo original da logo. ---------------- */
-  --teal: #4bc1c8;
-  --teal-forte: #2e9aa1;
+  --teal: #2e9aa1;
+  --teal-vivo: #4bc1c8;
   --teal-fundo: #1f7176;
+  --menta: #5fb3a0;
+  --menta-vivo: #85cebd;
+
+  /* Superfícies: branco com uma gota de teal. Um #FFF puro ao lado de
+     uma marca teal parece descolorido; este branco pertence à paleta. */
+  --superficie: #f7fafa;
+  --superficie-alta: #fdfefe;
+  --superficie-baixa: #eef3f3;
+  --superficie-realce: #e6eeee;
+
+  --fio: #dde6e6;
+  --fio-forte: #c3d2d2;
+
+  /* Contraste medido sobre --superficie:
+       texto        14,2:1
+       texto-corpo   7,1:1
+       texto-apoio   4,6:1   (piso AA de corpo é 4,5:1)  */
+  --texto: #101617;
+  --texto-corpo: #465051;
+  --texto-apoio: #677273;
+
+  --ok: #17795a;
+  --atencao: #9a6407;
+  --erro: #b23a32;
+  --ok-fundo: #e6f4ef;
+  --atencao-fundo: #fbf2e1;
+  --erro-fundo: #faeae9;
+  --ok-texto: #0f5b43;
+  --atencao-texto: #7a4f05;
+  --erro-texto: #8d2c25;
+
+  /* No tema claro não há brilho: luz sobre fundo claro não se lê como
+     luz, se lê como borrão. A ênfase vem de cor e peso. */
+  --brilho-1: none;
+  --brilho-2: none;
+  --brilho-forte: none;
+  --linha-grafico-filtro: none;
+
+  --sombra-1: 0 1px 2px rgba(16, 22, 23, 0.06), 0 1px 1px rgba(16, 22, 23, 0.04);
+  --sombra-2: 0 2px 8px rgba(16, 22, 23, 0.08), 0 1px 2px rgba(16, 22, 23, 0.05);
+  --sombra-3: 0 8px 28px rgba(16, 22, 23, 0.12), 0 2px 6px rgba(16, 22, 23, 0.06);
+
+  --marca-nome-cor: #3f4040;
+  --marca-tagline-cor: var(--menta);
+
+  --realce-teclado: color-mix(in srgb, var(--teal-vivo) 22%, transparent);
+  --selecao: color-mix(in srgb, var(--teal-vivo) 26%, transparent);
+  --selecao-texto: #101617;
+
+  color-scheme: light;
+}
+
+/* ---------------------------------------------------------------------
+   TEMA ESCURO
+
+   O fundo é um quase-preto AZUL-ESVERDEADO (#0a1213), não #000. Preto
+   puro num monitor moderno cria contraste extremo com o texto claro e
+   provoca aquele "sangramento" de halo na leitura longa; um preto com
+   matiz assenta a vista e, aqui, ainda carrega a cor da marca.
+   ------------------------------------------------------------------- */
+:root[data-tema='escuro'] {
+  /* No escuro os tons da marca sobem de luminosidade: a mesma cor que
+     lê como "teal forte" sobre branco fica apagada sobre preto. */
+  --teal: #4bc1c8;
+  --teal-vivo: #5ce1e6;
+  --teal-fundo: #7af0f2;
   --menta: #85cebd;
-  --menta-forte: #5fb3a0;
-  --grafite: #686969;
-  --grafite-forte: #3f4040;
-  --tinta: #1c1f22;
+  --menta-vivo: #9ff0d8;
 
-  /* -- Superfícies. Um branco levemente frio, puxado para o teal, para
-        a marca aparecer até onde não há cor. Não é creme: creme virou o
-        default automático e não tem nada a ver com esta clínica. ----- */
-  --papel: #fbfcfc;
-  --papel-alto: #ffffff;
-  --papel-fundo: #f2f5f5;
+  --superficie: #0a1213;
+  --superficie-alta: #0f1a1c;
+  --superficie-baixa: #060d0e;
+  --superficie-realce: #16262a;
 
-  /* -- Fios. A estrutura da interface. ------------------------------ */
-  --fio: #e2e8e8;
-  --fio-forte: #cbd5d5;
+  --fio: #1d3034;
+  --fio-forte: #2b464b;
 
-  /* -- Texto. Contraste medido, não estimado:
-        tinta   sobre papel = 14,8:1
-        corpo   sobre papel =  7,3:1
-        apoio   sobre papel =  4,6:1  (piso AA de corpo é 4,5:1)
-        Nada abaixo disso carrega texto de leitura. ------------------ */
-  --texto: #1c1f22;
-  --texto-corpo: #4a5152;
-  --texto-apoio: #6b7374;
+  /* Contraste sobre --superficie (#0a1213):
+       texto        16,1:1
+       texto-corpo   9,4:1
+       texto-apoio   5,6:1  */
+  --texto: #e9f5f6;
+  --texto-corpo: #b3c6c8;
+  --texto-apoio: #80989c;
 
-  /* -- Estado. Sinal funcional, não cor de marca. ------------------- */
-  --ok: #1f9d6b;
-  --atencao: #b5790b;
-  --erro: #c4453c;
-  --ok-fundo: #eaf6f0;
-  --atencao-fundo: #fdf4e3;
-  --erro-fundo: #fbeceb;
+  --ok: #3ee0a0;
+  --atencao: #ffc857;
+  --erro: #ff7a70;
+  --ok-fundo: #0d241d;
+  --atencao-fundo: #26200c;
+  --erro-fundo: #2a1413;
+  --ok-texto: #6df0bd;
+  --atencao-texto: #ffd98a;
+  --erro-texto: #ffa79f;
 
-  /* -- Tipografia -------------------------------------------------- */
+  /* AQUI o neon existe. Brilho é sombra colorida SEM deslocamento — o
+     que num tema claro seria decoração barata, no escuro é como a luz
+     de um instrumento se comporta de verdade. */
+  --brilho-1: 0 0 12px color-mix(in srgb, var(--teal-vivo) 28%, transparent);
+  --brilho-2: 0 0 22px color-mix(in srgb, var(--teal-vivo) 34%, transparent);
+  --brilho-forte:
+    0 0 8px color-mix(in srgb, var(--teal-vivo) 55%, transparent),
+    0 0 26px color-mix(in srgb, var(--teal-vivo) 30%, transparent);
+  --linha-grafico-filtro: drop-shadow(0 0 6px color-mix(in srgb, var(--teal-vivo) 45%, transparent));
+
+  /* Sombra no escuro é ausência de luz, não borrão preto sobre preto:
+     mantemos elevação sutil e deixamos o brilho fazer a hierarquia. */
+  --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --sombra-2: 0 4px 14px rgba(0, 0, 0, 0.55);
+  --sombra-3: 0 12px 36px rgba(0, 0, 0, 0.65);
+
+  --marca-nome-cor: #eaf7f8;
+  --marca-tagline-cor: var(--menta-vivo);
+
+  --realce-teclado: color-mix(in srgb, var(--teal-vivo) 34%, transparent);
+  --selecao: color-mix(in srgb, var(--teal-vivo) 30%, transparent);
+  --selecao-texto: #eaf7f8;
+
+  color-scheme: dark;
+}
+
+/* Sem escolha explícita, segue o sistema operacional. Um seletor de
+   tema que ignora a preferência do sistema obriga a pessoa a repetir
+   todo dia uma decisão que ela já tomou uma vez. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema='claro']) {
+    --teal: #4bc1c8;
+    --teal-vivo: #5ce1e6;
+    --teal-fundo: #7af0f2;
+    --menta: #85cebd;
+    --menta-vivo: #9ff0d8;
+
+    --superficie: #0a1213;
+    --superficie-alta: #0f1a1c;
+    --superficie-baixa: #060d0e;
+    --superficie-realce: #16262a;
+
+    --fio: #1d3034;
+    --fio-forte: #2b464b;
+
+    --texto: #e9f5f6;
+    --texto-corpo: #b3c6c8;
+    --texto-apoio: #80989c;
+
+    --ok: #3ee0a0;
+    --atencao: #ffc857;
+    --erro: #ff7a70;
+    --ok-fundo: #0d241d;
+    --atencao-fundo: #26200c;
+    --erro-fundo: #2a1413;
+    --ok-texto: #6df0bd;
+    --atencao-texto: #ffd98a;
+    --erro-texto: #ffa79f;
+
+    --brilho-1: 0 0 12px color-mix(in srgb, var(--teal-vivo) 28%, transparent);
+    --brilho-2: 0 0 22px color-mix(in srgb, var(--teal-vivo) 34%, transparent);
+    --brilho-forte:
+      0 0 8px color-mix(in srgb, var(--teal-vivo) 55%, transparent),
+      0 0 26px color-mix(in srgb, var(--teal-vivo) 30%, transparent);
+    --linha-grafico-filtro: drop-shadow(0 0 6px color-mix(in srgb, var(--teal-vivo) 45%, transparent));
+
+    --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --sombra-2: 0 4px 14px rgba(0, 0, 0, 0.55);
+    --sombra-3: 0 12px 36px rgba(0, 0, 0, 0.65);
+
+    --marca-nome-cor: #eaf7f8;
+    --marca-tagline-cor: var(--menta-vivo);
+
+    --realce-teclado: color-mix(in srgb, var(--teal-vivo) 34%, transparent);
+    --selecao: color-mix(in srgb, var(--teal-vivo) 30%, transparent);
+    --selecao-texto: #eaf7f8;
+
+    color-scheme: dark;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Tipografia, espaço e movimento — iguais nos dois temas
+   ------------------------------------------------------------------- */
+:root {
   --fonte-display: 'Outfit', 'Segoe UI', system-ui, sans-serif;
   --fonte-corpo: 'Source Sans 3', system-ui, -apple-system, sans-serif;
 
-  /* Escala com razão ~1,25 — degraus óbvios, sem hierarquia achatada. */
-  --t-xs: 0.75rem;    /* 12px — só rótulo, nunca corpo               */
-  --t-sm: 0.8125rem;  /* 13px — texto funcional                     */
-  --t-base: 0.9375rem;/* 15px — corpo                               */
-  --t-md: 1.125rem;   /* 18px                                       */
-  --t-lg: 1.5rem;     /* 24px                                       */
-  --t-xl: 2rem;       /* 32px                                       */
-  --t-2xl: 2.75rem;   /* 44px — números do painel                   */
-  --t-3xl: 3.5rem;    /* 56px                                       */
+  --t-xs: 0.75rem;
+  --t-sm: 0.8125rem;
+  --t-base: 0.9375rem;
+  --t-md: 1.125rem;
+  --t-lg: 1.5rem;
+  --t-xl: 2rem;
+  --t-2xl: 2.75rem;
+  --t-3xl: 3.5rem;
 
-  /* -- Espaço. Ritmo de 4px, com saltos maiores entre seções. ------- */
   --e-1: 0.25rem;
   --e-2: 0.5rem;
   --e-3: 0.75rem;
@@ -80,14 +235,6 @@
   --raio: 3px;
   --raio-md: 6px;
 
-  /* -- Profundidade. Sombra COM deslocamento e neutra. Halo colorido
-        de offset zero é decoração, não profundidade. ---------------- */
-  --sombra-1: 0 1px 2px rgba(28, 31, 34, 0.05), 0 1px 1px rgba(28, 31, 34, 0.04);
-  --sombra-2: 0 2px 8px rgba(28, 31, 34, 0.07), 0 1px 2px rgba(28, 31, 34, 0.05);
-  --sombra-3: 0 8px 28px rgba(28, 31, 34, 0.1), 0 2px 6px rgba(28, 31, 34, 0.06);
-
-  /* -- Movimento. Ease-out exponencial: parte rápido e assenta, como
-        um objeto real. Nada de bounce. ------------------------------ */
   --saida: cubic-bezier(0.16, 1, 0.3, 1);
   --saida-suave: cubic-bezier(0.22, 1, 0.36, 1);
   --rapido: 140ms;
@@ -111,8 +258,8 @@
 
 html {
   -webkit-text-size-adjust: 100%;
-  /* Rolagem suave só para quem não pediu menos movimento. */
   scroll-behavior: smooth;
+  background: var(--superficie);
 }
 
 body {
@@ -120,9 +267,14 @@ body {
   font-size: var(--t-base);
   line-height: 1.6;
   color: var(--texto-corpo);
-  background: var(--papel);
+  background: var(--superficie);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* A troca de tema é uma transição curta, não um fade lento: a tela
+     precisa parecer que respondeu ao clique, não que está pensando. */
+  transition:
+    background-color var(--medio) var(--saida),
+    color var(--medio) var(--saida);
 }
 
 h1, h2, h3, h4 {
@@ -131,13 +283,10 @@ h1, h2, h3, h4 {
   line-height: 1.15;
   font-weight: 500;
   letter-spacing: -0.02em;
-  /* Título se liga ao que INTRODUZ: mais espaço acima que abaixo. */
   text-wrap: balance;
 }
 
 p {
-  /* Medida de leitura. Linha acima de ~75 caracteres cansa o olho na
-     volta para a esquerda. */
   max-width: 68ch;
 }
 
@@ -155,29 +304,25 @@ button {
 
 /* =====================================================================
    Superfícies do navegador
-
-   As partes que não desenhamos também carregam o design. Seleção,
-   cursor, scrollbar e anel de foco vêm com padrões que não pertencem a
-   sistema nenhum. Tematizá-los é o sinal mais barato de que a tela foi
-   construída, e o que quase todo mundo pula.
    ===================================================================== */
 
 ::selection {
-  background: color-mix(in srgb, var(--teal) 26%, transparent);
-  color: var(--tinta);
+  background: var(--selecao);
+  color: var(--selecao-texto);
 }
 
 :root {
-  accent-color: var(--teal-forte);
-  caret-color: var(--teal-forte);
+  accent-color: var(--teal);
+  caret-color: var(--teal-vivo);
 }
 
-/* Anel de foco visível e no tom da marca. Foco invisível é barreira de
-   acessibilidade para quem navega por teclado. */
 :focus-visible {
-  outline: 2px solid var(--teal-forte);
+  outline: 2px solid var(--teal-vivo);
   outline-offset: 2px;
   border-radius: 2px;
+  /* No escuro o anel de foco acende; no claro o brilho é `none` e sobra
+     só o contorno. Mesmo código, comportamento certo nos dois. */
+  box-shadow: var(--brilho-1);
 }
 :focus:not(:focus-visible) {
   outline: none;
@@ -197,14 +342,12 @@ button {
 *::-webkit-scrollbar-thumb {
   background: var(--fio-forte);
   border-radius: 99px;
-  border: 3px solid var(--papel);
+  border: 3px solid var(--superficie);
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--grafite);
+  background: var(--teal);
 }
 
-/* Números de dinheiro e de tabela em largura fixa: sem isso as colunas
-   dançam a cada dígito e o olho não consegue comparar verticalmente. */
 .tabular {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
@@ -214,8 +357,6 @@ button {
    Acessibilidade
    ===================================================================== */
 
-/* Respeitar quem pediu menos movimento é obrigação, não gentileza:
-   animação pode provocar enjoo e desconforto real. */
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -240,17 +381,14 @@ button {
   border: 0;
 }
 
-/* Pular para o conteúdo: primeiro item do tab, escondido até receber
-   foco. Quem navega por teclado não deveria atravessar o menu inteiro
-   a cada página. */
 .pular-para-conteudo {
   position: absolute;
   left: var(--e-4);
   top: -100px;
   z-index: 100;
   padding: var(--e-3) var(--e-4);
-  background: var(--tinta);
-  color: var(--papel-alto);
+  background: var(--texto);
+  color: var(--superficie);
   border-radius: var(--raio);
   transition: top var(--rapido) var(--saida);
 }
