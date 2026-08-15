@@ -21,6 +21,7 @@ import {
 } from './api.js';
 import { Carregando, Erro, GraficoLinha, Indicador, Vazio, reais, type Ponto } from './ui.jsx';
 import { Marca } from './Marca.jsx';
+import { AbaAnamnese, AbaEvolucao } from './Prontuario.jsx';
 import { SeletorTema, useTema } from './tema.jsx';
 
 /**
@@ -229,7 +230,7 @@ function Sistema({
 
       <main id="conteudo" className="conteudo">
         {aba === 'painel' && <Painel principal={principal} />}
-        {aba === 'alunos' && <Alunos />}
+        {aba === 'alunos' && <Alunos principal={principal} />}
         {aba === 'agenda' && <Agenda />}
       </main>
     </div>
@@ -526,7 +527,7 @@ const ROTULO_CICLO: Record<string, string> = {
   ANNUAL: 'Anual',
 };
 
-function Alunos(): ReactNode {
+function Alunos({ principal }: { principal: Principal }): ReactNode {
   /* Três telas no mesmo lugar: lista, ficha e formulário. Sem
      roteador por enquanto — o custo de um seria maior que o ganho com
      três destinos, e trocar depois é local. */
@@ -568,7 +569,7 @@ function Alunos(): ReactNode {
   }, [busca, vendo]);
 
   if (vendo.tela === 'ficha') {
-    return <Ficha id={vendo.id} aoVoltar={() => setVendo({ tela: 'lista' })} aoEditar={() => setVendo({ tela: 'editar', id: vendo.id })} />;
+    return <Ficha principal={principal} id={vendo.id} aoVoltar={() => setVendo({ tela: 'lista' })} aoEditar={() => setVendo({ tela: 'editar', id: vendo.id })} />;
   }
   if (vendo.tela === 'novo') {
     return <FormularioAluno aoSair={() => setVendo({ tela: 'lista' })} aoSalvar={(id) => setVendo({ tela: 'ficha', id })} />;
@@ -782,10 +783,12 @@ function Agenda(): ReactNode {
  * ================================================================== */
 
 function Ficha({
+  principal,
   id,
   aoVoltar,
   aoEditar,
 }: {
+  principal: Principal;
   id: string;
   aoVoltar: () => void;
   aoEditar: () => void;
@@ -793,10 +796,18 @@ function Ficha({
   const [ficha, setFicha] = useState<FichaAluno | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [secao, setSecao] = useState<'cadastro' | 'anamnese' | 'evolucao'>('cadastro');
 
-  useEffect(() => {
-    void (async () => {
-      setCarregando(true);
+  const pode = (p: string): boolean => principal.permissions.includes(p);
+
+  /* Recarregável, e não um efeito de mão única: a anamnese é gravada
+     por um componente filho, e o resumo aqui em cima depende dela
+     ("Sem anamnese", o aviso na aba). Sem esta releitura o profissional
+     preenchia a anamnese e a tela continuava dizendo que faltava — o
+     tipo de mentira que faz preencher de novo. */
+  const recarregar = useCallback(
+    async (comEsqueleto: boolean): Promise<void> => {
+      if (comEsqueleto) setCarregando(true);
       setErro(null);
       try {
         const r = await buscarFicha(id);
@@ -804,10 +815,15 @@ function Ficha({
       } catch (e) {
         setErro(e instanceof ApiError ? e.message : 'Não foi possível abrir a ficha.');
       } finally {
-        setCarregando(false);
+        if (comEsqueleto) setCarregando(false);
       }
-    })();
-  }, [id]);
+    },
+    [id],
+  );
+
+  useEffect(() => {
+    void recarregar(true);
+  }, [recarregar]);
 
   if (carregando) return <Carregando rotulo="Abrindo a ficha" />;
   if (erro !== null) {
@@ -904,6 +920,44 @@ function Ficha({
         </div>
       </div>
 
+      {/* A ficha vira um prontuário quando ganha abas: quem atende
+          precisa de identidade + situação SEMPRE visíveis (o topo e o
+          resumo ficam), e alterna entre cadastro, anamnese e evolução
+          embaixo. Empilhar tudo numa página só faria a anamnese começar
+          depois de três telas de rolagem. */}
+      <nav className="ficha-secoes" aria-label="Seções da ficha">
+        {SECOES_FICHA.filter((s) => s.permissao === null || pode(s.permissao)).map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`ficha-secao ${secao === s.id ? 'ativa' : ''}`}
+            aria-current={secao === s.id ? 'true' : undefined}
+            onClick={() => setSecao(s.id)}
+          >
+            {s.nome}
+            {s.id === 'anamnese' && !f.temAnamnese && (
+              <span className="ficha-secao-pendente" title="Sem anamnese registrada">
+                !
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {secao === 'anamnese' && (
+        <AbaAnamnese
+          alunoId={f.id}
+          podeEscrever={pode('anamnesis:write')}
+          /* Sem esqueleto: recarregar em silêncio evita a ficha piscar
+             logo depois de salvar. */
+          aoGravar={() => void recarregar(false)}
+        />
+      )}
+      {secao === 'evolucao' && (
+        <AbaEvolucao alunoId={f.id} podeEscrever={pode('evolution:write')} />
+      )}
+
+      {secao === 'cadastro' && (
       <div className="ficha-blocos">
         <section className="ficha-bloco">
           <h2>Contato</h2>
@@ -952,9 +1006,23 @@ function Ficha({
           {f.observacoes !== null && <Campo rotulo="Observações" valor={f.observacoes} />}
         </section>
       </div>
+      )}
     </>
   );
 }
+
+/* A anamnese só aparece para quem pode lê-la. Isto é conveniência de
+   interface, não segurança: as rotas exigem a permissão de qualquer
+   forma, e quem chamar direto recebe 403. */
+const SECOES_FICHA: {
+  id: 'cadastro' | 'anamnese' | 'evolucao';
+  nome: string;
+  permissao: string | null;
+}[] = [
+  { id: 'cadastro', nome: 'Cadastro', permissao: null },
+  { id: 'anamnese', nome: 'Anamnese', permissao: 'anamnesis:read' },
+  { id: 'evolucao', nome: 'Evolução', permissao: 'evolution:read' },
+];
 
 function Campo({ rotulo, valor }: { rotulo: string; valor: string | null }): ReactNode {
   return (

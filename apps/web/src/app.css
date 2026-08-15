@@ -1137,3 +1137,183 @@
 .lista-erros li { margin-top: 2px; }
 
 .formulario-acoes { display: flex; gap: var(--e-3); justify-content: flex-end; margin-top: var(--e-4); }
+
+/* ---------------------------------------------------------------------
+   Prontuário
+
+   A ficha vira prontuário quando ganha seções. Identidade e situação
+   ficam sempre visíveis lá em cima; aqui embaixo alterna o assunto.
+   ------------------------------------------------------------------- */
+
+.ficha-secoes {
+  display: flex;
+  gap: var(--e-5);
+  border-bottom: 1px solid var(--fio);
+  margin: var(--e-6) 0 var(--e-5);
+}
+
+.ficha-secao {
+  position: relative;
+  background: none;
+  border: 0;
+  padding: var(--e-3) 0;
+  font-family: inherit;
+  font-size: var(--t-base);
+  color: var(--texto-apoio);
+  cursor: pointer;
+  /* O sublinhado é uma borda que já existe transparente: assim a linha
+     não empurra o texto 2px quando a aba é selecionada. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--rapido) var(--saida), border-color var(--rapido) var(--saida);
+}
+.ficha-secao:hover { color: var(--texto); }
+.ficha-secao.ativa {
+  color: var(--texto);
+  font-weight: 500;
+  border-bottom-color: var(--teal-vivo);
+  box-shadow: 0 1px 0 var(--brilho-cor, transparent);
+}
+
+/* Um ponto, não um texto: o aviso precisa caber ao lado do rótulo sem
+   fazer a aba mudar de largura quando o aluno ganhar anamnese. */
+.ficha-secao-pendente {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: var(--e-2);
+  border-radius: 50%;
+  background: var(--atencao);
+  color: var(--superficie);
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+.prontuario { max-width: 52rem; }
+.prontuario .formulario { margin-bottom: var(--e-5); }
+
+.prontuario-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-4);
+  margin-bottom: var(--e-5);
+}
+.prontuario-data { font-size: var(--t-sm); color: var(--texto-apoio); }
+.prontuario-autor { font-size: var(--t-sm); color: var(--texto-apoio); margin-left: var(--e-2); }
+
+.prontuario-medidas-leitura {
+  display: flex;
+  gap: var(--e-6);
+  padding-bottom: var(--e-5);
+  border-bottom: 1px solid var(--fio);
+  margin-bottom: var(--e-5);
+  color: var(--texto-apoio);
+  font-size: var(--t-sm);
+}
+.prontuario-medidas-leitura strong { color: var(--texto); font-size: var(--t-lg); font-weight: 500; }
+.prontuario-imc { margin-left: auto; }
+
+/* Contraindicação não é um parágrafo entre outros: é o campo cuja
+   ausência de leitura machuca alguém. Fica no topo e com peso visual. */
+.prontuario-alerta {
+  border-left: 3px solid var(--atencao);
+  padding: var(--e-3) 0 var(--e-3) var(--e-4);
+  margin-bottom: var(--e-6);
+}
+.prontuario-alerta-rotulo {
+  display: block;
+  font-size: var(--t-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--atencao);
+  margin-bottom: var(--e-2);
+}
+.prontuario-alerta p { margin: 0; color: var(--texto); }
+
+.prontuario-secao { margin-bottom: var(--e-6); }
+.prontuario-secao h3 {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto-apoio);
+  margin: 0 0 var(--e-2);
+}
+.prontuario-secao p { margin: 0; white-space: pre-wrap; line-height: 1.6; }
+
+.prontuario-aviso {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  margin: var(--e-4) 0 0;
+}
+.prontuario-vazio { display: grid; justify-items: start; gap: var(--e-4); }
+
+.prontuario-historico { margin-top: var(--e-6); font-size: var(--t-sm); }
+.prontuario-historico summary { cursor: pointer; color: var(--texto-apoio); }
+.prontuario-historico ul { margin: var(--e-3) 0 0; padding-left: var(--e-5); color: var(--texto-apoio); }
+
+.campo-erro {
+  display: block;
+  margin-top: var(--e-1);
+  font-size: var(--t-xs);
+  color: var(--erro);
+}
+
+/* --- evolução --- */
+
+.evolucao-nova {
+  padding-bottom: var(--e-5);
+  border-bottom: 1px solid var(--fio);
+  margin-bottom: var(--e-6);
+}
+
+.evolucao-linha { list-style: none; margin: 0; padding: 0; }
+
+.evolucao-item {
+  padding: var(--e-4) 0 var(--e-4) var(--e-5);
+  border-left: 1px solid var(--fio);
+  position: relative;
+}
+/* O marcador na linha do tempo: um ponto sobre o fio, alinhado com a
+   data. Sem ele a coluna de datas parece uma tabela sem colunas. */
+.evolucao-item::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: calc(var(--e-4) + 6px);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal-vivo);
+  box-shadow: var(--brilho-1);
+}
+
+.evolucao-item-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  margin-bottom: var(--e-2);
+}
+.evolucao-data { font-weight: 500; }
+.evolucao-autor { font-size: var(--t-sm); color: var(--texto-apoio); }
+.evolucao-conteudo { margin: 0; white-space: pre-wrap; line-height: 1.6; }
+.evolucao-correcao { width: 100%; font-family: inherit; font-size: var(--t-base); line-height: 1.55; }
+
+/* Três faixas, porque onze cores não comunicam nada. */
+.selo-dor {
+  font-size: var(--t-xs);
+  padding: 2px var(--e-2);
+  border-radius: var(--raio-pequeno, 4px);
+  border: 1px solid currentColor;
+}
+.selo-dor-leve  { color: var(--ok); }
+.selo-dor-media { color: var(--atencao); }
+.selo-dor-alta  { color: var(--erro); }
+
+@media (max-width: 700px) {
+  .ficha-secoes { gap: var(--e-4); overflow-x: auto; scrollbar-width: none; }
+  .ficha-secoes::-webkit-scrollbar { display: none; }
+  .prontuario-medidas-leitura { gap: var(--e-4); }
+  .prontuario-imc { margin-left: 0; }
+}

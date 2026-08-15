@@ -325,3 +325,83 @@ export const atualizarAluno = (id: string, dados: DadosAluno) =>
     method: 'PATCH',
     body: JSON.stringify(dados),
   });
+
+/* --------------------------------------------------------------------
+ * Prontuário
+ *
+ * Anamnese e evolução são dado de saúde. Nenhuma delas é guardada em
+ * cache aqui de propósito: o que não fica em memória do navegador não
+ * vaza numa máquina compartilhada do balcão.
+ * ------------------------------------------------------------------ */
+
+export interface Anamnese {
+  id: string;
+  queixaPrincipal: string | null;
+  historicoClinico: string | null;
+  medicamentos: string | null;
+  cirurgias: string | null;
+  lesoes: string | null;
+  objetivos: string | null;
+  contraindicacoes: string | null;
+  alturaCm: number | null;
+  pesoG: number | null;
+  respostas: Record<string, unknown>;
+  realizadaEm: string;
+  criadaEm: string;
+  profissional: { id: string; nome: string } | null;
+}
+
+export interface VersaoAnamnese {
+  id: string;
+  realizadaEm: string;
+  profissional: string | null;
+}
+
+export interface Evolucao {
+  id: string;
+  dataSessao: string;
+  conteudo: string;
+  escalaDor: number | null;
+  medidas: Record<string, unknown>;
+  criadaEm: string;
+  atualizadaEm: string;
+  profissional: { id: string; nome: string };
+  editavel: boolean;
+}
+
+export type DadosAnamnese = Record<string, string | number | undefined>;
+
+export const buscarAnamnese = (alunoId: string) =>
+  api<{ data: { vigente: Anamnese | null; versoes: VersaoAnamnese[] } }>(
+    `/api/students/${alunoId}/anamnese`,
+  );
+
+export const gravarAnamnese = (alunoId: string, dados: DadosAnamnese) =>
+  api<{ data: { id: string } }>(`/api/students/${alunoId}/anamnese`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const buscarEvolucoes = (alunoId: string, pagina = 1) =>
+  api<{ data: Evolucao[]; pagination: { total: number; totalPages: number } }>(
+    `/api/students/${alunoId}/evolucoes?page=${pagina}&pageSize=20`,
+  );
+
+export const criarEvolucao = (
+  alunoId: string,
+  dados: { dataSessao: string; conteudo: string; escalaDor?: number },
+) =>
+  api<{ data: { id: string } }>(`/api/students/${alunoId}/evolucoes`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const editarEvolucao = (
+  alunoId: string,
+  evolucaoId: string,
+  dados: { conteudo: string; escalaDor?: number },
+) =>
+  api<{ ok: boolean }>(`/api/students/${alunoId}/evolucoes/${evolucaoId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(dados),
+  });
