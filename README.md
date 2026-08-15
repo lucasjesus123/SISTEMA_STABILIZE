@@ -31,14 +31,19 @@ existe e o que não existe:
 | Matriz de permissões (5 papéis, escopo por profissional) | ✅ Pronta e testada — 19 testes |
 | Schema do banco com Row-Level Security | ✅ Pronto e verificado — 22 tabelas, 9 garantias |
 | Camada de dados da API (contexto de tenant, escopo) | ✅ Pronta e testada — 11 testes de isolamento |
-| Autenticação e rotas HTTP | ⬜ Não construída |
+| Autenticação, sessão e cabeçalhos de segurança | ✅ Pronta e testada — 27 testes ponta a ponta |
+| Alunos (listar, abrir ficha) | ✅ Pronto e testado |
+| Agenda, disponibilidade e presença | ✅ Pronta e testada — 35 testes do motor de horários |
+| Cadastro de alunos (criar, editar) e prontuário | ⬜ Schema pronto, rotas não construídas |
+| Financeiro e comissões | ⬜ Schema pronto, rotas não construídas |
 | Interface web | ⬜ Não construída |
 | App do aluno | ⬜ Não construído |
 | Integração WhatsApp (uazapi) | ⬜ Schema pronto, integração não construída |
 | Relatórios em PDF | ⬜ Não construídos |
 
 **O sistema ainda não está pronto para produção.** O motivo não é fragilidade
-do que existe — é que falta funcionalidade. Ver
+do que existe — é que falta funcionalidade, e falta o preparo do servidor
+(TLS, firewall, backup com restore testado). Ver
 [`AUDITORIA_SEGURANCA.md`](AUDITORIA_SEGURANCA.md) para o parecer completo,
 incluindo o que está verificado por execução e o que é hipótese.
 
