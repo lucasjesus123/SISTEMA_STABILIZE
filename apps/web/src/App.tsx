@@ -52,7 +52,7 @@ export default function App(): ReactNode {
   if (carregando) {
     return (
       <div className="tela-centro">
-        <Marca tamanho={44} />
+        <Marca altura={104} />
       </div>
     );
   }
@@ -115,7 +115,7 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
           <SeletorTema tema={tema} definir={definir} />
         </div>
 
-        <Marca tamanho={34} />
+        <Marca altura={104} />
 
         <h1 className="entrada-titulo">Acesso ao sistema</h1>
 
@@ -198,7 +198,7 @@ function Sistema({
       </a>
 
       <header className="topo">
-        <Marca tamanho={30} />
+        <Marca variante="horizontal" altura={42} />
 
         <nav className="navegacao" aria-label="Seções do sistema">
           {visiveis.map((a) => (

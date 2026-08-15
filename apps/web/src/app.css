@@ -12,46 +12,20 @@
    Marca
    ------------------------------------------------------------------- */
 
+/* A marca é um SVG com a geometria do arquivo original; aqui só se
+   decide a cor que muda com o tema. As demais cores vêm do próprio
+   arquivo e não se mexe nelas. */
 .marca {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
-  align-items: center;
-  column-gap: var(--e-3);
-  line-height: 1;
+  display: block;
+  flex: none;
+  /* A palavra usa currentColor. */
+  color: var(--marca-tinta);
 }
 
-.marca-nome {
-  grid-column: 1;
-  font-family: var(--fonte-display);
-  font-weight: 300;
-  font-size: var(--marca-tamanho, 32px);
-  /* A logo original tem terminações abertas e letras generosas; o
-     tracking levemente aberto aproxima o desenho. */
-  letter-spacing: 0.01em;
-  color: var(--marca-nome-cor);
-}
-
-.marca-fio {
-  box-shadow: var(--brilho-1);
-  grid-column: 2;
-  grid-row: 1 / 3;
-  align-self: end;
-  height: 1px;
-  background: var(--menta-vivo);
-  margin-bottom: calc(var(--marca-tamanho, 32px) * 0.12);
-}
-
-.marca-tagline {
-  grid-column: 1;
-  grid-row: 2;
-  font-family: var(--fonte-display);
-  font-size: calc(var(--marca-tamanho, 32px) * 0.3);
-  font-weight: 400;
-  color: var(--marca-tagline-cor);
-  letter-spacing: 0.01em;
-  margin-top: calc(var(--marca-tamanho, 32px) * 0.16);
-  white-space: nowrap;
+.marca-tagline,
+.marca-moldura {
+  /* Menta do arquivo original, igual nos dois temas. */
+  fill: #85cebe;
 }
 
 .tela-centro {
@@ -168,8 +142,6 @@
 }
 
 .entrada-cartao .marca {
-  justify-content: center;
-  width: fit-content;
   margin-inline: auto;
 }
 
@@ -567,8 +539,7 @@
     gap: var(--e-3);
     padding-inline: var(--e-4);
   }
-  .marca-nome { font-size: 22px; }
-  .marca-tagline { font-size: 8px; }
+
   .navegacao {
     order: 3;
     width: 100%;

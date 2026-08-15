@@ -3,9 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="light" />
+    <!--
+      "light dark" porque o sistema tem os dois temas. Com "light", o
+      primeiro quadro — antes do CSS chegar — pintava fundo branco mesmo
+      para quem usa o tema escuro, e o clarão aparecia a cada recarga.
+    -->
+    <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#4BC1C8" />
     <title>Stabilize — Clínica do Músculo</title>
+
+    <!--
+      A figura da marca, direto do arquivo vetorial original
+      (gerada por brand/extrair.py). SVG em vez de PNG: nítida em
+      qualquer densidade de tela e um arquivo só.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!--
       A fonte é carregada com preconnect para não atrasar a primeira

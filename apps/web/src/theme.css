@@ -72,8 +72,10 @@
   --sombra-2: 0 2px 8px rgba(16, 22, 23, 0.08), 0 1px 2px rgba(16, 22, 23, 0.05);
   --sombra-3: 0 8px 28px rgba(16, 22, 23, 0.12), 0 2px 6px rgba(16, 22, 23, 0.06);
 
-  --marca-nome-cor: #3f4040;
-  --marca-tagline-cor: var(--menta);
+  /* Grafite exato do arquivo original da marca. A palavra "stabilize"
+     é a única parte que muda de cor entre os temas; figura e tagline
+     nascem em menta e funcionam sobre os dois fundos. */
+  --marca-tinta: #686969;
 
   --realce-teclado: color-mix(in srgb, var(--teal-vivo) 22%, transparent);
   --selecao: color-mix(in srgb, var(--teal-vivo) 26%, transparent);
@@ -141,8 +143,9 @@
   --sombra-2: 0 4px 14px rgba(0, 0, 0, 0.55);
   --sombra-3: 0 12px 36px rgba(0, 0, 0, 0.65);
 
-  --marca-nome-cor: #eaf7f8;
-  --marca-tagline-cor: var(--menta-vivo);
+  /* No escuro o grafite sumiria. Não é licença poética: a alternativa
+     seria a marca invisível no tema padrão do sistema. */
+  --marca-tinta: #eaf7f8;
 
   --realce-teclado: color-mix(in srgb, var(--teal-vivo) 34%, transparent);
   --selecao: color-mix(in srgb, var(--teal-vivo) 30%, transparent);
@@ -195,8 +198,7 @@
     --sombra-2: 0 4px 14px rgba(0, 0, 0, 0.55);
     --sombra-3: 0 12px 36px rgba(0, 0, 0, 0.65);
 
-    --marca-nome-cor: #eaf7f8;
-    --marca-tagline-cor: var(--menta-vivo);
+    --marca-tinta: #eaf7f8;
 
     --realce-teclado: color-mix(in srgb, var(--teal-vivo) 34%, transparent);
     --selecao: color-mix(in srgb, var(--teal-vivo) 30%, transparent);
