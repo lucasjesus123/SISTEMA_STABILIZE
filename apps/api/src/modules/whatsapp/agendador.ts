@@ -1,0 +1,71 @@
+import type { FastifyInstance } from 'fastify';
+import { enviarAniversariosDoDia } from './aniversarios.js';
+
+/**
+ * Agendador de tarefas de fundo.
+ *
+ * POR QUE DENTRO DA API, E NÃO UM CRON DO SISTEMA
+ *
+ * Um cron externo precisaria de credencial de banco própria, de um
+ * caminho para o código e de manutenção separada — três coisas a
+ * esquecer numa VPS. Aqui a tarefa mora no mesmo processo que já tem
+ * tudo isso, e o Docker reinicia sozinho se cair.
+ *
+ * A contrapartida é conhecida: se um dia a API rodar em mais de uma
+ * réplica, todas tentarão a tarefa. Isso é INOFENSIVO por construção —
+ * a idempotência está no banco (UNIQUE em `idempotency_key`), não no
+ * agendador. A segunda réplica esbarra na unicidade e não envia nada.
+ * Quando houver réplica, isto vira desperdício de uma consulta por hora,
+ * não mensagem duplicada.
+ *
+ * O TIQUE É DE HORA EM HORA, e a tarefa só age na hora configurada.
+ * Um `setTimeout` calculado até o horário exato parece mais elegante e é
+ * pior: qualquer suspensão do processo, ajuste de relógio ou horário de
+ * verão desloca o disparo, e ninguém percebe até alguém reclamar que não
+ * recebeu os parabéns.
+ */
+
+const UMA_HORA_MS = 60 * 60 * 1000;
+
+/** Hora local do envio. 9h: cedo o bastante para ser no dia, tarde o
+ *  bastante para não acordar ninguém. */
+const HORA_DO_ENVIO = 9;
+
+export function registrarAgendador(app: FastifyInstance): void {
+  let ultimaExecucao = '';
+
+  const tique = async (): Promise<void> => {
+    const agora = new Date();
+    if (agora.getHours() !== HORA_DO_ENVIO) return;
+
+    /* Guarda de dia: o tique de hora em hora cairia duas vezes dentro da
+       mesma hora se o intervalo derivar. A idempotência do banco já
+       protegeria, mas evitar a consulta é mais barato que desperdiçá-la. */
+    const dia = agora.toDateString();
+    if (dia === ultimaExecucao) return;
+    ultimaExecucao = dia;
+
+    try {
+      const r = await enviarAniversariosDoDia(app.log);
+      if (r.enviadas > 0 || r.falhas > 0) {
+        app.log.info({ aniversarios: r }, 'tarefa de aniversários concluída');
+      }
+    } catch (erro) {
+      /* NUNCA deixar a exceção escapar de um temporizador: uma rejeição
+         não tratada derruba o processo inteiro, e uma falha na
+         integração de WhatsApp não pode tirar o sistema do ar. */
+      app.log.error({ err: erro }, 'tarefa de aniversários falhou');
+    }
+  };
+
+  const relogio = setInterval(() => void tique(), UMA_HORA_MS);
+  /* `unref` para o temporizador não segurar o processo vivo no
+     encerramento — sem isto, `docker compose down` espera o timeout. */
+  relogio.unref();
+
+  app.addHook('onClose', async () => {
+    clearInterval(relogio);
+  });
+
+  app.log.info({ hora: HORA_DO_ENVIO }, 'agendador de aniversários ativo');
+}

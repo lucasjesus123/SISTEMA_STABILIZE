@@ -39,6 +39,8 @@ export type AuditAction =
   // treino
   | 'exercise.write'
   | 'workout.write'
+  // integração
+  | 'whatsapp.connect'
   // agenda
   | 'appointment.create'
   | 'appointment.update'
