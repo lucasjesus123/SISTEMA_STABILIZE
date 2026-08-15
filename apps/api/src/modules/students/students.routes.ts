@@ -1,7 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
-import { findStudentById, listStudents } from './students.repository.js';
+import {
+  atualizarAluno,
+  buscarFicha,
+  criarAluno,
+  findStudentById,
+  listStudents,
+} from './students.repository.js';
+import { hasPermission } from '@stabilize/shared';
 import { notFound } from '../../http/errors.js';
 import { auditDenied, writeAudit } from '../../audit/audit.js';
 
@@ -36,6 +43,39 @@ const listQuerySchema = z.object({
  * registro não existe, ou vice-versa.
  */
 const idParamSchema = z.object({ id: z.string().uuid('Identificador inválido') });
+
+/* Schema fechado do formulário.
+   Zod descarta por padrão qualquer chave não declarada, e é isso que
+   fecha a porta de mass assignment: um corpo com "status":"ACTIVE" numa
+   rota que não deveria mudar situação simplesmente não chega ao SQL. */
+const dadosAlunoSchema = z.object({
+  nome: z.string().trim().min(2, 'Informe o nome completo').max(160),
+  email: z.string().trim().toLowerCase().email('E-mail inválido').max(160).optional().or(z.literal('')),
+  telefone: z.string().trim().max(30).optional().or(z.literal('')),
+  /* E.164 com o mesmo padrão do banco. Validar aqui devolve uma
+     mensagem em português; deixar só para o CHECK devolveria 422
+     genérico e o atendente não saberia o que corrigir. */
+  whatsapp: z
+    .string()
+    .trim()
+    .regex(/^\+[1-9][0-9]{7,14}$/, 'Use o formato +5531999998888')
+    .optional()
+    .or(z.literal('')),
+  dataNascimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
+  documento: z.string().trim().max(20).optional().or(z.literal('')),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED', 'LEAD']).optional(),
+  observacoes: z.string().trim().max(2000).optional().or(z.literal('')),
+  cep: z.string().trim().max(12).optional().or(z.literal('')),
+  logradouro: z.string().trim().max(160).optional().or(z.literal('')),
+  numero: z.string().trim().max(20).optional().or(z.literal('')),
+  complemento: z.string().trim().max(80).optional().or(z.literal('')),
+  bairro: z.string().trim().max(80).optional().or(z.literal('')),
+  cidade: z.string().trim().max(80).optional().or(z.literal('')),
+  uf: z.string().trim().length(2, 'Use a sigla do estado').toUpperCase().optional().or(z.literal('')),
+  contatoEmergencia: z.string().trim().max(160).optional().or(z.literal('')),
+  telefoneEmergencia: z.string().trim().max(30).optional().or(z.literal('')),
+  profissionalId: z.string().uuid().optional().or(z.literal('')),
+});
 
 export async function studentsRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
@@ -128,6 +168,114 @@ export async function studentsRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  await fichaEEscrita(app);
+}
+
+/* ------------------------------------------------------------------
+ * GET /api/students/:id/ficha
+ * ---------------------------------------------------------------- */
+export async function fichaEEscrita(app: FastifyInstance): Promise<void> {
+  app.get('/:id/ficha', { preHandler: [app.authorize('student:read')] }, async (request) => {
+    const { id } = idParamSchema.parse(request.params);
+    const scope = requireScope(request);
+
+    return inTenant(request, async (client, principal) => {
+      const ficha = await buscarFicha(client, scope, id);
+      if (ficha === null) {
+        await auditDenied(principal.tenantId, principal.userId, {
+          action: 'student.read',
+          resourceType: 'student',
+          resourceId: id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+        });
+        throw notFound('Aluno');
+      }
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'student.read',
+        resourceType: 'student',
+        resourceId: id,
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+      });
+
+      return { data: { ...ficha, criadoEm: ficha.criadoEm.toISOString() } };
+    });
+  });
+
+  app.post('/', { preHandler: [app.authorize('student:write')] }, async (request, reply) => {
+    const dados = dadosAlunoSchema.parse(request.body);
+
+    return inTenant(request, async (client, principal) => {
+      /* Um profissional que cadastra aluno vincula a SI MESMO. Deixá-lo
+         escolher outro profissional permitiria plantar aluno na carteira
+         de um colega — e alterar a comissão dele. */
+      const profissionalId =
+        principal.role === 'PROFESSIONAL' ? principal.userId : dados.profissionalId;
+
+      const criado = await criarAluno(
+        client,
+        principal.tenantId,
+        { ...dados, profissionalId },
+        principal.userId,
+      );
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'student.create',
+        resourceType: 'student',
+        resourceId: criado.id,
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+      });
+
+      void reply.status(201);
+      return { data: { id: criado.id } };
+    });
+  });
+
+  app.patch('/:id', { preHandler: [app.authorize('student:write')] }, async (request) => {
+    const { id } = idParamSchema.parse(request.params);
+    const dados = dadosAlunoSchema.partial().parse(request.body);
+    const scope = requireScope(request);
+
+    return inTenant(request, async (client, principal) => {
+      /* Só quem pode redistribuir alunos muda o profissional. Sem esta
+         checagem, um professor moveria aluno entre carteiras pelo corpo
+         da requisição — e comissão é dinheiro. */
+      const podeReatribuir = hasPermission(principal.role, 'student:assign_professional');
+      const corpo = podeReatribuir ? dados : { ...dados, profissionalId: undefined };
+
+      const ok = await atualizarAluno(client, scope, principal.tenantId, id, corpo);
+      if (!ok) {
+        await auditDenied(principal.tenantId, principal.userId, {
+          action: 'student.update',
+          resourceType: 'student',
+          resourceId: id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+        });
+        throw notFound('Aluno');
+      }
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'student.update',
+        resourceType: 'student',
+        resourceId: id,
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+        metadata: { campos: Object.keys(corpo).filter((k) => corpo[k as keyof typeof corpo] !== undefined) },
+      });
+
+      return { ok: true };
+    });
+  });
 }
 
 /** Converte a linha do banco na forma exposta pela API. */
