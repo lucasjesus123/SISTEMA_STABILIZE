@@ -35,7 +35,8 @@ existe e o que não existe:
 | Alunos (listar, abrir ficha) | ✅ Pronto e testado |
 | Agenda, disponibilidade e presença | ✅ Pronta e testada — 35 testes do motor de horários |
 | Cadastro de alunos (criar, editar) e prontuário | ⬜ Schema pronto, rotas não construídas |
-| Financeiro e comissões | ⬜ Schema pronto, rotas não construídas |
+| Financeiro (lançamentos, baixas, resumo) | ✅ Pronto e testado |
+| Comissões com memória de cálculo | ✅ Pronta e testada — 18 testes do cálculo |
 | Interface web | ⬜ Não construída |
 | App do aluno | ⬜ Não construído |
 | Integração WhatsApp (uazapi) | ⬜ Schema pronto, integração não construída |
