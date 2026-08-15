@@ -1057,3 +1057,112 @@
   color: var(--menta);
   min-width: 3.2rem;
 }
+
+/* ---------------------------------------------------------------------
+   Ficha do aluno e formulário
+   ------------------------------------------------------------------- */
+
+.linha-cabecalho { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--e-4); flex-wrap:wrap; }
+
+.botao-acao {
+  padding: var(--e-3) var(--e-5);
+  border-radius: var(--raio);
+  background: var(--teal-fundo);
+  color: var(--superficie-baixa);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background var(--rapido) var(--saida), box-shadow var(--medio) var(--saida);
+}
+.botao-acao:hover:not(:disabled) { background: var(--teal-vivo); box-shadow: var(--brilho-1); }
+.botao-acao:disabled { background: var(--fio-forte); color: var(--texto-apoio); cursor: not-allowed; }
+
+.botao-voltar {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--texto-apoio);
+  margin-bottom: var(--e-5);
+  transition: color var(--rapido) var(--saida);
+}
+.botao-voltar:hover { color: var(--teal); }
+
+/* A linha inteira abre a ficha. O cursor e o realce precisam anunciar
+   isso — alvo clicável que não parece clicável não é usado. */
+.linha-clicavel { cursor: pointer; }
+.linha-clicavel:focus-visible { outline: 2px solid var(--teal-vivo); outline-offset: -2px; }
+
+.ficha-topo {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--e-5); flex-wrap: wrap; margin-bottom: var(--e-6);
+}
+.ficha-topo h1 { font-size: var(--t-xl); margin-bottom: var(--e-3); }
+.ficha-selos { display: flex; gap: var(--e-2); flex-wrap: wrap; }
+.selo-plano { background: color-mix(in srgb, var(--teal-vivo) 14%, transparent); color: var(--teal); }
+.selo-alerta { background: var(--atencao-fundo); color: var(--atencao-texto); }
+
+.ficha-resumo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1px; background: var(--fio); border: 1px solid var(--fio);
+  margin-bottom: var(--e-7);
+}
+.mini-valor-texto { font-size: var(--t-md); line-height: 1.3; }
+
+.ficha-blocos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--e-7) var(--e-8);
+}
+.ficha-bloco h2 {
+  font-size: var(--t-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--texto-apoio);
+  padding-bottom: var(--e-3); border-bottom: 1px solid var(--fio); margin-bottom: var(--e-4);
+}
+.ficha-bloco .titulo-interno { margin-top: var(--e-6); }
+
+.campo-leitura { display: flex; flex-direction: column; gap: 1px; padding: var(--e-2) 0; }
+.campo-leitura-rotulo { font-size: var(--t-sm); color: var(--texto-apoio); }
+.campo-leitura-valor { color: var(--texto); }
+
+/* ---------------------------------------------------------------------
+   Formulário
+   ------------------------------------------------------------------- */
+
+.formulario {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--e-4) var(--e-5);
+  max-width: 52rem;
+}
+.campo-cheia { grid-column: span 6; }
+.campo-meia  { grid-column: span 3; }
+.campo-terco { grid-column: span 2; }
+@media (max-width: 700px) {
+  .campo-meia, .campo-terco { grid-column: span 6; }
+}
+.formulario .campo { margin-bottom: 0; }
+
+.formulario select,
+.formulario textarea {
+  width: 100%;
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-alta);
+  color: var(--texto);
+  font-size: var(--t-base);
+  transition: border-color var(--rapido) var(--saida), box-shadow var(--rapido) var(--saida);
+}
+.formulario textarea { resize: vertical; font-family: inherit; line-height: 1.55; }
+.formulario select:focus,
+.formulario textarea:focus {
+  outline: none; border-color: var(--teal-vivo);
+  box-shadow: 0 0 0 3px var(--realce-teclado), var(--brilho-1);
+}
+
+.campo-dica { display: block; margin-top: var(--e-1); font-size: var(--t-xs); color: var(--texto-apoio); }
+
+.lista-erros { margin: var(--e-2) 0 0; padding-left: var(--e-4); font-size: var(--t-sm); }
+.lista-erros li { margin-top: 2px; }
+
+.formulario-acoes { display: flex; gap: var(--e-3); justify-content: flex-end; margin-top: var(--e-4); }

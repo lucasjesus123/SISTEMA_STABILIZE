@@ -3,13 +3,18 @@ import {
   ApiError,
   buscarAgenda,
   buscarAlunos,
+  atualizarAluno,
+  buscarFicha,
   buscarIndicadores,
   buscarResumo,
+  criarAluno,
   entrar,
   restaurarSessao,
   sair,
   type Aluno,
   type Compromisso,
+  type DadosAluno,
+  type FichaAluno,
   type IndicadoresGestao,
   type Principal,
   type ResumoFinanceiro,
@@ -504,7 +509,28 @@ function Gestao({ dados }: { dados: IndicadoresGestao }): ReactNode {
  * Alunos
  * ================================================================== */
 
+const ROTULO_STATUS: Record<string, string> = {
+  ACTIVE: 'Ativo',
+  INACTIVE: 'Inativo',
+  SUSPENDED: 'Suspenso',
+  LEAD: 'Interessado',
+};
+
+const ROTULO_CICLO: Record<string, string> = {
+  SESSION: 'Por sessão',
+  WEEKLY: 'Semanal',
+  BIWEEKLY: 'Quinzenal',
+  MONTHLY: 'Mensal',
+  QUARTERLY: 'Trimestral',
+  SEMIANNUAL: 'Semestral',
+  ANNUAL: 'Anual',
+};
+
 function Alunos(): ReactNode {
+  /* Três telas no mesmo lugar: lista, ficha e formulário. Sem
+     roteador por enquanto — o custo de um seria maior que o ganho com
+     três destinos, e trocar depois é local. */
+  const [vendo, setVendo] = useState<{ tela: 'lista' } | { tela: 'ficha'; id: string } | { tela: 'novo' } | { tela: 'editar'; id: string }>({ tela: 'lista' });
   const [lista, setLista] = useState<Aluno[]>([]);
   const [total, setTotal] = useState(0);
   const [busca, setBusca] = useState('');
@@ -512,6 +538,7 @@ function Alunos(): ReactNode {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
+    if (vendo.tela !== 'lista') return;
     let cancelado = false;
     // Espera o usuário parar de digitar: sem isso, cada tecla dispara
     // uma requisição e as respostas chegam fora de ordem.
@@ -538,13 +565,28 @@ function Alunos(): ReactNode {
       cancelado = true;
       clearTimeout(t);
     };
-  }, [busca]);
+  }, [busca, vendo]);
+
+  if (vendo.tela === 'ficha') {
+    return <Ficha id={vendo.id} aoVoltar={() => setVendo({ tela: 'lista' })} aoEditar={() => setVendo({ tela: 'editar', id: vendo.id })} />;
+  }
+  if (vendo.tela === 'novo') {
+    return <FormularioAluno aoSair={() => setVendo({ tela: 'lista' })} aoSalvar={(id) => setVendo({ tela: 'ficha', id })} />;
+  }
+  if (vendo.tela === 'editar') {
+    return <FormularioAluno id={vendo.id} aoSair={() => setVendo({ tela: 'ficha', id: vendo.id })} aoSalvar={(id) => setVendo({ tela: 'ficha', id })} />;
+  }
 
   return (
     <>
-      <div className="secao-cabecalho">
-        <h1>Alunos</h1>
-        <p>{total === 1 ? '1 aluno' : `${total} alunos`} no seu acompanhamento</p>
+      <div className="secao-cabecalho linha-cabecalho">
+        <div>
+          <h1>Alunos</h1>
+          <p>{total === 1 ? '1 aluno' : `${total} alunos`} no seu acompanhamento</p>
+        </div>
+        <button type="button" className="botao-acao" onClick={() => setVendo({ tela: 'novo' })}>
+          Cadastrar aluno
+        </button>
       </div>
 
       <label className="campo-busca">
@@ -583,7 +625,22 @@ function Alunos(): ReactNode {
           </thead>
           <tbody>
             {lista.map((a) => (
-              <tr key={a.id}>
+              <tr
+                key={a.id}
+                className="linha-clicavel"
+                tabIndex={0}
+                role="button"
+                aria-label={`Abrir a ficha de ${a.nome}`}
+                onClick={() => setVendo({ tela: 'ficha', id: a.id })}
+                onKeyDown={(e) => {
+                  /* Enter e espaço também abrem: uma linha clicável que
+                     só responde ao mouse é inalcançável por teclado. */
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setVendo({ tela: 'ficha', id: a.id });
+                  }
+                }}
+              >
                 <td>
                   <span className="celula-forte">{a.nome}</span>
                   {a.email !== null && <span className="celula-apoio">{a.email}</span>}
@@ -591,13 +648,7 @@ function Alunos(): ReactNode {
                 <td className="tabular">{a.telefone ?? a.whatsapp ?? '—'}</td>
                 <td>
                   <span className={`selo selo-${a.status.toLowerCase()}`}>
-                    {a.status === 'ACTIVE'
-                      ? 'Ativo'
-                      : a.status === 'INACTIVE'
-                        ? 'Inativo'
-                        : a.status === 'SUSPENDED'
-                          ? 'Suspenso'
-                          : 'Interessado'}
+                    {ROTULO_STATUS[a.status] ?? a.status}
                   </span>
                 </td>
               </tr>
@@ -718,6 +769,382 @@ function Agenda(): ReactNode {
           })}
         </ol>
       )}
+    </>
+  );
+}
+
+/* ====================================================================
+ * Ficha do aluno
+ *
+ * O centro de gravidade do atendimento. Identidade e situação no topo,
+ * o resto em blocos — dados, plano, frequência, financeiro. Quem está
+ * no balcão abre aqui e resolve sem navegar.
+ * ================================================================== */
+
+function Ficha({
+  id,
+  aoVoltar,
+  aoEditar,
+}: {
+  id: string;
+  aoVoltar: () => void;
+  aoEditar: () => void;
+}): ReactNode {
+  const [ficha, setFicha] = useState<FichaAluno | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      setCarregando(true);
+      setErro(null);
+      try {
+        const r = await buscarFicha(id);
+        setFicha(r.data);
+      } catch (e) {
+        setErro(e instanceof ApiError ? e.message : 'Não foi possível abrir a ficha.');
+      } finally {
+        setCarregando(false);
+      }
+    })();
+  }, [id]);
+
+  if (carregando) return <Carregando rotulo="Abrindo a ficha" />;
+  if (erro !== null) {
+    return (
+      <>
+        <button type="button" className="botao-voltar" onClick={aoVoltar}>
+          ← Voltar para a lista
+        </button>
+        <Erro mensagem={erro} />
+      </>
+    );
+  }
+  if (ficha === null) return null;
+
+  const f = ficha;
+  const totalSessoes = f.frequencia.presencas + f.frequencia.faltas;
+  const frequencia =
+    totalSessoes === 0 ? null : Math.round((f.frequencia.presencas / totalSessoes) * 100);
+
+  return (
+    <>
+      <button type="button" className="botao-voltar" onClick={aoVoltar}>
+        ← Voltar para a lista
+      </button>
+
+      <header className="ficha-topo">
+        <div>
+          <h1>{f.nome}</h1>
+          <div className="ficha-selos">
+            <span className={`selo selo-${f.status.toLowerCase()}`}>
+              {ROTULO_STATUS[f.status] ?? f.status}
+            </span>
+            {f.contrato !== null && (
+              <span className="selo selo-plano">{ROTULO_CICLO[f.contrato.ciclo] ?? f.contrato.ciclo}</span>
+            )}
+            {/* Pendência financeira aparece no TOPO, junto da identidade.
+                Enterrada num bloco lá embaixo, o atendente atende o
+                aluno inteiro sem nunca ver que há conta vencida. */}
+            {f.financeiro.vencidasQtd > 0 && (
+              <span className="selo selo-alerta">
+                {f.financeiro.vencidasQtd === 1
+                  ? '1 conta vencida'
+                  : `${f.financeiro.vencidasQtd} contas vencidas`}
+              </span>
+            )}
+          </div>
+        </div>
+        <button type="button" className="botao-acao" onClick={aoEditar}>
+          Editar
+        </button>
+      </header>
+
+      <div className="ficha-resumo">
+        <div className="mini">
+          <span className="mini-rotulo">Frequência</span>
+          <strong className="mini-valor tabular">
+            {frequencia === null ? '—' : `${frequencia}%`}
+          </strong>
+          <span className="mini-nota">
+            {f.frequencia.presencas} presenças · {f.frequencia.faltas} faltas
+            {f.frequencia.agendados > 0 && ` · ${f.frequencia.agendados} agendados`}
+          </span>
+        </div>
+        <div className="mini">
+          <span className="mini-rotulo">Em aberto</span>
+          <strong
+            className={`mini-valor tabular ${f.financeiro.emAbertoCentavos > 0 ? 'tom-atencao' : ''}`}
+          >
+            {reais(f.financeiro.emAbertoCentavos)}
+          </strong>
+          <span className="mini-nota">Pago no ano: {reais(f.financeiro.pagoNoAnoCentavos)}</span>
+        </div>
+        <div className="mini">
+          <span className="mini-rotulo">Plano</span>
+          <strong className="mini-valor tabular">
+            {f.contrato === null ? '—' : reais(f.contrato.valorCentavos)}
+          </strong>
+          <span className="mini-nota">
+            {f.contrato === null
+              ? 'Sem contrato ativo'
+              : `${ROTULO_CICLO[f.contrato.ciclo] ?? f.contrato.ciclo}${
+                  f.contrato.diaVencimento !== null ? ` · vence dia ${f.contrato.diaVencimento}` : ''
+                }`}
+          </span>
+        </div>
+        <div className="mini">
+          <span className="mini-rotulo">Profissional</span>
+          <strong className="mini-valor mini-valor-texto">
+            {f.profissional?.nome ?? '—'}
+          </strong>
+          <span className="mini-nota">
+            {f.temAnamnese ? 'Anamnese registrada' : 'Sem anamnese'}
+          </span>
+        </div>
+      </div>
+
+      <div className="ficha-blocos">
+        <section className="ficha-bloco">
+          <h2>Contato</h2>
+          <Campo rotulo="E-mail" valor={f.email} />
+          <Campo rotulo="Telefone" valor={f.telefone} />
+          <Campo rotulo="WhatsApp" valor={f.whatsapp} />
+          <Campo
+            rotulo="Nascimento"
+            valor={f.dataNascimento === null ? null : formatarData(f.dataNascimento)}
+          />
+          <Campo rotulo="Documento" valor={f.documento} />
+        </section>
+
+        <section className="ficha-bloco">
+          <h2>Endereço</h2>
+          <Campo
+            rotulo="Logradouro"
+            valor={
+              f.endereco.logradouro === null
+                ? null
+                : `${f.endereco.logradouro}${f.endereco.numero !== null ? `, ${f.endereco.numero}` : ''}`
+            }
+          />
+          <Campo rotulo="Complemento" valor={f.endereco.complemento} />
+          <Campo rotulo="Bairro" valor={f.endereco.bairro} />
+          <Campo
+            rotulo="Cidade"
+            valor={
+              f.endereco.cidade === null
+                ? null
+                : `${f.endereco.cidade}${f.endereco.uf !== null ? ` / ${f.endereco.uf}` : ''}`
+            }
+          />
+          <Campo rotulo="CEP" valor={f.endereco.cep} />
+        </section>
+
+        <section className="ficha-bloco">
+          <h2>Emergência</h2>
+          <Campo rotulo="Contato" valor={f.emergencia.contato} />
+          <Campo rotulo="Telefone" valor={f.emergencia.telefone} />
+          <h2 className="titulo-interno">Cadastro</h2>
+          <Campo
+            rotulo="Aluno desde"
+            valor={f.inicioEm === null ? null : formatarData(f.inicioEm)}
+          />
+          {f.observacoes !== null && <Campo rotulo="Observações" valor={f.observacoes} />}
+        </section>
+      </div>
+    </>
+  );
+}
+
+function Campo({ rotulo, valor }: { rotulo: string; valor: string | null }): ReactNode {
+  return (
+    <div className="campo-leitura">
+      <span className="campo-leitura-rotulo">{rotulo}</span>
+      {/* Traço, e não vazio: um campo em branco parece bug de carregamento
+          e faz o atendente recarregar a página à toa. */}
+      <span className="campo-leitura-valor">{valor === null || valor === '' ? '—' : valor}</span>
+    </div>
+  );
+}
+
+function formatarData(iso: string): string {
+  const [ano, mes, dia] = iso.slice(0, 10).split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+/* ====================================================================
+ * Formulário
+ * ================================================================== */
+
+const CAMPOS: { nome: string; rotulo: string; tipo?: string; dica?: string; largura?: 'meia' | 'terco' }[] = [
+  { nome: 'nome', rotulo: 'Nome completo' },
+  { nome: 'email', rotulo: 'E-mail', tipo: 'email', largura: 'meia' },
+  { nome: 'telefone', rotulo: 'Telefone', largura: 'meia' },
+  { nome: 'whatsapp', rotulo: 'WhatsApp', dica: 'Com país e DDD: +5531988887777', largura: 'meia' },
+  { nome: 'dataNascimento', rotulo: 'Nascimento', tipo: 'date', largura: 'meia' },
+  { nome: 'documento', rotulo: 'CPF', largura: 'meia' },
+  { nome: 'cep', rotulo: 'CEP', largura: 'meia' },
+  { nome: 'logradouro', rotulo: 'Logradouro' },
+  { nome: 'numero', rotulo: 'Número', largura: 'terco' },
+  { nome: 'complemento', rotulo: 'Complemento', largura: 'terco' },
+  { nome: 'bairro', rotulo: 'Bairro', largura: 'terco' },
+  { nome: 'cidade', rotulo: 'Cidade', largura: 'meia' },
+  { nome: 'uf', rotulo: 'Estado', dica: 'Sigla, como MG', largura: 'meia' },
+  { nome: 'contatoEmergencia', rotulo: 'Contato de emergência', largura: 'meia' },
+  { nome: 'telefoneEmergencia', rotulo: 'Telefone de emergência', largura: 'meia' },
+];
+
+function FormularioAluno({
+  id,
+  aoSair,
+  aoSalvar,
+}: {
+  id?: string;
+  aoSair: () => void;
+  aoSalvar: (id: string) => void;
+}): ReactNode {
+  const [dados, setDados] = useState<DadosAluno>({});
+  const [erro, setErro] = useState<string | null>(null);
+  const [detalhes, setDetalhes] = useState<{ campo: string; problema: string }[]>([]);
+  const [enviando, setEnviando] = useState(false);
+  const [carregando, setCarregando] = useState(id !== undefined);
+
+  useEffect(() => {
+    if (id === undefined) return;
+    void (async () => {
+      try {
+        const { data: f } = await buscarFicha(id);
+        setDados({
+          nome: f.nome,
+          email: f.email ?? '',
+          telefone: f.telefone ?? '',
+          whatsapp: f.whatsapp ?? '',
+          dataNascimento: f.dataNascimento ?? '',
+          documento: f.documento ?? '',
+          status: f.status,
+          observacoes: f.observacoes ?? '',
+          cep: f.endereco.cep ?? '',
+          logradouro: f.endereco.logradouro ?? '',
+          numero: f.endereco.numero ?? '',
+          complemento: f.endereco.complemento ?? '',
+          bairro: f.endereco.bairro ?? '',
+          cidade: f.endereco.cidade ?? '',
+          uf: f.endereco.uf ?? '',
+          contatoEmergencia: f.emergencia.contato ?? '',
+          telefoneEmergencia: f.emergencia.telefone ?? '',
+        });
+      } catch (e) {
+        setErro(e instanceof ApiError ? e.message : 'Não foi possível carregar o cadastro.');
+      } finally {
+        setCarregando(false);
+      }
+    })();
+  }, [id]);
+
+  const enviar = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setErro(null);
+    setDetalhes([]);
+    setEnviando(true);
+    try {
+      if (id === undefined) {
+        const r = await criarAluno(dados);
+        aoSalvar(r.data.id);
+      } else {
+        await atualizarAluno(id, dados);
+        aoSalvar(id);
+      }
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setErro(e.message);
+        /* O servidor devolve qual campo falhou e por quê. Mostrar isso
+           é a diferença entre "dados inválidos" — que obriga a caçar o
+           erro entre dezoito campos — e "WhatsApp: use o formato
+           +5531999998888". */
+        setDetalhes(e.campos);
+      } else {
+        setErro('Não foi possível salvar. Verifique sua conexão.');
+      }
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  if (carregando) return <Carregando rotulo="Carregando o cadastro" />;
+
+  const mudar = (campo: string, valor: string): void =>
+    setDados((d) => ({ ...d, [campo]: valor }));
+
+  return (
+    <>
+      <button type="button" className="botao-voltar" onClick={aoSair}>
+        ← Cancelar
+      </button>
+
+      <div className="secao-cabecalho">
+        <h1>{id === undefined ? 'Cadastrar aluno' : 'Editar cadastro'}</h1>
+        <p>Apenas o nome é obrigatório. O resto pode ser completado depois.</p>
+      </div>
+
+      <form className="formulario" onSubmit={(e) => void enviar(e)} noValidate>
+        {CAMPOS.map((c) => (
+          <label key={c.nome} className={`campo campo-${c.largura ?? 'cheia'}`}>
+            <span className="campo-rotulo">{c.rotulo}</span>
+            <input
+              type={c.tipo ?? 'text'}
+              value={dados[c.nome] ?? ''}
+              onChange={(e) => mudar(c.nome, e.target.value)}
+              required={c.nome === 'nome'}
+              autoFocus={c.nome === 'nome'}
+            />
+            {c.dica !== undefined && <span className="campo-dica">{c.dica}</span>}
+          </label>
+        ))}
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Situação</span>
+          <select value={dados['status'] ?? 'ACTIVE'} onChange={(e) => mudar('status', e.target.value)}>
+            <option value="ACTIVE">Ativo</option>
+            <option value="LEAD">Interessado</option>
+            <option value="SUSPENDED">Suspenso</option>
+            <option value="INACTIVE">Inativo</option>
+          </select>
+        </label>
+
+        <label className="campo campo-cheia">
+          <span className="campo-rotulo">Observações</span>
+          <textarea
+            rows={3}
+            value={dados['observacoes'] ?? ''}
+            onChange={(e) => mudar('observacoes', e.target.value)}
+          />
+        </label>
+
+        {erro !== null && (
+          <div className="mensagem-erro campo-cheia" role="alert">
+            <p>{erro}</p>
+            {detalhes.length > 0 && (
+              <ul className="lista-erros">
+                {detalhes.map((d) => (
+                  <li key={d.campo}>
+                    <b>{CAMPOS.find((c) => c.nome === d.campo)?.rotulo ?? d.campo}:</b>{' '}
+                    {d.problema}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <div className="formulario-acoes campo-cheia">
+          <button type="button" className="botao-secundario" onClick={aoSair}>
+            Cancelar
+          </button>
+          <button type="submit" className="botao-acao" disabled={enviando}>
+            {enviando ? 'Salvando…' : id === undefined ? 'Cadastrar' : 'Salvar alterações'}
+          </button>
+        </div>
+      </form>
     </>
   );
 }

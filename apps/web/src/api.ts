@@ -23,17 +23,37 @@ export interface Principal {
   studentId?: string;
 }
 
+export interface ErroDeCampo {
+  campo: string;
+  problema: string;
+}
+
 export class ApiError extends Error {
   override readonly name = 'ApiError';
   readonly status: number;
   readonly code: string;
   readonly requestId: string | undefined;
+  /**
+   * Quais campos falharam e por quê, quando o servidor informa.
+   *
+   * Sem isto, o formulário só conseguia dizer "os dados enviados são
+   * inválidos" — o servidor mandava o detalhe e o cliente jogava fora,
+   * obrigando a pessoa a caçar o erro entre dezoito campos.
+   */
+  readonly campos: ErroDeCampo[];
 
-  constructor(status: number, code: string, message: string, requestId?: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    requestId?: string,
+    campos: ErroDeCampo[] = [],
+  ) {
     super(message);
     this.status = status;
     this.code = code;
     this.requestId = requestId;
+    this.campos = campos;
   }
 }
 
@@ -70,11 +90,13 @@ async function bruto<T>(caminho: string, init: RequestInit = {}): Promise<T> {
 
   if (!resposta.ok) {
     const e = corpo.error;
+    const detalhes = e?.details;
     throw new ApiError(
       resposta.status,
       e?.code ?? 'ERRO',
       e?.message ?? 'Não foi possível completar a operação.',
       e?.requestId,
+      Array.isArray(detalhes) ? (detalhes as ErroDeCampo[]) : [],
     );
   }
 
@@ -257,3 +279,49 @@ export interface IndicadoresGestao {
 
 export const buscarIndicadores = () =>
   api<{ data: IndicadoresGestao }>('/api/insights/gestao');
+
+/* -------------------------------------------------------------------- */
+
+export interface FichaAluno {
+  id: string;
+  nome: string;
+  email: string | null;
+  telefone: string | null;
+  whatsapp: string | null;
+  dataNascimento: string | null;
+  documento: string | null;
+  status: string;
+  observacoes: string | null;
+  inicioEm: string | null;
+  criadoEm: string;
+  endereco: {
+    cep: string | null; logradouro: string | null; numero: string | null;
+    complemento: string | null; bairro: string | null; cidade: string | null; uf: string | null;
+  };
+  emergencia: { contato: string | null; telefone: string | null };
+  profissional: { id: string; nome: string } | null;
+  contrato: {
+    ciclo: string; valorCentavos: number; comissaoBp: number;
+    sessoesIncluidas: number | null; diaVencimento: number | null; inicioEm: string;
+  } | null;
+  frequencia: { presencas: number; faltas: number; agendados: number };
+  financeiro: { emAbertoCentavos: number; vencidasQtd: number; pagoNoAnoCentavos: number };
+  temAnamnese: boolean;
+}
+
+export type DadosAluno = Record<string, string | undefined>;
+
+export const buscarFicha = (id: string) =>
+  api<{ data: FichaAluno }>(`/api/students/${id}/ficha`);
+
+export const criarAluno = (dados: DadosAluno) =>
+  api<{ data: { id: string } }>('/api/students', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const atualizarAluno = (id: string, dados: DadosAluno) =>
+  api<{ ok: boolean }>(`/api/students/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(dados),
+  });
