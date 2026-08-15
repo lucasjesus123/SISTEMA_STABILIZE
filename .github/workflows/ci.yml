@@ -1,0 +1,112 @@
+name: CI
+
+# Roda em todo push e em toda proposta de merge. Sem isso, "está testado"
+# é uma afirmação sobre o passado: vale para o momento em que alguém
+# rodou os testes na própria máquina, e não para o que está no branch.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  # Um push novo cancela a execução anterior do mesmo branch — o
+  # resultado dela já não interessa.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Segredos de CI, descartáveis e sem valor fora daqui. O banco só
+  # existe durante a execução e some junto com o runner.
+  POSTGRES_PASSWORD: ci_only_nao_usar_fora_daqui
+  JWT_ACCESS_SECRET: ci-acesso-descartavel-com-tamanho-suficiente-01
+  JWT_REFRESH_SECRET: ci-refresh-descartavel-com-tamanho-suficiente-02
+
+jobs:
+  verificar:
+    name: Testes e análise
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: stabilize_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_only_nao_usar_fora_daqui
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Histórico completo: o gitleaks precisa varrer todos os
+          # commits, não apenas o último.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Compilar módulo nativo do Argon2
+        # O pnpm bloqueia scripts de build por padrão, o que é a postura
+        # correta; aqui liberamos só o que precisamos.
+        run: pnpm rebuild argon2
+
+      - name: Aplicar migrations
+        env:
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        run: |
+          for f in packages/db/sql/[0-8]*.sql; do
+            echo "--> $(basename "$f")"
+            psql -h localhost -U postgres -d stabilize_test -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+
+      - name: Verificação de tipos
+        run: pnpm -r typecheck
+
+      - name: Testes de unidade
+        run: pnpm --filter @stabilize/shared test
+
+      - name: Prova de isolamento no banco
+        # Roda como stabilize_app, e o script ABORTA se a credencial
+        # tiver BYPASSRLS — a prova passaria mesmo com a RLS desligada.
+        env:
+          DATABASE_URL: postgresql://stabilize_app:TROQUE_ESTA_SENHA_APP@localhost:5432/stabilize_test
+        run: ./packages/db/scripts/test-isolation.sh
+
+      - name: Testes da API contra PostgreSQL real
+        env:
+          TEST_DATABASE_URL: postgresql://stabilize_app:TROQUE_ESTA_SENHA_APP@localhost:5432/stabilize_test
+        run: pnpm --filter @stabilize/api test
+
+      - name: Análise estática dos invariantes do projeto
+        run: |
+          pipx install semgrep || pip install --quiet semgrep
+          semgrep --config .semgrep/stabilize.yml --metrics=off \
+                  --exclude=node_modules --error .
+
+      - name: Segredos no histórico
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependências vulneráveis
+        # Não falha o build: hoje as vulnerabilidades conhecidas estão
+        # todas em dependências de desenvolvimento (ver SEC-003 no
+        # relatório de auditoria). Falhar aqui travaria o trabalho por
+        # algo que não afeta produção — mas o aviso fica visível no log.
+        run: pnpm audit || true
+        continue-on-error: true
