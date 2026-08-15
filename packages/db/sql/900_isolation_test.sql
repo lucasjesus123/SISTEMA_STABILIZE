@@ -22,17 +22,22 @@ DECLARE
   room_a uuid;
   visiveis int;
   ok boolean;
+  sufixo text;
 BEGIN
   -- =================================================================
   -- Preparação: duas empresas, cada uma com um usuário e um aluno.
   -- =================================================================
   t_a := gen_random_uuid();
   t_b := gen_random_uuid();
+  /* Slug derivado do uuid do próprio run. Com valor fixo, uma segunda
+     execução falharia na restrição de unicidade — e um teste que só
+     roda uma vez deixa de ser teste de regressão. */
+  sufixo := substr(replace(t_a::text, '-', ''), 1, 8);
 
   -- Cada INSERT precisa acontecer sob o contexto do próprio tenant,
   -- porque a policy WITH CHECK impede gravar para outro.
   PERFORM set_config('app.tenant_id', t_a::text, true);
-  INSERT INTO tenants (id, name, slug) VALUES (t_a, 'Academia A', 'academia-a');
+  INSERT INTO tenants (id, name, slug) VALUES (t_a, 'Academia A', 'academia-a-' || sufixo);
   INSERT INTO users (tenant_id, email, password_hash, full_name, role)
     VALUES (t_a, 'admin@a.test', 'x', 'Admin A', 'OWNER') RETURNING id INTO u_a;
   INSERT INTO users (tenant_id, email, password_hash, full_name, role)
@@ -41,7 +46,7 @@ BEGIN
   INSERT INTO rooms (tenant_id, name) VALUES (t_a, 'Sala 1') RETURNING id INTO room_a;
 
   PERFORM set_config('app.tenant_id', t_b::text, true);
-  INSERT INTO tenants (id, name, slug) VALUES (t_b, 'Academia B', 'academia-b');
+  INSERT INTO tenants (id, name, slug) VALUES (t_b, 'Academia B', 'academia-b-' || sufixo);
   INSERT INTO users (tenant_id, email, password_hash, full_name, role)
     VALUES (t_b, 'admin@b.test', 'x', 'Admin B', 'OWNER') RETURNING id INTO u_b;
   INSERT INTO students (tenant_id, full_name) VALUES (t_b, 'Aluno da B') RETURNING id INTO s_b;
@@ -331,6 +336,15 @@ BEGIN
     RAISE EXCEPTION 'FALHA 9c: aceitou comissão com mês de referência fora do dia 1';
   END IF;
   RAISE NOTICE 'OK 9 — validações de domínio ativas';
+
+  -- ==================================================================
+  -- Limpeza: o teste não pode deixar rastro que impeça a próxima
+  -- execução nem que polua consultas de quem for depurar o banco.
+  -- ==================================================================
+  PERFORM set_config('app.tenant_id', t_a::text, true);
+  DELETE FROM tenants WHERE id = t_a;
+  PERFORM set_config('app.tenant_id', t_b::text, true);
+  DELETE FROM tenants WHERE id = t_b;
 
   RAISE NOTICE '';
   RAISE NOTICE '======================================';
