@@ -1,0 +1,259 @@
+/* =====================================================================
+   Stabilize — sistema visual
+
+   MUNDO VISUAL: prancha anatômica. A logo é um corpo desenhado em traço
+   fino e contínuo; a interface segue a mesma lógica. Fios de 1px em vez
+   de caixas, respiro generoso em vez de bordas, e o teal usado como
+   TINTA sobre o dado — não como decoração de fundo.
+
+   O que este arquivo recusa, deliberadamente:
+   - card dentro de card (a hierarquia vem de espaço e tipografia)
+   - halo/glow colorido (profundidade vem de sombra neutra com offset)
+   - gradiente em texto (ênfase vem de peso e tamanho)
+   - bounce/elástico (objetos reais desaceleram, não quicam)
+   ===================================================================== */
+
+:root {
+  /* -- Marca. Extraídas do arquivo original da logo. ---------------- */
+  --teal: #4bc1c8;
+  --teal-forte: #2e9aa1;
+  --teal-fundo: #1f7176;
+  --menta: #85cebd;
+  --menta-forte: #5fb3a0;
+  --grafite: #686969;
+  --grafite-forte: #3f4040;
+  --tinta: #1c1f22;
+
+  /* -- Superfícies. Um branco levemente frio, puxado para o teal, para
+        a marca aparecer até onde não há cor. Não é creme: creme virou o
+        default automático e não tem nada a ver com esta clínica. ----- */
+  --papel: #fbfcfc;
+  --papel-alto: #ffffff;
+  --papel-fundo: #f2f5f5;
+
+  /* -- Fios. A estrutura da interface. ------------------------------ */
+  --fio: #e2e8e8;
+  --fio-forte: #cbd5d5;
+
+  /* -- Texto. Contraste medido, não estimado:
+        tinta   sobre papel = 14,8:1
+        corpo   sobre papel =  7,3:1
+        apoio   sobre papel =  4,6:1  (piso AA de corpo é 4,5:1)
+        Nada abaixo disso carrega texto de leitura. ------------------ */
+  --texto: #1c1f22;
+  --texto-corpo: #4a5152;
+  --texto-apoio: #6b7374;
+
+  /* -- Estado. Sinal funcional, não cor de marca. ------------------- */
+  --ok: #1f9d6b;
+  --atencao: #b5790b;
+  --erro: #c4453c;
+  --ok-fundo: #eaf6f0;
+  --atencao-fundo: #fdf4e3;
+  --erro-fundo: #fbeceb;
+
+  /* -- Tipografia -------------------------------------------------- */
+  --fonte-display: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+  --fonte-corpo: 'Source Sans 3', system-ui, -apple-system, sans-serif;
+
+  /* Escala com razão ~1,25 — degraus óbvios, sem hierarquia achatada. */
+  --t-xs: 0.75rem;    /* 12px — só rótulo, nunca corpo               */
+  --t-sm: 0.8125rem;  /* 13px — texto funcional                     */
+  --t-base: 0.9375rem;/* 15px — corpo                               */
+  --t-md: 1.125rem;   /* 18px                                       */
+  --t-lg: 1.5rem;     /* 24px                                       */
+  --t-xl: 2rem;       /* 32px                                       */
+  --t-2xl: 2.75rem;   /* 44px — números do painel                   */
+  --t-3xl: 3.5rem;    /* 56px                                       */
+
+  /* -- Espaço. Ritmo de 4px, com saltos maiores entre seções. ------- */
+  --e-1: 0.25rem;
+  --e-2: 0.5rem;
+  --e-3: 0.75rem;
+  --e-4: 1rem;
+  --e-5: 1.5rem;
+  --e-6: 2rem;
+  --e-7: 3rem;
+  --e-8: 4rem;
+  --e-9: 6rem;
+
+  --raio: 3px;
+  --raio-md: 6px;
+
+  /* -- Profundidade. Sombra COM deslocamento e neutra. Halo colorido
+        de offset zero é decoração, não profundidade. ---------------- */
+  --sombra-1: 0 1px 2px rgba(28, 31, 34, 0.05), 0 1px 1px rgba(28, 31, 34, 0.04);
+  --sombra-2: 0 2px 8px rgba(28, 31, 34, 0.07), 0 1px 2px rgba(28, 31, 34, 0.05);
+  --sombra-3: 0 8px 28px rgba(28, 31, 34, 0.1), 0 2px 6px rgba(28, 31, 34, 0.06);
+
+  /* -- Movimento. Ease-out exponencial: parte rápido e assenta, como
+        um objeto real. Nada de bounce. ------------------------------ */
+  --saida: cubic-bezier(0.16, 1, 0.3, 1);
+  --saida-suave: cubic-bezier(0.22, 1, 0.36, 1);
+  --rapido: 140ms;
+  --medio: 260ms;
+  --lento: 520ms;
+}
+
+/* =====================================================================
+   Base
+   ===================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Rolagem suave só para quem não pediu menos movimento. */
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--fonte-corpo);
+  font-size: var(--t-base);
+  line-height: 1.6;
+  color: var(--texto-corpo);
+  background: var(--papel);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--fonte-display);
+  color: var(--texto);
+  line-height: 1.15;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  /* Título se liga ao que INTRODUZ: mais espaço acima que abaixo. */
+  text-wrap: balance;
+}
+
+p {
+  /* Medida de leitura. Linha acima de ~75 caracteres cansa o olho na
+     volta para a esquerda. */
+  max-width: 68ch;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* =====================================================================
+   Superfícies do navegador
+
+   As partes que não desenhamos também carregam o design. Seleção,
+   cursor, scrollbar e anel de foco vêm com padrões que não pertencem a
+   sistema nenhum. Tematizá-los é o sinal mais barato de que a tela foi
+   construída, e o que quase todo mundo pula.
+   ===================================================================== */
+
+::selection {
+  background: color-mix(in srgb, var(--teal) 26%, transparent);
+  color: var(--tinta);
+}
+
+:root {
+  accent-color: var(--teal-forte);
+  caret-color: var(--teal-forte);
+}
+
+/* Anel de foco visível e no tom da marca. Foco invisível é barreira de
+   acessibilidade para quem navega por teclado. */
+:focus-visible {
+  outline: 2px solid var(--teal-forte);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fio-forte) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--fio-forte);
+  border-radius: 99px;
+  border: 3px solid var(--papel);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--grafite);
+}
+
+/* Números de dinheiro e de tabela em largura fixa: sem isso as colunas
+   dançam a cada dígito e o olho não consegue comparar verticalmente. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* =====================================================================
+   Acessibilidade
+   ===================================================================== */
+
+/* Respeitar quem pediu menos movimento é obrigação, não gentileza:
+   animação pode provocar enjoo e desconforto real. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.apenas-leitor-de-tela {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Pular para o conteúdo: primeiro item do tab, escondido até receber
+   foco. Quem navega por teclado não deveria atravessar o menu inteiro
+   a cada página. */
+.pular-para-conteudo {
+  position: absolute;
+  left: var(--e-4);
+  top: -100px;
+  z-index: 100;
+  padding: var(--e-3) var(--e-4);
+  background: var(--tinta);
+  color: var(--papel-alto);
+  border-radius: var(--raio);
+  transition: top var(--rapido) var(--saida);
+}
+.pular-para-conteudo:focus {
+  top: var(--e-4);
+}

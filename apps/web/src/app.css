@@ -1,0 +1,753 @@
+/* =====================================================================
+   Composição — modo Operar
+
+   Regras que valem para o arquivo inteiro:
+   - A estrutura vem de FIOS e ESPAÇO, não de caixas empilhadas.
+   - Nenhum card dentro de card.
+   - Sombra só onde há elevação real (menu suspenso, leitura do gráfico).
+   - Um momento de movimento na entrada; depois a tela fica quieta.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Marca
+   ------------------------------------------------------------------- */
+
+.marca {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: var(--e-3);
+  line-height: 1;
+}
+
+.marca-nome {
+  grid-column: 1;
+  font-family: var(--fonte-display);
+  font-weight: 300;
+  font-size: var(--marca-tamanho, 32px);
+  /* A logo original tem terminações abertas e letras generosas; o
+     tracking levemente aberto aproxima o desenho. */
+  letter-spacing: 0.01em;
+  color: var(--grafite-forte);
+}
+
+.marca-fio {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: end;
+  height: 1px;
+  background: var(--menta);
+  margin-bottom: calc(var(--marca-tamanho, 32px) * 0.12);
+}
+
+.marca-tagline {
+  grid-column: 1;
+  grid-row: 2;
+  font-family: var(--fonte-display);
+  font-size: calc(var(--marca-tamanho, 32px) * 0.3);
+  font-weight: 400;
+  color: var(--menta-forte);
+  letter-spacing: 0.01em;
+  margin-top: calc(var(--marca-tamanho, 32px) * 0.16);
+  white-space: nowrap;
+}
+
+.tela-centro {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--e-6);
+}
+
+/* ---------------------------------------------------------------------
+   Entrada
+   ------------------------------------------------------------------- */
+
+.entrada {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+}
+
+.entrada-painel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--e-8) clamp(var(--e-6), 8vw, var(--e-9));
+  max-width: 34rem;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.entrada-titulo {
+  font-size: var(--t-xl);
+  /* Mais espaço acima do título do que abaixo: ele pertence ao que
+     introduz, não ao que veio antes. */
+  margin-top: var(--e-7);
+  margin-bottom: var(--e-2);
+}
+
+.entrada-apoio {
+  color: var(--texto-apoio);
+  margin-bottom: var(--e-6);
+}
+
+/* A lateral é uma superfície de cor chapada com um único fio vertical
+   — a assinatura da marca sem recorrer a gradiente decorativo. */
+.entrada-lateral {
+  background: var(--papel-fundo);
+  border-left: 1px solid var(--fio);
+  position: relative;
+}
+.entrada-lateral::after {
+  content: '';
+  position: absolute;
+  inset-block: 12%;
+  left: clamp(2rem, 18%, 8rem);
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--teal) 18%,
+    var(--menta) 82%,
+    transparent
+  );
+}
+
+@media (max-width: 900px) {
+  .entrada {
+    grid-template-columns: 1fr;
+  }
+  .entrada-lateral {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Formulário
+   ------------------------------------------------------------------- */
+
+.campo {
+  display: block;
+  margin-bottom: var(--e-4);
+}
+
+.campo-rotulo {
+  display: block;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto);
+  margin-bottom: var(--e-2);
+}
+
+.campo input,
+.campo-busca input {
+  width: 100%;
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--papel-alto);
+  font-size: var(--t-base);
+  color: var(--texto);
+  transition:
+    border-color var(--rapido) var(--saida),
+    box-shadow var(--rapido) var(--saida);
+}
+
+.campo input::placeholder,
+.campo-busca input::placeholder {
+  /* Placeholder também precisa passar no contraste de corpo. */
+  color: var(--texto-apoio);
+}
+
+.campo input:hover,
+.campo-busca input:hover {
+  border-color: var(--grafite);
+}
+
+.campo input:focus {
+  outline: none;
+  border-color: var(--teal-forte);
+  /* Anel de foco desenhado com box-shadow sem desfoque colorido
+     espalhado: é indicação de estado, não brilho decorativo. */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 22%, transparent);
+}
+
+.botao-principal {
+  width: 100%;
+  padding: var(--e-3) var(--e-5);
+  background: var(--teal-fundo);
+  color: #fff;
+  border-radius: var(--raio);
+  font-weight: 600;
+  font-size: var(--t-base);
+  margin-top: var(--e-3);
+  transition:
+    background var(--rapido) var(--saida),
+    transform var(--rapido) var(--saida);
+}
+.botao-principal:hover:not(:disabled) {
+  background: var(--teal-forte);
+}
+.botao-principal:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.botao-principal:disabled {
+  background: var(--fio-forte);
+  color: var(--texto-apoio);
+  cursor: not-allowed;
+}
+
+.botao-secundario {
+  padding: var(--e-2) var(--e-4);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--papel-alto);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--texto);
+  transition:
+    border-color var(--rapido) var(--saida),
+    background var(--rapido) var(--saida);
+}
+.botao-secundario:hover {
+  border-color: var(--grafite);
+  background: var(--papel-fundo);
+}
+
+.botao-texto {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--texto-apoio);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--fio-forte);
+  transition: color var(--rapido) var(--saida);
+}
+.botao-texto:hover {
+  color: var(--texto);
+  text-decoration-color: currentColor;
+}
+
+.mensagem-erro {
+  padding: var(--e-3) var(--e-4);
+  background: var(--erro-fundo);
+  /* Texto no tom escuro da própria cor de fundo, nunca cinza: cinza
+     sobre superfície colorida fica lavado. */
+  color: #8f2f28;
+  border-radius: var(--raio);
+  font-size: var(--t-sm);
+  margin-bottom: var(--e-3);
+}
+
+/* ---------------------------------------------------------------------
+   Estrutura do sistema
+   ------------------------------------------------------------------- */
+
+.sistema {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-7);
+  padding: var(--e-4) clamp(var(--e-4), 4vw, var(--e-7));
+  border-bottom: 1px solid var(--fio);
+  background: var(--papel-alto);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.navegacao {
+  display: flex;
+  gap: var(--e-1);
+  margin-right: auto;
+}
+
+.aba {
+  padding: var(--e-2) var(--e-3);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--texto-apoio);
+  border-radius: var(--raio);
+  position: relative;
+  transition: color var(--rapido) var(--saida);
+}
+.aba:hover {
+  color: var(--texto);
+}
+.aba.ativa {
+  color: var(--texto);
+}
+/* O indicador da aba ativa é um fio, coerente com o resto da
+   interface — não uma pílula preenchida. */
+.aba.ativa::after {
+  content: '';
+  position: absolute;
+  left: var(--e-3);
+  right: var(--e-3);
+  bottom: -13px;
+  height: 2px;
+  background: var(--teal);
+}
+
+.topo-conta {
+  display: flex;
+  align-items: center;
+  gap: var(--e-4);
+}
+
+.conta-papel {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+}
+
+.conteudo {
+  flex: 1;
+  padding: var(--e-7) clamp(var(--e-4), 4vw, var(--e-7)) var(--e-9);
+  max-width: 78rem;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.secao-cabecalho {
+  margin-bottom: var(--e-6);
+}
+.secao-cabecalho h1 {
+  font-size: var(--t-xl);
+  margin-bottom: var(--e-1);
+}
+.secao-cabecalho p {
+  color: var(--texto-apoio);
+  font-size: var(--t-base);
+
+}
+
+.marca-hoje {
+  display: inline-block;
+  margin-left: var(--e-3);
+  padding: 2px var(--e-2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--teal-fundo);
+  background: color-mix(in srgb, var(--teal) 14%, transparent);
+  border-radius: var(--raio);
+}
+
+/* ---------------------------------------------------------------------
+   Indicadores
+
+   Separados por fio vertical, não por card. Quatro caixas iguais lado a
+   lado seriam o template de métrica que todo painel repete; o fio dá a
+   mesma separação sem o peso visual.
+   ------------------------------------------------------------------- */
+
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0;
+  border-block: 1px solid var(--fio);
+  margin-bottom: var(--e-8);
+}
+
+.indicador {
+  padding: var(--e-5) var(--e-5) var(--e-5) 0;
+  border-right: 1px solid var(--fio);
+}
+.indicador:last-child {
+  border-right: none;
+}
+.indicadores > .indicador:not(:first-child) {
+  padding-left: var(--e-5);
+}
+
+.indicador-rotulo {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-apoio);
+  margin-bottom: var(--e-3);
+}
+
+.indicador-valor {
+  font-family: var(--fonte-display);
+  /* Tamanho que ACOMPANHA a coluna. Fixo em 2,75rem, "R$ 2.749,10"
+     quebrava em duas linhas numa coluna estreita — e número de dinheiro
+     partido ao meio deixa de ser legível de relance, que é a única
+     razão de existir um indicador. */
+  font-size: clamp(1.75rem, 2.6vw + 0.5rem, 2.5rem);
+  white-space: nowrap;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  color: var(--texto);
+  line-height: 1;
+}
+
+.indicador-detalhe {
+  margin-top: var(--e-2);
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+/* A cor carrega significado, não decoração: só o valor que exige
+   atenção muda de tom. Tudo colorido é o mesmo que nada colorido. */
+.tom-positivo { color: var(--ok); }
+.tom-atencao  { color: var(--atencao); }
+.tom-negativo { color: var(--erro); }
+
+/* O topo em telas estreitas: a marca encolhe, a navegação rola na
+   horizontal em vez de estourar a borda, e o bloco da conta desce.
+   Sem isto, "Agenda" e o botão Sair ficavam fora da tela — inacessíveis,
+   não apenas feios. */
+@media (max-width: 780px) {
+  .topo {
+    flex-wrap: wrap;
+    gap: var(--e-3);
+    padding-inline: var(--e-4);
+  }
+  .marca-nome { font-size: 22px; }
+  .marca-tagline { font-size: 8px; }
+  .navegacao {
+    order: 3;
+    width: 100%;
+    margin-right: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .navegacao::-webkit-scrollbar { display: none; }
+  .aba { white-space: nowrap; }
+  .aba.ativa::after { bottom: -2px; }
+  .topo-conta { margin-left: auto; }
+}
+
+@media (max-width: 640px) {
+  .indicador {
+    border-right: none;
+    border-bottom: 1px solid var(--fio);
+    padding-left: 0 !important;
+  }
+  .indicador:last-child { border-bottom: none; }
+}
+
+/* ---------------------------------------------------------------------
+   Blocos e gráfico
+   ------------------------------------------------------------------- */
+
+.bloco {
+  margin-bottom: var(--e-8);
+}
+.bloco h2 {
+  font-size: var(--t-lg);
+  margin-bottom: var(--e-1);
+}
+.bloco-apoio {
+  color: var(--texto-apoio);
+  font-size: var(--t-sm);
+  margin-bottom: var(--e-5);
+}
+
+.grafico {
+  position: relative;
+  /* Espaço reservado no topo para a leitura, que fica acima da área de
+     desenho. Sem a reserva, ela cobriria o título da seção. */
+  padding-top: var(--e-6);
+}
+
+.grafico-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.grafico-grade {
+  stroke: var(--fio);
+  stroke-width: 1;
+}
+
+.grafico-eixo {
+  font-family: var(--fonte-corpo);
+  font-size: 11px;
+  fill: var(--texto-apoio);
+}
+
+/* O ÚNICO momento de movimento autoral: a linha se desenha uma vez, na
+   entrada. Usa stroke-dashoffset (não width/height), então não há
+   recálculo de layout a cada quadro. */
+.grafico-linha {
+  stroke-dasharray: 2000;
+  stroke-dashoffset: 2000;
+  transition: stroke-dashoffset 1100ms var(--saida-suave);
+}
+.grafico-linha.desenhada {
+  stroke-dashoffset: 0;
+}
+
+.grafico-ponto {
+  transition: r var(--rapido) var(--saida);
+}
+
+.grafico-leitura {
+  /* ACIMA do gráfico, não sobre ele. Flutuando dentro da área de
+     desenho, o quadro tapava justamente a linha que o usuário estava
+     tentando ler. */
+  position: absolute;
+  top: calc(-1 * var(--e-6));
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  padding: var(--e-3) var(--e-4);
+  background: var(--papel-alto);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra-2);
+  font-size: var(--t-sm);
+  pointer-events: none;
+}
+.grafico-leitura strong {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+}
+.grafico-leitura span {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  color: var(--texto-corpo);
+}
+.grafico-leitura b {
+  margin-left: auto;
+  color: var(--texto);
+}
+
+.legenda {
+  display: flex;
+  gap: var(--e-5);
+  margin-top: var(--e-4);
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+}
+.legenda span {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.ponto-cor {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------
+   Tabela
+   ------------------------------------------------------------------- */
+
+.campo-busca {
+  display: block;
+  max-width: 24rem;
+  margin-bottom: var(--e-5);
+}
+
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-base);
+}
+
+.tabela th {
+  text-align: left;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-apoio);
+  padding: 0 var(--e-4) var(--e-3);
+  border-bottom: 1px solid var(--fio-forte);
+}
+
+.tabela td {
+  padding: var(--e-4);
+  border-bottom: 1px solid var(--fio);
+  vertical-align: middle;
+}
+
+.tabela tbody tr {
+  transition: background var(--rapido) var(--saida);
+}
+.tabela tbody tr:hover {
+  background: var(--papel-fundo);
+}
+
+.celula-forte {
+  display: block;
+  color: var(--texto);
+  font-weight: 500;
+}
+.celula-apoio {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+.selo {
+  display: inline-block;
+  padding: 2px var(--e-2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  border-radius: var(--raio);
+  white-space: nowrap;
+}
+.selo-active,
+.selo-attended,
+.selo-confirmed {
+  background: var(--ok-fundo);
+  color: #146b49;
+}
+.selo-inactive,
+.selo-scheduled {
+  background: var(--papel-fundo);
+  color: var(--texto-corpo);
+}
+.selo-suspended,
+.selo-no_show {
+  background: var(--atencao-fundo);
+  color: #8a5c08;
+}
+.selo-lead {
+  background: color-mix(in srgb, var(--teal) 14%, transparent);
+  color: var(--teal-fundo);
+}
+
+/* ---------------------------------------------------------------------
+   Agenda
+   ------------------------------------------------------------------- */
+
+.agenda-controles {
+  display: flex;
+  gap: var(--e-2);
+  margin-bottom: var(--e-5);
+}
+
+.agenda-lista {
+  list-style: none;
+  padding: 0;
+  border-top: 1px solid var(--fio);
+}
+
+.agenda-item {
+  display: flex;
+  align-items: center;
+  gap: var(--e-5);
+  padding: var(--e-4) var(--e-2);
+  border-bottom: 1px solid var(--fio);
+  transition: background var(--rapido) var(--saida);
+}
+.agenda-item:hover {
+  background: var(--papel-fundo);
+}
+
+.agenda-hora {
+  display: flex;
+  flex-direction: column;
+  min-width: 4.5rem;
+  line-height: 1.3;
+}
+.agenda-hora strong {
+  font-size: var(--t-md);
+  font-weight: 500;
+  color: var(--texto);
+}
+.agenda-hora span {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+.agenda-corpo {
+  display: flex;
+  flex-direction: column;
+  margin-right: auto;
+  min-width: 0;
+}
+.agenda-aluno {
+  font-weight: 500;
+  color: var(--texto);
+}
+.agenda-detalhe {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+/* Atendimento que já passou e não foi cumprido recua visualmente, sem
+   sumir: continua legível para quem precisa cobrar a falta. */
+.agenda-item.status-no_show .agenda-aluno {
+  color: var(--texto-corpo);
+}
+
+/* ---------------------------------------------------------------------
+   Estados
+   ------------------------------------------------------------------- */
+
+.carregando {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  padding: var(--e-5) 0;
+}
+
+.esqueleto {
+  height: 14px;
+  border-radius: var(--raio);
+  background: linear-gradient(
+    90deg,
+    var(--papel-fundo) 0%,
+    var(--fio) 50%,
+    var(--papel-fundo) 100%
+  );
+  background-size: 200% 100%;
+  animation: deslizar 1.4s ease-in-out infinite;
+}
+
+@keyframes deslizar {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.estado-vazio,
+.estado-erro {
+  padding: var(--e-7) 0;
+  max-width: 46ch;
+}
+.estado-vazio h3 {
+  font-size: var(--t-md);
+  margin-bottom: var(--e-2);
+}
+.estado-vazio p,
+.estado-erro p {
+  color: var(--texto-apoio);
+  margin-bottom: var(--e-4);
+}
+.estado-erro p {
+  color: var(--erro);
+}
+
+.vazio {
+  color: var(--texto-apoio);
+  padding: var(--e-6) 0;
+}
