@@ -94,10 +94,25 @@ rules:
       Erro interno sendo enviado ao cliente. Stack trace, texto de query
       e caminho de arquivo são mapa para quem está sondando o sistema.
       Devolva uma mensagem escrita por nós e registre o original no log.
-    pattern-either:
-      - pattern: "$REPLY.send({ ..., error: $ERR.message, ... })"
-      - pattern: "$REPLY.send({ ..., stack: $ERR.stack, ... })"
-      - pattern: $REPLY.send($ERR)
+    patterns:
+      - pattern-either:
+          # Enviar o objeto de erro inteiro.
+          - pattern: $REPLY.send($ERR)
+          # Enviar a pilha de chamadas, em qualquer forma.
+          - pattern: "$REPLY.send({ ..., stack: ..., ... })"
+          - pattern: $REPLY.send($ERR.stack)
+          - pattern: $REPLY.send($ERR.message)
+      - metavariable-regex:
+          metavariable: $REPLY
+          regex: ^(reply|res|response)$
+      # error-handler.ts é o ÚNICO lugar autorizado a formatar resposta de
+      # erro, e tem teste dedicado garantindo que nenhuma resposta contém
+      # stack trace, caminho de arquivo ou texto de SQL. Sem esta exclusão
+      # a regra acusa o próprio mecanismo que a implementa.
+      - pattern-not-inside: |
+          app.setErrorHandler(...)
+      - pattern-not-inside: |
+          app.setNotFoundHandler(...)
 
   # -------------------------------------------------------------------
   - id: tenant-vindo-do-cliente
@@ -174,8 +189,19 @@ rules:
       Possível dado sensível em log. Senha, token e prontuário não podem
       ir para o agregador de logs — de onde costumam vazar sem que
       ninguém perceba, porque log não parece um banco de dados.
-    pattern-either:
-      - pattern: "$LOG.$LEVEL({ ..., password: $P, ... })"
-      - pattern: "$LOG.$LEVEL({ ..., passwordHash: $P, ... })"
-      - pattern: "$LOG.$LEVEL({ ..., token: $T, ... })"
-      - pattern: console.log($X.password)
+    patterns:
+      - pattern-either:
+          - pattern: "$LOG.$LEVEL({ ..., password: ..., ... })"
+          - pattern: "$LOG.$LEVEL({ ..., passwordHash: ..., ... })"
+          - pattern: "$LOG.$LEVEL({ ..., password_hash: ..., ... })"
+          - pattern: "$LOG.$LEVEL({ ..., token: ..., ... })"
+          - pattern: "$LOG.$LEVEL({ ..., tokenHash: ..., ... })"
+      # Sem estas duas âncoras a regra casava com z.object({password: ...})
+      # e com qualquer chamada que tivesse uma chave "password" — o que a
+      # tornava ruído puro no schema de validação do login.
+      - metavariable-regex:
+          metavariable: $LOG
+          regex: ^(log|logger|console|req\.log|request\.log|app\.log|fastify\.log)$
+      - metavariable-regex:
+          metavariable: $LEVEL
+          regex: ^(log|info|warn|error|debug|trace|fatal)$

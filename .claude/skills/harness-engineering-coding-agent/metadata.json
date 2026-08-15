@@ -1,0 +1,50 @@
+{
+  "name": "harness-engineering-coding-agent",
+  "title": "Harness Engineering Coding Agent",
+  "description": "Portable harness engineering workflow for AI coding agents.",
+  "version": "2026.06.24",
+  "maturity": "stable",
+  "origin_url": "https://github.com/AndreAlmeidaDC/harness-engineering-coding-agent",
+  "origin_git_url": "https://github.com/AndreAlmeidaDC/harness-engineering-coding-agent.git",
+  "default_branch": "main",
+  "author": "André Almeida",
+  "license": "MIT",
+  "declared_capabilities": {
+    "network_egress": {
+      "expected": false,
+      "reason": "No active network calls; the skill orchestrates local engineering work."
+    },
+    "subprocess": {
+      "expected": false,
+      "reason": "No subprocess execution in the skill's own scripts."
+    },
+    "dependency_install": {
+      "expected": false,
+      "reason": "No package installation performed by the skill."
+    }
+  },
+  "last_standardized_at": "2026-06-24 GMT-3",
+  "required_files": [
+    "SKILL.md",
+    "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "GOVERNANCE.md",
+    "metadata.json",
+    "references/version-check.md",
+    "references/",
+    "templates/",
+    "checklists/",
+    "examples/",
+    "docs/"
+  ],
+  "update_policy": {
+    "check_upstream_on_meaningful_use": true,
+    "read_upstream_readme": true,
+    "read_upstream_changelog": true,
+    "summarize_changes_before_update": true,
+    "requires_user_consent": true,
+    "silent_self_update_allowed": false,
+    "overwrite_local_changes_allowed_without_consent": false
+  }
+}

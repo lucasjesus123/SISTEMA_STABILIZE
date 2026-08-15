@@ -7,7 +7,7 @@ import authPlugin from './http/plugins/authenticate.js';
 import { registerErrorHandler } from './http/error-handler.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { studentsRoutes } from './modules/students/students.routes.js';
-import { getPool } from './db/pool.js';
+import { withoutTenantContext } from './db/pool.js';
 
 /**
  * Monta a aplicação.
@@ -103,7 +103,12 @@ export async function buildApp(): Promise<FastifyInstance> {
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     async (_request, reply) => {
       try {
-        await getPool().query('SELECT 1');
+        /* Passa por withoutTenantContext e não por getPool().query direto:
+           a convenção do projeto é que nenhum acesso ao banco escape das
+           duas funções de contexto, para que a regra de análise estática
+           consiga vigiar isso. O healthcheck é uma das exceções
+           legítimas, e declará-la aqui é o que a torna auditável. */
+        await withoutTenantContext('healthcheck', (client) => client.query('SELECT 1'));
         return { status: 'ready' };
       } catch {
         return reply.status(503).send({ status: 'unavailable' });
