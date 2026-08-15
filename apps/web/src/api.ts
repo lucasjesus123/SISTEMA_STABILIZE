@@ -222,3 +222,37 @@ export const buscarComissao = (profissionalId: string, mes: Date) =>
       itens: { descricao: string; baseFormatada: string; valorFormatado: string }[];
     };
   }>(`/api/finance/comissoes/${profissionalId}?mes=${iso(mes)}`);
+
+/* -------------------------------------------------------------------- */
+
+export interface AlunoEmRisco {
+  id: string;
+  nome: string;
+  diasSemVir: number;
+  presencasAnteriores: number;
+  profissional: string | null;
+  whatsapp: string | null;
+}
+
+export interface IndicadoresGestao {
+  ativos: number;
+  inativos: number;
+  novosNoMes: number;
+  saidasNoMes: number;
+  churnPercentual: number | null;
+  churnBase: number;
+  leituraChurn: string;
+  receitaMesFormatada: string;
+  ticketMedioFormatado: string | null;
+  tempoMedioVidaMeses: number | null;
+  ltvFormatado: string | null;
+  inadimplentes: number;
+  inadimplenciaFormatada: string;
+  frequenciaMediaPorAluno: number | null;
+  taxaComparecimentoPercentual: number | null;
+  emRisco: AlunoEmRisco[];
+  aniversariantes: { id: string; nome: string; dia: number; mes: number }[];
+}
+
+export const buscarIndicadores = () =>
+  api<{ data: IndicadoresGestao }>('/api/insights/gestao');

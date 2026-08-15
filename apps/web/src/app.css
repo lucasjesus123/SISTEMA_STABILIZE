@@ -957,3 +957,103 @@
 :root:not([data-tema='claro']) .topo {
   box-shadow: 0 1px 0 color-mix(in srgb, var(--teal-vivo) 14%, transparent);
 }
+
+/* ---------------------------------------------------------------------
+   Indicadores de gestão
+   ------------------------------------------------------------------- */
+
+.grade-indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1px;
+  background: var(--fio);
+  border: 1px solid var(--fio);
+}
+
+.mini {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  padding: var(--e-5);
+  background: var(--superficie);
+}
+
+.mini-rotulo {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--texto-apoio);
+}
+
+.mini-valor {
+  font-family: var(--fonte-display);
+  font-size: 1.9rem;
+  font-weight: 400;
+  letter-spacing: -.02em;
+  line-height: 1;
+  color: var(--texto);
+}
+
+.mini-nota {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  line-height: 1.45;
+}
+
+/* ---------------------------------------------------------------------
+   Alunos que pararam de vir
+   ------------------------------------------------------------------- */
+
+.lista-risco {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid var(--fio);
+}
+
+.lista-risco li {
+  display: flex;
+  align-items: center;
+  gap: var(--e-4);
+  padding: var(--e-4) var(--e-2);
+  border-bottom: 1px solid var(--fio);
+  transition: background var(--rapido) var(--saida);
+}
+.lista-risco li:hover { background: var(--superficie-baixa); }
+
+.risco-corpo { display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
+.risco-nome { font-weight: 500; color: var(--texto); }
+.risco-detalhe { font-size: var(--t-sm); color: var(--texto-apoio); }
+
+/* O número de dias é o dado que ordena a decisão de quem ligar
+   primeiro, então é ele que ganha peso — não um selo colorido. */
+.risco-dias {
+  font-family: var(--fonte-display);
+  font-size: var(--t-md);
+  color: var(--atencao);
+  white-space: nowrap;
+}
+
+.lista-aniversario {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--e-2) var(--e-5);
+}
+.lista-aniversario li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e-3);
+  padding: var(--e-2) 0;
+  border-bottom: 1px solid var(--fio);
+  color: var(--texto-corpo);
+}
+.aniversario-dia {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--menta);
+  min-width: 3.2rem;
+}

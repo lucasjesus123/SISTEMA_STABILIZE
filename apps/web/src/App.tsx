@@ -3,12 +3,14 @@ import {
   ApiError,
   buscarAgenda,
   buscarAlunos,
+  buscarIndicadores,
   buscarResumo,
   entrar,
   restaurarSessao,
   sair,
   type Aluno,
   type Compromisso,
+  type IndicadoresGestao,
   type Principal,
   type ResumoFinanceiro,
 } from './api.js';
@@ -239,6 +241,7 @@ function Painel({ principal }: { principal: Principal }): ReactNode {
     recebido: [],
     pago: [],
   });
+  const [gestao, setGestao] = useState<IndicadoresGestao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
 
@@ -256,8 +259,12 @@ function Painel({ principal }: { principal: Principal }): ReactNode {
       const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
       const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
-      const atual = await buscarResumo(inicioMes, fimMes);
+      const [atual, indicadores] = await Promise.all([
+        buscarResumo(inicioMes, fimMes),
+        buscarIndicadores(),
+      ]);
       setResumo(atual.data);
+      setGestao(indicadores.data);
 
       // Seis meses de histórico, um pedido por mês. Em volume maior isto
       // viraria um endpoint de série; com seis, a simplicidade ganha.
@@ -358,6 +365,136 @@ function Painel({ principal }: { principal: Principal }): ReactNode {
           ]}
         />
       </section>
+
+      {gestao !== null && <Gestao dados={gestao} />}
+    </>
+  );
+}
+
+/* ====================================================================
+ * Indicadores de gestão
+ *
+ * Os números pelos quais uma academia é realmente administrada, e que
+ * não aparecem no extrato. Ficam DEPOIS do caixa de propósito: o dono
+ * abre o painel para saber quanto entrou; a leitura estratégica vem em
+ * seguida, quando ele já se situou.
+ * ================================================================== */
+
+function Gestao({ dados }: { dados: IndicadoresGestao }): ReactNode {
+  const churn = dados.churnPercentual;
+  const tomChurn =
+    churn === null ? 'neutro' : churn < 3 ? 'positivo' : churn <= 5 ? 'neutro' : churn <= 7 ? 'atencao' : 'negativo';
+
+  return (
+    <>
+      <section className="bloco" aria-labelledby="titulo-gestao">
+        <h2 id="titulo-gestao">Indicadores de gestão</h2>
+        <p className="bloco-apoio">
+          Evasão, valor por aluno e frequência — a leitura que o extrato não dá.
+        </p>
+
+        <div className="grade-indicadores">
+          <div className="mini">
+            <span className="mini-rotulo">Evasão no mês</span>
+            <strong className={`mini-valor tabular tom-${tomChurn}`}>
+              {churn === null ? '—' : `${churn.toString().replace('.', ',')}%`}
+            </strong>
+            {/* Sempre a base junto: "8%" sobre 12 alunos é ruído; sobre
+                400 é emergência. Só a porcentagem esconde a diferença. */}
+            <span className="mini-nota">
+              {dados.saidasNoMes} de {dados.churnBase} alunos · {dados.leituraChurn}
+            </span>
+          </div>
+
+          <div className="mini">
+            <span className="mini-rotulo">Ticket médio</span>
+            <strong className="mini-valor tabular">{dados.ticketMedioFormatado ?? '—'}</strong>
+            <span className="mini-nota">
+              {dados.ativos} ativos · {dados.novosNoMes} novos no mês
+            </span>
+          </div>
+
+          <div className="mini">
+            <span className="mini-rotulo">Tempo médio de permanência</span>
+            <strong className="mini-valor tabular">
+              {dados.tempoMedioVidaMeses === null
+                ? '—'
+                : `${dados.tempoMedioVidaMeses.toString().replace('.', ',')} meses`}
+            </strong>
+            <span className="mini-nota">
+              Projeção de receita por aluno: {dados.ltvFormatado ?? '—'}
+            </span>
+          </div>
+
+          <div className="mini">
+            <span className="mini-rotulo">Comparecimento</span>
+            <strong className="mini-valor tabular">
+              {dados.taxaComparecimentoPercentual === null
+                ? '—'
+                : `${dados.taxaComparecimentoPercentual.toString().replace('.', ',')}%`}
+            </strong>
+            <span className="mini-nota">
+              {dados.frequenciaMediaPorAluno ?? '—'} visitas por aluno no mês
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* O único indicador que aponta para uma PESSOA em vez de um
+          número. Evasão é diagnóstico do que já aconteceu; isto aqui
+          ainda dá para reverter com um telefonema. */}
+      <section className="bloco" aria-labelledby="titulo-risco">
+        <h2 id="titulo-risco">Alunos que pararam de vir</h2>
+        <p className="bloco-apoio">
+          Tinham frequência estabelecida e sumiram há mais de duas semanas, sem horário
+          marcado à frente. É a lista para ligar hoje.
+        </p>
+
+        {dados.emRisco.length === 0 ? (
+          <Vazio
+            titulo="Ninguém sumido no momento"
+            descricao="Todos os alunos com frequência estabelecida vieram nas últimas duas semanas ou já têm horário marcado."
+          />
+        ) : (
+          <ol className="lista-risco">
+            {dados.emRisco.slice(0, 8).map((a) => (
+              <li key={a.id}>
+                <div className="risco-corpo">
+                  <span className="risco-nome">{a.nome}</span>
+                  <span className="risco-detalhe">
+                    {a.presencasAnteriores} presenças nos últimos 90 dias
+                    {a.profissional !== null && ` · ${a.profissional}`}
+                  </span>
+                </div>
+                <span className="risco-dias tabular">
+                  {a.diasSemVir} dias
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      {dados.aniversariantes.length > 0 && (
+        <section className="bloco" aria-labelledby="titulo-aniversario">
+          <h2 id="titulo-aniversario">Aniversariantes do mês</h2>
+          <p className="bloco-apoio">
+            {dados.aniversariantes.length === 1
+              ? '1 aluno faz aniversário este mês.'
+              : `${dados.aniversariantes.length} alunos fazem aniversário este mês.`}
+          </p>
+          <ul className="lista-aniversario">
+            {dados.aniversariantes.map((a) => (
+              <li key={a.id}>
+                <span className="aniversario-dia tabular">
+                  {String(a.dia).padStart(2, '0')}/{String(a.mes).padStart(2, '0')}
+                </span>
+                <span>{a.nome}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </>
   );
 }
