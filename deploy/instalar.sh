@@ -23,7 +23,10 @@
 # =====================================================================
 set -euo pipefail
 
-GAVETA="/opt/STABILIZE_SISTEMA"
+# A VPS já tem uma convenção: as gavetas moram em /opt/gavetas/ (é onde
+# está a MINHAMECANICA, conforme o cron de backup dela). Seguir o padrão
+# da casa vale mais do que impor o meu.
+GAVETA="/opt/gavetas/STABILIZE_SISTEMA"
 REPO="https://github.com/lucasjesus123/SISTEMA_STABILIZE.git"
 RAMO="claude/stabilize-academia-management-xodct5"
 PROJETO="stabilize_sistema"

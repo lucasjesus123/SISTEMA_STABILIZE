@@ -80,11 +80,33 @@ case "$MODO" in
     RESUMO_REDE="modo BORDA — ocupa 80/443, emite TLS para $DOMINIO"
     ;;
   2)
-    read -rp "Porta local para o proxy encaminhar (enter = 8080): " PORTA_LOCAL
-    PORTA_LOCAL="${PORTA_LOCAL:-8080}"
+    # Lista o que já está escutando: numa VPS com vários sistemas, a
+    # 8080 costuma já ser de alguém, e escolher uma porta ocupada faz o
+    # contêiner morrer com "address already in use" na subida.
+    em_uso=""
+    if command -v ss >/dev/null 2>&1; then
+      em_uso=$(ss -tlnH 2>/dev/null | awk '{split($4,a,":"); print a[length(a)]}' | sort -un | tr '\n' ' ')
+      echo
+      echo "   Portas já escutando nesta VPS: $em_uso"
+    fi
+
+    read -rp "Porta local para o proxy encaminhar (enter = 8090): " PORTA_LOCAL
+    PORTA_LOCAL="${PORTA_LOCAL:-8090}"
     case "$PORTA_LOCAL" in
       ''|*[!0-9]*) echo "ERRO: porta inválida."; exit 1 ;;
     esac
+    if [ -n "$em_uso" ]; then
+      for p in $PORTA_LOCAL $((PORTA_LOCAL + 1)); do
+        case " $em_uso " in
+          *" $p "*)
+            echo "ERRO: a porta $p já está em uso nesta VPS."
+            echo "       Subir por cima dela quebraria o sistema que já está lá."
+            echo "       Escolha outra (a 443 interna usa porta+1)."
+            exit 1
+            ;;
+        esac
+      done
+    fi
     EMAIL_TLS=""
     # ':80' faz o Caddy servir HTTP puro. Pedir certificado sem a porta
     # 80 pública põe o ACME em laço de falha.
