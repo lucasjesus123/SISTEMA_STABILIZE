@@ -1,0 +1,33 @@
+# =====================================================================
+# MODO INTERNO — o Stabilize atrás de um proxy que já existe na VPS.
+#
+# Usado quando as portas 80/443 já são de outro sistema. Este arquivo
+# não é passado na linha de comando: o gerar-segredos.sh escreve
+# `COMPOSE_FILE` no .env, e o `docker compose` lê os dois sozinho.
+#
+# POR QUE DUAS LIGAÇÕES PARA A MESMA PORTA:
+#
+#   127.0.0.1  para quem administra a máquina (curl de teste, túnel SSH)
+#   172.17.0.1 para o proxy da frente, que roda DENTRO de um contêiner
+#
+# A segunda é a que faz funcionar, e é fácil de errar: para um contêiner,
+# `127.0.0.1` é ele mesmo, não o host. Um `reverse_proxy 127.0.0.1:8090`
+# escrito no Caddy da borda nunca chegaria aqui — ele procuraria a porta
+# dentro do próprio contêiner do Caddy. O gateway da bridge (docker0) é
+# o endereço pelo qual um contêiner enxerga o host.
+#
+# NADA fica exposto na internet por este arquivo: as duas ligações são
+# endereços locais da máquina. Quem responde ao mundo é o proxy da
+# frente, que já tem o certificado.
+#
+# `!override` substitui a lista de portas do arquivo base em vez de
+# somar. Sem ele, o compose CONCATENA as listas e o '80:80' do base
+# voltaria — disputando a porta com o sistema que já está lá, que é
+# exatamente o acidente que este modo existe para evitar.
+# =====================================================================
+
+services:
+  proxy:
+    ports: !override
+      - '127.0.0.1:${PORTA_LOCAL:?defina no .env}:80'
+      - '${IP_BRIDGE:-172.17.0.1}:${PORTA_LOCAL:?defina no .env}:80'

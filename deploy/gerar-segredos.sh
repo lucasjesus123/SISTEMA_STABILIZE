@@ -77,6 +77,7 @@ case "$MODO" in
     ENDERECO_CADDY="$DOMINIO"
     PORTA_HTTP=80
     PORTA_HTTPS=443
+    EXTRA_INTERNO=""
     RESUMO_REDE="modo BORDA — ocupa 80/443, emite TLS para $DOMINIO"
     ;;
   2)
@@ -111,13 +112,35 @@ case "$MODO" in
     # ':80' faz o Caddy servir HTTP puro. Pedir certificado sem a porta
     # 80 pública põe o ACME em laço de falha.
     ENDERECO_CADDY=":80"
-    # Só no loopback: mesmo que o firewall falhe, não há como chegar
-    # nesta porta de fora da máquina.
+
+    # O ENDEREÇO PELO QUAL UM CONTÊINER ENXERGA O HOST.
+    #
+    # Se o proxy da frente roda em contêiner — quase sempre roda — ele
+    # NÃO alcança o Stabilize por 127.0.0.1: para ele, 127.0.0.1 é ele
+    # mesmo. O gateway da bridge do Docker (docker0, normalmente
+    # 172.17.0.1) é o caminho de volta para o host.
+    # O `|| true` não é enfeite: com `set -e` e `pipefail`, uma máquina
+    # sem o comando `ip` (ou sem docker0) faria o script MORRER EM
+    # SILÊNCIO aqui, no meio da geração, sem escrever o .env e sem dizer
+    # por quê. Aconteceu no primeiro teste.
+    IP_BRIDGE=$(ip -4 addr show docker0 2>/dev/null \
+                | awk '/inet /{split($2, a, "/"); print a[1]; exit}' || true)
+    IP_BRIDGE="${IP_BRIDGE:-172.17.0.1}"
+    echo "   Gateway da bridge (como um contêiner alcança o host): $IP_BRIDGE"
+
+    # As portas do arquivo base não são usadas neste modo — quem manda é
+    # o docker-compose.interno.yml, que publica em 127.0.0.1 E na bridge.
     PORTA_HTTP="127.0.0.1:${PORTA_LOCAL}"
-    # A 443 não é usada neste modo; fica no loopback numa porta alta só
-    # para o compose ter um mapeamento válido.
     PORTA_HTTPS="127.0.0.1:$((PORTA_LOCAL + 1))"
-    RESUMO_REDE="modo INTERNO — escuta em 127.0.0.1:${PORTA_LOCAL}; quem termina TLS é o seu proxy"
+    RESUMO_REDE="modo INTERNO — escuta em 127.0.0.1:${PORTA_LOCAL} e ${IP_BRIDGE}:${PORTA_LOCAL}; quem termina TLS é o seu proxy"
+
+    # COMPOSE_FILE é lido pelo próprio docker compose a partir do .env.
+    # É o que faz `docker compose up -d`, sem nenhum -f na linha de
+    # comando, já subir no modo interno. Um comando esquecido aqui
+    # publicaria o Stabilize na porta 80 da máquina.
+    EXTRA_INTERNO="COMPOSE_FILE=docker-compose.yml:docker-compose.interno.yml
+PORTA_LOCAL=${PORTA_LOCAL}
+IP_BRIDGE=${IP_BRIDGE}"
     ;;
   *)
     echo "ERRO: escolha 1 ou 2."
@@ -146,6 +169,7 @@ ENDERECO_CADDY=$ENDERECO_CADDY
 EMAIL_TLS=$EMAIL_TLS
 PORTA_HTTP=$PORTA_HTTP
 PORTA_HTTPS=$PORTA_HTTPS
+${EXTRA_INTERNO}
 
 # Origem permitida no CORS. É sempre o endereço PÚBLICO pelo qual o
 # navegador chega — no modo interno, quem responde nele é o seu proxy,
@@ -185,9 +209,17 @@ if [ "$MODO" = "2" ]; then
   cat <<AVISO
 
   FALTA UM PASSO, e ele é no SEU proxy, não aqui: encaminhar
-  $DOMINIO para http://127.0.0.1:${PORTA_LOCAL}.
+  $DOMINIO para o Stabilize.
 
-  nginx:
+  QUAL ENDEREÇO USAR — e errar aqui é o engano mais comum:
+
+    proxy no HOST (nginx instalado na máquina)  ->  127.0.0.1:${PORTA_LOCAL}
+    proxy em CONTÊINER (Caddy/Traefik/nginx)    ->  ${IP_BRIDGE}:${PORTA_LOCAL}
+
+  Para um contêiner, 127.0.0.1 é ELE MESMO, não o host: com esse
+  endereço o proxy procuraria a porta dentro de si e daria 502.
+
+  nginx (no host):
       server {
           server_name $DOMINIO;
           location / {

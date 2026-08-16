@@ -158,6 +158,39 @@ else
   echo "     docker compose logs --tail 40 proxy"
 fi
 
+# ---------------------------------------------------------------------
+# No modo interno, deixa pronto o trecho que o proxy da frente precisa.
+# Ele é ESCRITO NA GAVETA, não instalado: encostar na configuração de um
+# sistema que já está no ar é decisão de quem opera, não deste script.
+if grep -q '^COMPOSE_FILE=.*interno' "$GAVETA/.env" 2>/dev/null; then
+  PORTA_LOCAL=$(grep -E '^PORTA_LOCAL=' "$GAVETA/.env" | cut -d= -f2-)
+  IP_BRIDGE=$(grep -E '^IP_BRIDGE=' "$GAVETA/.env" | cut -d= -f2-)
+  TRECHO="$GAVETA/deploy/stabilize.caddy"
+
+  cat > "$TRECHO" <<CADDY
+# Stabilize — Clínica do Músculo
+# Gerado por deploy/instalar.sh. Este arquivo é do Stabilize; apagá-lo
+# desliga o site sem afetar mais nada.
+${DOMINIO} {
+	encode zstd gzip
+
+	# ${IP_BRIDGE} é o gateway da bridge do Docker: é assim que ESTE
+	# contêiner (o proxy) enxerga o host, onde o Stabilize publica.
+	# Com 127.0.0.1 aqui, o Caddy procuraria a porta dentro de si
+	# mesmo e responderia 502.
+	reverse_proxy ${IP_BRIDGE}:${PORTA_LOCAL} {
+		# SOBRESCREVE em vez de acrescentar. O padrão do Caddy junta o
+		# valor que o cliente mandou, e a API leria um IP forjado —
+		# força bruta de senha sem limite e auditoria mentindo.
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+CADDY
+  verde "   trecho do proxy escrito em $TRECHO"
+fi
+
 cat <<FIM
 
 ======================================================================
