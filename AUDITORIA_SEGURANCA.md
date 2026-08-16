@@ -589,9 +589,9 @@ significativa. Priorize arquitetura, banco, infra e operação.
 ### Como reproduzir as verificações
 
 ```bash
-pnpm --filter @stabilize/shared test      # 50 testes: aritmética + permissões
+pnpm --filter @stabilize/shared test      # aritmética + permissões
 DATABASE_URL=... pnpm --filter @stabilize/db test    # 9 garantias de banco
-TEST_DATABASE_URL=... pnpm --filter @stabilize/api test  # 11 testes de isolamento
+TEST_DATABASE_URL=... pnpm --filter @stabilize/api test  # 187 testes
 gitleaks detect --source . --log-opts="--all" -v
 semgrep --config .semgrep/stabilize.yml --metrics=off .
 pnpm audit
@@ -601,3 +601,93 @@ pnpm audit
 
 *Relatório gerado em 14/08/2026. Segredos mascarados. Nenhum código, banco,
 configuração ou infraestrutura foi alterado durante a fase de auditoria.*
+
+---
+
+## 9. Adendo — o aplicativo do aluno (16/08/2026)
+
+As seções 1 a 8 descrevem o estado do repositório em 14/08. As lacunas SEC-001
+(camada HTTP inexistente) e SEC-005 (senha do papel de runtime) foram fechadas
+desde então. Este adendo cobre **só** o que a terceira etapa acrescentou de
+superfície e de decisão de segurança. Mantém a mesma separação: fato verificado,
+hipótese, não verificado.
+
+### 9.1 Um novo tipo de usuário autenticado
+
+O aluno passa a ter conta. Isso muda o modelo de ameaça: além do
+"usuário autenticado de outra empresa" e do "profissional olhando aluno alheio",
+existe agora o **aluno autenticado tentando ver o prontuário de outro aluno**.
+
+A resposta é estrutural, não uma verificação a mais: **nenhuma rota do portal
+aceita id de aluno**. Não existe `GET /api/eu/alunos/:id`. O identificador vem do
+token (`AccessScope` do tipo `SELF`, com `studentId` no claim `sid`) e é aplicado
+na cláusula `WHERE` pela mesma função que todos os repositórios usam. Um
+parâmetro que não existe não pode ser adulterado.
+
+- **FATO VERIFICADO:** 14 testes ponta a ponta em
+  `apps/api/src/modules/portal/portal.e2e.test.ts`, incluindo um aluno tentando
+  cancelar o agendamento de outro (resposta 404, não 403 — um 403 confirmaria
+  que o id existe).
+- **FATO VERIFICADO:** um usuário com papel diferente de `STUDENT` recebe erro ao
+  chamar `/api/eu` — a área é do aplicativo, e o escopo é conferido no servidor.
+
+### 9.2 Service worker: por que ele não guarda nada de `/api`
+
+Um service worker de aplicativo instalável normalmente guarda respostas de API
+para abrir offline com o último estado conhecido. **Aqui isso foi recusado de
+propósito.**
+
+Guardar resposta de `/api` gravaria treino, agenda e — em outras rotas — dado
+clínico no `CacheStorage` do aparelho. Esse armazenamento sobrevive ao logout,
+não é limpo ao trocar de usuário, e nenhuma tela do sistema consegue alcançá-lo.
+Numa academia, o aparelho é frequentemente compartilhado. O ganho seria ver a
+tela de ontem sem sinal; o custo seria dado de saúde persistido fora do controle
+da aplicação, em desacordo com o direito de eliminação (LGPD, art. 18, VI).
+
+O worker guarda **apenas a casca**: HTML, JS, CSS, ícones e fontes. Sem rede, o
+aplicativo abre instantaneamente e mostra que está sem rede.
+
+- **FATO VERIFICADO:** a verificação no navegador enumera `CacheStorage` após o
+  uso do aplicativo e afirma que nenhuma entrada começa com `/api`. Resultado: 0.
+- **FATO VERIFICADO:** recarga com a rede desligada, três execuções seguidas,
+  serve a casca e falha **apenas** em `/api/auth/refresh` — que é o
+  comportamento pretendido.
+
+### 9.3 Fontes: um `<link>` de terceiro a menos
+
+O `<link>` para `fonts.googleapis.com` foi removido e as fontes passaram a ser
+servidas pela própria origem (`brand/fontes.mjs` as baixa; `apps/web/src/fontes.css`
+é gerado). Três motivos, em ordem de peso:
+
+1. **Metadado saindo para terceiro.** Cada carregamento entregava ao Google o IP
+   do aluno, o User-Agent e o `Referer` — que é o endereço de um sistema de
+   saúde. Não é dado clínico, mas é registro de uso de serviço de saúde saindo
+   sem necessidade. Um tribunal alemão tratou exatamente esse embed como
+   violação de proteção de dados (LG München I, 3 O 17493/20).
+2. **Execução de CSS remoto na nossa origem**, a cada carregamento, sem
+   verificação de integridade — uma dependência de cadeia de suprimentos que não
+   passa por revisão nem por lockfile.
+3. Abertura offline: a requisição falhava e o texto refluía.
+
+- **FATO VERIFICADO:** carregamento completo do sistema e do aplicativo no
+  navegador com contagem de requisições para hosts que não sejam a própria
+  origem. Resultado: 0.
+
+### 9.4 O que este adendo NÃO verificou
+
+- **Catálogos públicos do semgrep** (`p/owasp-top-ten`, `p/typescript`,
+  `p/secrets`): ⬜ **NÃO EXECUTADO**. A saída de rede para `semgrep.dev` é negada
+  neste ambiente (403 no CONNECT, confirmado no status do proxy). Ficaram
+  configurados no CI, onde há rede, sem derrubar o build. As regras próprias do
+  projeto (`.semgrep/stabilize.yml`) rodaram e passaram.
+- **Wake Lock e vibração** em aparelho real: ⬜ **NÃO VERIFICADO**. O código trata
+  a ausência das duas APIs (`navigator.wakeLock?`, `navigator.vibrate?.()`), e o
+  navegador de teste roda sem tela física. Só um celular na mão prova que a tela
+  fica acesa entre uma série e outra.
+- **Instalação na tela de início** em iOS e Android reais: ⬜ **NÃO VERIFICADO**.
+  O manifesto, os ícones e as metas do iOS foram conferidos por leitura no
+  navegador; o fluxo de instalação depende do sistema operacional.
+
+*Adendo gerado em 16/08/2026. Nenhum segredo real citado. As senhas de
+demonstração que aparecem no seed são de demonstração e o próprio script recusa
+rodar em banco com dados que não sejam de demo.*

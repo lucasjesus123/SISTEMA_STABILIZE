@@ -245,17 +245,25 @@ Honestidade em vez de checklist verde:
 - [ ] **Restauração testada** (passo 5). Sem isto o backup é fé.
 - [ ] **`.env` copiado para fora da VPS.**
 - [ ] **Cópia externa dos backups** configurada.
-- [ ] **Fontes servidas localmente.** Hoje o front busca Outfit e Source
-      Sans no Google Fonts. Funciona, mas cria dependência de rede de
-      terceiro e vaza o IP de cada usuário para o Google. Baixar e servir
-      do próprio domínio resolve as duas coisas.
+- [x] **Fontes servidas localmente.** ✅ Feito. Outfit e Source Sans 3 vêm
+      do próprio domínio (`apps/web/public/fontes/`, geradas por
+      `brand/fontes.mjs`). Zero requisição a terceiros, conferido no
+      navegador.
 - [ ] **Monitoramento externo** (UptimeRobot ou similar) apontando para
       `/health`. Monitoramento que roda na mesma máquina não avisa quando
       a máquina cai.
 - [ ] **Auditoria de dependências** com egress liberado:
-      `pnpm audit` e semgrep com as regras completas do OWASP. O ambiente
-      de desenvolvimento bloqueia `semgrep.dev`; só as 10 regras próprias
-      do projeto rodaram.
+      `pnpm audit` e semgrep com os catálogos do OWASP. O ambiente de
+      desenvolvimento bloqueia `semgrep.dev`; só as regras próprias do
+      projeto rodaram aqui. Os catálogos já estão no CI (onde há rede),
+      sem derrubar o build — leia o log da primeira execução.
+- [ ] **HTTPS obrigatório para o aplicativo do aluno.** Não é
+      recomendação: navegador nenhum registra service worker fora de
+      `https://` (exceto `localhost`). Sem TLS, o aplicativo continua
+      funcionando, mas deixa de ser instalável e de abrir offline.
+- [ ] **`CORS_ORIGINS` com o domínio real.** Lista explícita, nunca
+      curinga. O front e a API ficam atrás do mesmo proxy, então é o
+      endereço público do sistema que entra aqui.
 
 ---
 

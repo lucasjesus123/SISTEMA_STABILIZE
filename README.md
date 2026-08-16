@@ -22,31 +22,37 @@ disciplina de quem escreve as queries.
 
 ## Estado atual — leia antes de usar
 
-Este repositório está em **construção da fundação**. Sendo direto sobre o que
-existe e o que não existe:
+As três etapas estão construídas. Sendo direto sobre o que está verificado por
+execução e o que não está:
 
 | Camada | Estado |
 |---|---|
-| Aritmética financeira (centavos, comissões, rateio) | ✅ Pronta e testada — 31 testes |
-| Matriz de permissões (5 papéis, escopo por profissional) | ✅ Pronta e testada — 19 testes |
-| Schema do banco com Row-Level Security | ✅ Pronto e verificado — 22 tabelas, 9 garantias |
+| Aritmética financeira (centavos, comissões, rateio) | ✅ Pronta e testada — 18 testes do cálculo |
+| Matriz de permissões (5 papéis, escopo por profissional) | ✅ Pronta e testada |
+| Schema do banco com Row-Level Security | ✅ Pronto e verificado — 9 garantias provadas em SQL |
 | Camada de dados da API (contexto de tenant, escopo) | ✅ Pronta e testada — 11 testes de isolamento |
 | Autenticação, sessão e cabeçalhos de segurança | ✅ Pronta e testada — 27 testes ponta a ponta |
-| Alunos (listar, abrir ficha) | ✅ Pronto e testado |
+| Alunos: cadastro, edição e ficha | ✅ Pronto e testado |
+| Prontuário: anamnese versionada e evolução | ✅ Pronto e testado — 16 testes |
+| Anexos (exames, laudos) | ✅ Pronto e testado — 16 testes |
 | Agenda, disponibilidade e presença | ✅ Pronta e testada — 35 testes do motor de horários |
-| Cadastro de alunos (criar, editar) e prontuário | ⬜ Schema pronto, rotas não construídas |
-| Financeiro (lançamentos, baixas, resumo) | ✅ Pronto e testado |
-| Comissões com memória de cálculo | ✅ Pronta e testada — 18 testes do cálculo |
-| Interface web | ⬜ Não construída |
-| App do aluno | ⬜ Não construído |
-| Integração WhatsApp (uazapi) | ⬜ Schema pronto, integração não construída |
-| Relatórios em PDF | ⬜ Não construídos |
+| Prescrição de treino | ✅ Pronta e testada — 15 testes |
+| Financeiro (lançamentos, baixas, resumo) | ✅ Pronto e testado — 14 testes |
+| Relatórios em PDF | ✅ Prontos e testados — 10 testes, PDF conferido página a página |
+| Integração WhatsApp (uazapi) | ✅ Pronta e testada — token cifrado, envio idempotente |
+| Interface web (administração e profissional) | ✅ Pronta, conferida no navegador |
+| Aplicativo do aluno (instalável, offline) | ✅ Pronto — 14 testes, conferido em viewport de celular |
 
-**O sistema ainda não está pronto para produção.** O motivo não é fragilidade
-do que existe — é que falta funcionalidade, e falta o preparo do servidor
-(TLS, firewall, backup com restore testado). Ver
-[`AUDITORIA_SEGURANCA.md`](AUDITORIA_SEGURANCA.md) para o parecer completo,
-incluindo o que está verificado por execução e o que é hipótese.
+**187 testes passando.** Todo teste de segurança foi validado por mutação:
+quebra-se a proteção e confirma-se que o teste falha.
+
+**O que ainda falta para produção**, e é preparo de servidor, não de código:
+TLS, firewall, e o backup com **restore testado** — o script existe
+(`deploy/backup.sh`, que restaura cada dump num banco descartável e conta os
+tenants antes de aceitá-lo), mas nunca rodou num servidor real. `docker build`
+também não foi executado aqui: a saída de rede para o registro do Docker é
+bloqueada neste ambiente. Ver [`AUDITORIA_SEGURANCA.md`](AUDITORIA_SEGURANCA.md)
+para o parecer completo, separando fato, hipótese e não verificado.
 
 ## Stack
 
@@ -109,10 +115,32 @@ openssl rand -base64 32   # ENCRYPTION_KEY
 # 3. Banco
 docker compose up -d postgres
 pnpm db:migrate
+pnpm --filter @stabilize/db seed   # academia de demonstração, reexecutável
 
 # 4. Testes
 pnpm test
+
+# 5. Subir
+pnpm --filter @stabilize/api dev    # :3333
+pnpm --filter @stabilize/web dev    # :5173, com proxy para a API
 ```
+
+O seed imprime as contas criadas. A do aplicativo é `ana@aluno.demo` — entrar
+com ela leva direto ao aplicativo do aluno, não ao sistema.
+
+### Vendo o aplicativo como aplicativo
+
+O service worker é ligado apenas na versão publicada (em desenvolvimento ele
+serviria arquivo velho por cima do que você acabou de editar). Para exercitar a
+instalação e o modo offline:
+
+```bash
+pnpm --filter @stabilize/web build
+pnpm --filter @stabilize/web preview   # :4173, com o mesmo proxy
+```
+
+Abra no celular, ou no navegador em modo dispositivo, e use "adicionar à tela de
+início".
 
 ### Verificando a segurança
 
@@ -144,6 +172,17 @@ apps/api/
   db/pool.ts           withTenant() — único caminho para dado de empresa
   auth/scope.ts        escopo que o TypeScript obriga a tratar
   http/errors.ts       404 para recurso alheio, nunca 403
+  modules/portal/      o aluno vendo os próprios dados — sem id na URL
+apps/web/
+  App.tsx              o sistema (administração e profissional)
+  Aplicativo.tsx       o aplicativo do aluno, incluindo o modo sessão
+  app-aluno.css        folha separada: o aplicativo tem outra gramática
+  public/sw.js         casca offline — e nada de /api no cache
+  src/fontes.css       gerado por brand/fontes.mjs; fonte servida por nós
+brand/
+  extrair.py           LOGO.pdf → SVG e geometria, por cor lida do PDF
+  icones.mjs           ícones do aplicativo, renderizados pelo Chromium
+  fontes.mjs           baixa e deduplica as fontes variáveis
 .semgrep/            regras que vigiam os invariantes do projeto
 ```
 

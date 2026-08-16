@@ -111,6 +111,26 @@ jobs:
           semgrep --config .semgrep/stabilize.yml --metrics=off \
                   --exclude=node_modules --error .
 
+      - name: Análise estática — catálogos públicos
+        # As regras de .semgrep/stabilize.yml cobrem os invariantes DESTE
+        # projeto (contexto de tenant, escopo, mensagem de erro vazando
+        # exceção). Estes catálogos cobrem o que é genérico e conhecido.
+        # São coisas diferentes e as duas valem.
+        #
+        # Roda só aqui, e não na máquina de quem desenvolve, porque baixa
+        # as regras de semgrep.dev — ambiente sem essa saída de rede
+        # falharia por motivo que não é o código.
+        #
+        # Não derruba o build: catálogo público em projeto com convenção
+        # própria gera falso positivo, e um alerta genérico não deve
+        # bloquear entrega. O resultado fica no log para leitura.
+        run: |
+          semgrep --config p/owasp-top-ten \
+                  --config p/typescript \
+                  --config p/secrets \
+                  --metrics=off --exclude=node_modules . || true
+        continue-on-error: true
+
       - name: Segredos no histórico
         uses: gitleaks/gitleaks-action@v2
         env:
