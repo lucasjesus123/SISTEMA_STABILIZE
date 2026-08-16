@@ -52,6 +52,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
     restart: unless-stopped
     depends_on:
       postgres:
@@ -94,8 +95,40 @@ services:
       start_period: 20s
     networks: [interna, borda]
 
+  # Roda uma vez, aplica as migrations e sai. `profiles` mantém este
+  # serviço FORA do `docker compose up -d`: ele não é um processo do
+  # sistema, é uma ferramenta. Sem isso, todo restart da VPS tentaria
+  # reaplicar DDL enquanto a API sobe.
+  #
+  #   docker compose run --rm migrate
+  #
+  # A imagem tem psql; a da API não tem, de propósito (ver o Dockerfile).
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    profiles: [ferramentas]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Credencial de MIGRAÇÃO (dona do schema), nunca a da API.
+      DATABASE_MIGRATION_URL: "${DATABASE_MIGRATION_URL:?defina no .env}"
+      STABILIZE_APP_PASSWORD: "${STABILIZE_APP_PASSWORD:?defina no .env}"
+      STABILIZE_MIGRATOR_PASSWORD: "${STABILIZE_MIGRATOR_PASSWORD:?defina no .env}"
+    networks: [interna]
+
   proxy:
-    image: caddy:2-alpine
+    # O front vai DENTRO desta imagem (estágio `web` do Dockerfile), e
+    # não montado do disco: `apps/web/dist` não existe num clone novo,
+    # porque está no .gitignore e a build acontece dentro do Docker.
+    # Montá-lo dava um diretório vazio, e o site subia em branco com
+    # todos os serviços "healthy". Ver o comentário no Dockerfile.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
     restart: unless-stopped
     depends_on: [api]
     ports:
@@ -106,8 +139,11 @@ services:
       DOMINIO: "${DOMINIO:?defina no .env, ex. sistema.stabilize.com.br}"
       EMAIL_TLS: "${EMAIL_TLS:?defina no .env, o Let's Encrypt avisa de expiração nele}"
     volumes:
+      # O Caddyfile continua vindo do disco: é configuração que o
+      # operador pode querer ajustar sem refazer a imagem. Os arquivos
+      # do front, não — eles têm que casar com o commit que gerou a
+      # imagem, e por isso são assados nela.
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./apps/web/dist:/srv:ro
       - caddy-dados:/data      # certificados — PERDER ISSO refaz a emissão
       - caddy-config:/config
     networks: [borda]

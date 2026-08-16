@@ -103,21 +103,32 @@ arquivo de exemplo é copiado com os valores de exemplo dentro.
 ## 4. Subir
 
 ```bash
-docker compose build
+# Constrói as três imagens: API, proxy (com o front dentro) e migrations.
+docker compose --profile ferramentas build
+
 docker compose up -d postgres
 sleep 20                      # o banco inicializa o cluster na 1ª vez
 
-# Migrations, com a credencial de MIGRAÇÃO — nunca a da API.
-set -a; . ./.env; set +a
-docker compose run --rm \
-  -e DATABASE_MIGRATION_URL \
-  -e STABILIZE_APP_PASSWORD \
-  -e STABILIZE_MIGRATOR_PASSWORD \
-  api ./packages/db/scripts/migrate.sh
+# Migrations. Roda com a credencial de MIGRAÇÃO, nunca a da API — o
+# serviço `migrate` já recebe a certa do .env.
+docker compose run --rm migrate
 
 docker compose up -d
 docker compose ps             # tudo 'healthy'
 ```
+
+O `migrate` é o único serviço com `profiles`, e isso é proposital: ele é
+uma ferramenta, não um processo do sistema. Fica de fora do
+`docker compose up -d` para que um restart da VPS não tente reaplicar DDL
+enquanto a API sobe.
+
+### Onde o front está
+
+Dentro da imagem do proxy, e não montado do disco. Não há passo de build
+do front na VPS e não existe diretório `apps/web/dist` para manter — o
+que sobe é exatamente o que foi construído a partir daquele commit. Se
+você editar o front, `docker compose build proxy && docker compose up -d
+proxy` publica.
 
 ### Por que duas credenciais de banco
 
@@ -197,15 +208,22 @@ problemas às três da manhã.
 ```bash
 cd /opt/stabilize
 git pull
-docker compose build
-set -a; . ./.env; set +a
-docker compose run --rm -e DATABASE_MIGRATION_URL -e STABILIZE_APP_PASSWORD \
-  -e STABILIZE_MIGRATOR_PASSWORD api ./packages/db/scripts/migrate.sh
+docker compose --profile ferramentas build
+docker compose run --rm migrate
 docker compose up -d
 ```
 
 Faça backup **antes** de migration que mexa em estrutura. As migrations
 são idempotentes (`IF NOT EXISTS`), então reexecutar é seguro.
+
+O `docker compose up -d` recria o proxy junto, e é o que publica o front
+novo — ele mora dentro daquela imagem.
+
+> **Quem já usa o aplicativo instalado recebe a versão nova sozinho.** O
+> service worker assume sem esperar (`skipWaiting`) e o `sw.js` e o
+> `index.html` são servidos com `no-cache` pelo proxy. Sem isso, um
+> aplicativo em tela cheia poderia ficar preso na versão anterior sem
+> nenhum botão de "atualizar" para o aluno apertar.
 
 ---
 

@@ -63,11 +63,28 @@ export async function buildApp(): Promise<FastifyInstance> {
       },
     },
 
-    /* Confia no cabeçalho X-Forwarded-For apenas em produção, onde há
-       proxy reverso conhecido na frente. Em desenvolvimento, confiar
-       nele permitiria a qualquer cliente forjar o próprio IP e escapar
-       do rate limit. */
-    trustProxy: config.NODE_ENV === 'production',
+    /* Confia em EXATAMENTE UM salto de proxy — não em `true`.
+
+       `trustProxy: true` manda o Fastify aceitar a cadeia inteira do
+       X-Forwarded-For e usar a entrada MAIS À ESQUERDA como
+       `request.ip`. Só que a ponta esquerda é justamente a que o cliente
+       escreve: quem mandasse `X-Forwarded-For: 9.9.9.9` seria contado
+       como 9.9.9.9 pelo rate limit do login e apareceria assim no
+       audit_log. Trocar o valor a cada tentativa daria força bruta sem
+       limite e auditoria apontando para IPs inventados.
+
+       Hoje isso não acontece porque o Caddy SOBRESCREVE o cabeçalho
+       (`header_up X-Forwarded-For {remote_host}`) em vez de acrescentar.
+       Mas então a defesa inteira depende de uma linha de configuração do
+       proxy que o próprio `caddy validate` chama de desnecessária — é
+       questão de tempo até alguém "limpar".
+
+       Com `1`, o Fastify confia só no salto imediato (o nosso proxy) e
+       lê a entrada MAIS À DIREITA, que é a que o proxy escreveu. O que
+       o cliente inventar fica à esquerda e é ignorado. Em
+       desenvolvimento não há proxy nenhum, e `false` usa o endereço do
+       socket. */
+    trustProxy: config.NODE_ENV === 'production' ? 1 : false,
 
     /* Teto de corpo da requisição. Sem isto, um POST de 500 MB consome
        memória do processo antes de qualquer validação rodar. Upload de

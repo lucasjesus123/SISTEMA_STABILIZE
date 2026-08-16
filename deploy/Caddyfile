@@ -5,7 +5,6 @@
 # automático, com renovação, sem cron e sem certbot. A causa mais comum
 # de sistema pequeno cair não é ataque — é certificado vencido.
 # =====================================================================
-
 {
 	email {$EMAIL_TLS}
 	# Servidor não anuncia o que é. Não impede ataque nenhum, mas tira
@@ -29,15 +28,43 @@
 		# de antemão fecha o que uma dependência comprometida tentaria.
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 		-Server
+
+		# CONTENT-SECURITY-POLICY.
+		#
+		# Ela só é escrevível assim porque o sistema não busca NADA de
+		# terceiro: as fontes passaram a ser servidas por nós, e não há
+		# CDN, tag de analytics nem widget. `default-src 'self'` é o
+		# começo e o fim da história.
+		#
+		# `style-src` precisa de 'unsafe-inline' e não é descuido: são
+		# doze atributos `style` que carregam VALOR CALCULADO — a
+		# porcentagem do anel de constância, a largura da barra de
+		# progresso da série. Isso não cabe em folha de estilo. O risco
+		# que 'unsafe-inline' abre em `style-src` é de exfiltração por
+		# seletor, não execução de código; `script-src` continua
+		# fechado, que é o que impede XSS de virar execução.
+		#
+		# `frame-ancestors 'none'` é o X-Frame-Options em versão que os
+		# navegadores atuais realmente consultam.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 	}
 
 	# --- API ---
 	handle /api/* {
 		reverse_proxy api:3333 {
 			header_up X-Real-IP {remote_host}
-			# O rate limit e a auditoria dependem do IP verdadeiro. Sem
-			# isto, todo mundo vira o IP do proxy e o limite por IP passa
-			# a valer para a academia inteira.
+			# `caddy validate` avisa que estas duas linhas são
+			# desnecessárias, porque o Caddy já repassa os cabeçalhos.
+			# NÃO SÃO, e a diferença importa: o comportamento padrão
+			# ACRESCENTA o IP real ao que veio do cliente, então quem
+			# mandasse `X-Forwarded-For: 9.9.9.9` produziria a cadeia
+			# "9.9.9.9, <ip real>". Aqui a linha SOBRESCREVE: o que o
+			# cliente inventou é descartado na borda.
+			#
+			# A API não depende disto (usa `trustProxy: 1`, que lê a
+			# ponta direita da cadeia), mas as duas defesas juntas
+			# significam que nenhuma das duas sozinha é ponto único de
+			# falha para o rate limit do login e para a auditoria.
 			header_up X-Forwarded-For {remote_host}
 			header_up X-Forwarded-Proto {scheme}
 		}
@@ -55,9 +82,27 @@
 		@comHash path_regexp \-[A-Za-z0-9_-]{8,}\.(js|css|woff2)$
 		header @comHash Cache-Control "public, max-age=31536000, immutable"
 
-		# O index NÃO: é ele que aponta para os arquivos novos depois de
-		# um deploy. Em cache, o usuário fica preso na versão anterior.
+		# As fontes não têm hash no nome (Outfit-latin.woff2), então não
+		# entram na regra acima. Uma semana: elas praticamente não mudam,
+		# mas trocar a tipografia da marca não pode significar um ano de
+		# gente vendo a antiga.
+		header /fontes/* Cache-Control "public, max-age=604800"
+
+		# NENHUM DESTES TRÊS PODE FICAR PRESO EM CACHE.
+		#
+		# O index aponta para os arquivos novos depois de um deploy; em
+		# cache, o usuário fica na versão anterior.
+		#
+		# O sw.js é pior: ele é o que decide o que TODO o resto serve.
+		# Um service worker velho preso no cache continua entregando a
+		# versão antiga do aplicativo mesmo depois do deploy, e o
+		# usuário não tem como sair disso — não há botão de "atualizar"
+		# num aplicativo em tela cheia. Os navegadores atuais já
+		# revalidam o script do worker por conta própria, mas isso é
+		# comportamento deles, não garantia nossa.
 		header /index.html Cache-Control "no-cache"
+		header /sw.js Cache-Control "no-cache"
+		header /manifest.webmanifest Cache-Control "no-cache"
 
 		# SPA: qualquer rota desconhecida devolve o index.
 		try_files {path} /index.html
