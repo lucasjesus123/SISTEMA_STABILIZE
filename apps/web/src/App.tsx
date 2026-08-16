@@ -25,6 +25,7 @@ import { Marca } from './Marca.jsx';
 import { AbaAnamnese, AbaAnexos, AbaEvolucao } from './Prontuario.jsx';
 import { AbaTreino } from './Treino.jsx';
 import { Whatsapp } from './Whatsapp.jsx';
+import { Aplicativo } from './Aplicativo.jsx';
 import { SeletorTema, useTema } from './tema.jsx';
 
 /**
@@ -63,6 +64,14 @@ export default function App(): ReactNode {
 
   if (principal === null) {
     return <Login aoEntrar={setPrincipal} />;
+  }
+
+  /* O ALUNO NÃO ENTRA NO SISTEMA — entra no aplicativo. São dois
+     produtos, com posturas diferentes, sobre o mesmo login. Isto é
+     conveniência de interface: quem chamar as rotas administrativas
+     direto recebe 403 do servidor de qualquer forma. */
+  if (principal.role === 'STUDENT') {
+    return <Aplicativo nome={principal.name} aoSair={() => setPrincipal(null)} />;
   }
 
   return <Sistema principal={principal} aoSair={() => setPrincipal(null)} />;

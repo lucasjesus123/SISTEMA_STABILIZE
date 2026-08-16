@@ -9,8 +9,36 @@
       para quem usa o tema escuro, e o clarão aparecia a cada recarga.
     -->
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#4BC1C8" />
+    <!--
+      A barra de status do celular assume esta cor quando o aplicativo
+      está instalado. Uma por tema: com uma cor só, ou a barra destoa do
+      cabeçalho no claro, ou destoa no escuro.
+    -->
+    <meta name="theme-color" content="#f7fafa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a1213" media="(prefers-color-scheme: dark)" />
     <title>Stabilize — Clínica do Músculo</title>
+
+    <!--
+      APLICATIVO INSTALÁVEL.
+
+      O manifesto é o que faz o Android oferecer "adicionar à tela de
+      início" e o que remove a barra de endereço depois (display:
+      standalone). Sem ele, o atalho abre um navegador com uma página
+      dentro — e o aluno percebe na hora.
+
+      O iOS ignora quase tudo do manifesto e lê estas metas próprias:
+      `apple-mobile-web-app-capable` tira a barra do Safari,
+      `status-bar-style: black-translucent` deixa o conteúdo passar por
+      baixo do relógio (é o que o `env(safe-area-inset-top)` do CSS do
+      aplicativo compensa) e o `apple-touch-icon` é o ícone do atalho,
+      que o iOS não lê do manifesto.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Stabilize" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!--
       A figura da marca, direto do arquivo vetorial original
@@ -20,16 +48,32 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!--
-      A fonte é carregada com preconnect para não atrasar a primeira
-      pintura. `display=swap` mostra o texto na fonte de sistema enquanto
-      a definitiva carrega — texto invisível esperando fonte é uma das
-      piores trocas que se pode fazer numa tela de trabalho.
+      As fontes são SERVIDAS POR NÓS (apps/web/src/fontes.css, geradas por
+      brand/fontes.mjs). Aqui havia um <link> para fonts.googleapis.com;
+      saiu por três motivos, detalhados no cabeçalho daquele script: sem
+      rede o aplicativo instalado começava com uma requisição que falha,
+      cada carregamento entregava o IP do aluno e o endereço do sistema a
+      um terceiro, e um <link> externo é CSS remoto executando na nossa
+      origem sem verificação.
+
+      Estes dois são os arquivos do bloco latino, os únicos que a
+      primeira tela usa. O `latin-ext` fica de fora do preload de
+      propósito: quase nenhum texto em português o alcança, e pré-carregar
+      o que não vai ser usado atrasa o que vai.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      href="/fontes/Outfit-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fontes/SourceSans3-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
   </head>
   <body>

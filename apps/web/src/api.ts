@@ -17,6 +17,7 @@
 
 export interface Principal {
   id: string;
+  name: string;
   role: string;
   roleLabel: string;
   permissions: string[];
@@ -164,10 +165,10 @@ export async function api<T>(caminho: string, init: RequestInit = {}): Promise<T
 export async function entrar(
   email: string,
   senha: string,
-): Promise<{ accessToken: string; user: Principal & { name: string; mustChangePassword: boolean } }> {
+): Promise<{ accessToken: string; user: Principal & { mustChangePassword: boolean } }> {
   const r = await bruto<{
     accessToken: string;
-    user: Principal & { name: string; mustChangePassword: boolean };
+    user: Principal & { mustChangePassword: boolean };
   }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password: senha }),
@@ -650,3 +651,77 @@ export const dispararAniversarios = () =>
     '/api/whatsapp/aniversarios/executar',
     { method: 'POST' },
   );
+
+/* --------------------------------------------------------------------
+ * Aplicativo do aluno
+ *
+ * Nenhuma destas rotas carrega id de aluno: ele vem do token. É a
+ * diferença central em relação ao resto da API — não existe parâmetro
+ * para adulterar.
+ * ------------------------------------------------------------------ */
+
+export interface MeuPerfil {
+  nome: string;
+  foto: string | null;
+  mensalista: boolean;
+  plano: { ciclo: string; valorCentavos: number; sessoesIncluidas: number | null } | null;
+  frequencia: { presencas: number; faltas: number; proximos: number };
+}
+
+export interface MeuItemTreino {
+  dia: string;
+  exercicio: string;
+  equipamento: string | null;
+  series: number | null;
+  repeticoes: string | null;
+  cargaG: number | null;
+  descansoSegundos: number | null;
+}
+
+export interface MeuTreino {
+  nome: string;
+  objetivo: string | null;
+  observacoes: string | null;
+  profissional: string;
+  itens: MeuItemTreino[];
+}
+
+export interface MeuHorario {
+  id: string;
+  inicio: string;
+  fim: string;
+  status: string;
+  profissional: string;
+  sala: string | null;
+  precoCentavos: number | null;
+  observacao: string | null;
+  podeCancelar: boolean;
+}
+
+export interface VagaProfissional {
+  profissional: { id: string; nome: string };
+  horarios: { inicio: string; fim: string }[];
+}
+
+export const meuPerfil = () => api<{ data: MeuPerfil }>('/api/eu');
+export const meuTreino = () => api<{ data: MeuTreino | null }>('/api/eu/treino');
+export const minhaAgenda = () => api<{ data: MeuHorario[] }>('/api/eu/agenda');
+
+export const vagas = (de: Date, ate: Date) =>
+  api<{ data: VagaProfissional[] }>(
+    `/api/eu/horarios?de=${de.toISOString()}&ate=${ate.toISOString()}`,
+  );
+
+export const agendar = (dados: {
+  profissionalId: string;
+  inicio: string;
+  fim: string;
+  observacao?: string;
+}) =>
+  api<{ data: { id: string; precoCentavos: number | null } }>('/api/eu/agendamentos', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const desmarcar = (id: string) =>
+  api<{ ok: boolean }>(`/api/eu/agendamentos/${id}`, { method: 'DELETE' });

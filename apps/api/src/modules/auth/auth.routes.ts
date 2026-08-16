@@ -5,6 +5,7 @@ import { REFRESH_COOKIE, refreshCookieOptions } from '../../auth/tokens.js';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../auth/password.js';
 import { changePassword, login, logout, refresh } from './auth.service.js';
 import { env } from '../../config/env.js';
+import { withTenant } from '../../db/pool.js';
 import { AppError, unauthorized } from '../../http/errors.js';
 import { LoginGuard } from '../../http/login-guard.js';
 
@@ -182,8 +183,23 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
    * ---------------------------------------------------------------- */
   app.get('/me', { preHandler: [app.authenticate] }, async (request) => {
     const principal = request.principal!;
+
+    /* O NOME vem do banco, não do token.
+       Poderia viajar como claim e evitar esta consulta, mas nome muda —
+       casamento, correção de digitação — e um claim só se atualiza no
+       próximo login. Uma consulta por carregamento de página é barata; a
+       pessoa ser chamada pelo nome errado por duas semanas, não. */
+    const { rows } = await withTenant(
+      { tenantId: principal.tenantId, userId: principal.userId },
+      (client) =>
+        client.query<{ full_name: string }>('SELECT full_name FROM users WHERE id = $1', [
+          principal.userId,
+        ]),
+    );
+
     return {
       id: principal.userId,
+      name: rows[0]?.full_name ?? '',
       role: principal.role,
       roleLabel: ROLE_LABELS[principal.role],
       permissions: permissionsOf(principal.role),

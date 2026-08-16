@@ -1,0 +1,456 @@
+/* =====================================================================
+   Aplicativo do aluno.
+
+   Folha SEPARADA da do sistema, e não um punhado de media queries. Os
+   dois produtos têm gramáticas diferentes — densidade contra alcance do
+   polegar — e misturá-las produziria regras que se desfazem uma à outra
+   a cada ajuste.
+
+   Tudo aqui é escuro. Não é preferência: o aplicativo é usado numa sala
+   de musculação, muitas vezes com pouca luz, e uma tela branca de 400
+   nits na cara de quem acabou de fazer agachamento é agressão.
+   ===================================================================== */
+
+.app {
+  /* ALTURA FIXA, não `min-height`.
+     Com `min-height`, a linha do meio (1fr) cresce junto com o conteúdo,
+     o `overflow-y: auto` de .app-conteudo nunca chega a valer e quem
+     rola é a PÁGINA inteira — a barra de abas ia junto e o último
+     exercício da lista terminava atrás dela. Com `height`, a grade não
+     passa da tela, a barra fica onde está e só o meio rola.
+
+     As duas declarações são propositais: a primeira atende navegador sem
+     `dvh` (iOS antigo), a segunda sobrescreve onde `dvh` existe e mede a
+     tela DEPOIS de descontar a barra do navegador. Ordem invertida
+     quebraria justamente o caso que `dvh` veio resolver. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background:
+    radial-gradient(120% 60% at 50% 0%, #10262a 0%, transparent 60%),
+    #080f11;
+  color: #e8f4f5;
+  /* O celular não tem hover; o azul de seleção do toque é ruído. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* `env(safe-area-inset-top)`: sem isto o conteúdo entra embaixo do
+     notch e some. É o detalhe que denuncia site aberto no celular. */
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 20px 10px;
+  color: #e8f4f5;
+}
+.app-sair {
+  background: none;
+  border: 0;
+  color: #7d8b8f;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px;
+}
+
+.app-conteudo {
+  padding: 8px 20px 24px;
+  overflow-y: auto;
+  /* O gesto de rolagem não "vaza" para a página inteira. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* --- barra inferior --- */
+
+.app-barra {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 4px;
+  padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + 8px);
+  background: rgba(8, 15, 17, 0.86);
+  backdrop-filter: blur(18px);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Sem `backdrop-filter` o fundo translúcido deixa a lista de exercícios
+   legível ATRÁS dos rótulos das abas. Fundo opaco resolve, e é a
+   degradação correta: perde-se o vidro, não a leitura. */
+@supports not (backdrop-filter: blur(1px)) {
+  .app-barra { background: #080f11; }
+}
+
+.app-aba {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  background: none;
+  border: 0;
+  padding: 8px 4px;
+  font: inherit;
+  font-size: 11px;
+  color: #6d7b7f;
+  border-radius: 14px;
+  /* 44px é o alvo mínimo confortável para o dedo. Menos que isso e a
+     pessoa erra a aba — sempre a do lado, sempre com o polegar. */
+  min-height: 52px;
+  transition: color 140ms ease, transform 120ms ease;
+}
+.app-aba svg { width: 22px; height: 22px; }
+.app-aba.ativa { color: #6ee7ef; }
+/* Resposta ao TOQUE, não ao hover: um :hover em celular fica preso
+   depois do clique e a aba parece travada. */
+.app-aba:active { transform: scale(0.94); }
+
+/* --- conteúdo --- */
+
+.app-saudacao {
+  font-size: 26px;
+  font-weight: 300;
+  line-height: 1.25;
+  margin: 10px 0 22px;
+  color: #9fb0b4;
+}
+.app-saudacao strong { color: #e8f4f5; font-weight: 600; }
+
+.app-titulo { font-size: 22px; font-weight: 600; margin: 10px 0 4px; }
+.app-subtitulo { color: #8c9b9f; font-size: 14px; margin: 0 0 18px; }
+
+.app-cartao {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 20px;
+  border-radius: 22px;
+  border: 1px solid rgba(110, 231, 239, 0.16);
+  background: linear-gradient(155deg, rgba(76, 194, 200, 0.14), rgba(8, 15, 17, 0.2));
+  color: inherit;
+  font: inherit;
+  margin-bottom: 22px;
+}
+.app-cartao-rotulo {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6ee7ef;
+}
+/* Sem `text-transform: capitalize` — ver primeiraMaiuscula() no TSX. */
+.app-cartao-quando { font-size: 17px; font-weight: 500; }
+.app-cartao-hora { font-size: 38px; font-weight: 600; line-height: 1.1; }
+.app-cartao-com { color: #9fb0b4; font-size: 14px; }
+.app-contagem {
+  justify-self: start;
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(110, 231, 239, 0.14);
+  color: #6ee7ef;
+  font-size: 12px;
+}
+.app-cartao-vazio:active { transform: scale(0.98); }
+
+.app-secao { margin-bottom: 26px; }
+.app-secao h2 {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6d7b7f;
+  margin: 0 0 12px;
+}
+
+/* --- anel de constância --- */
+
+.app-constancia { display: flex; align-items: center; gap: 22px; }
+.app-anel { width: 110px; height: 110px; flex: none; transform: rotate(-90deg); }
+.app-anel-trilho { fill: none; stroke: rgba(255, 255, 255, 0.07); stroke-width: 9; }
+.app-anel-valor {
+  fill: none;
+  stroke: #6ee7ef;
+  stroke-width: 9;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(110, 231, 239, 0.5));
+  transition: stroke-dashoffset 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app-anel-texto {
+  transform: rotate(90deg);
+  transform-origin: 55px 55px;
+  text-anchor: middle;
+  fill: #e8f4f5;
+  font-size: 21px;
+  font-weight: 600;
+}
+.app-constancia-numeros { display: grid; gap: 14px; }
+.app-constancia-numeros strong { font-size: 26px; display: block; }
+.app-constancia-numeros span { color: #7d8b8f; font-size: 13px; }
+
+/* --- listas e chips --- */
+
+.app-dias { display: grid; gap: 10px; }
+.app-dia {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  font: inherit;
+  transition: transform 120ms ease;
+}
+.app-dia:active { transform: scale(0.98); }
+.app-dia-nome { font-weight: 500; }
+.app-dia-qtd { color: #7d8b8f; font-size: 13px; }
+
+.app-chips, .app-faixa-dias {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Encaixe: o dia escolhido para alinhado, como em app nativo. */
+  scroll-snap-type: x mandatory;
+  padding-bottom: 4px;
+  margin-bottom: 18px;
+}
+.app-chips::-webkit-scrollbar, .app-faixa-dias::-webkit-scrollbar { display: none; }
+.app-chip, .app-dia-chip { scroll-snap-align: start; flex: none; }
+
+.app-chip {
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: none;
+  color: #9fb0b4;
+  font: inherit;
+  font-size: 14px;
+}
+.app-chip.ativo { background: #6ee7ef; border-color: #6ee7ef; color: #06181b; font-weight: 600; }
+
+.app-dia-chip {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 58px;
+  padding: 10px 0;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #9fb0b4;
+  font: inherit;
+}
+.app-dia-chip strong { font-size: 19px; color: #e8f4f5; }
+.app-dia-semana { font-size: 11px; text-transform: uppercase; }
+.app-dia-chip.ativo { background: #6ee7ef; border-color: #6ee7ef; }
+.app-dia-chip.ativo strong, .app-dia-chip.ativo .app-dia-semana { color: #06181b; }
+
+.app-exercicios { list-style: none; margin: 0 0 20px; padding: 0; }
+.app-exercicio {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.app-exercicio strong { display: block; font-weight: 500; }
+.app-exercicio span { color: #7d8b8f; font-size: 12px; }
+.app-prescricao { color: #6ee7ef; font-size: 13px; white-space: nowrap; }
+
+.app-horarios { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-horario {
+  min-width: 76px;
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(110, 231, 239, 0.28);
+  background: rgba(110, 231, 239, 0.08);
+  color: #e8f4f5;
+  font: inherit;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  transition: transform 120ms ease;
+}
+.app-horario:active { transform: scale(0.94); }
+.app-horario:disabled { opacity: 0.4; }
+
+.app-marcado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.app-marcado strong { display: block; font-weight: 500; font-size: 15px; }
+.app-marcado span { color: #7d8b8f; font-size: 13px; }
+.app-desmarcar {
+  background: none;
+  border: 0;
+  color: #ff8b8b;
+  font: inherit;
+  font-size: 13px;
+  padding: 10px;
+}
+
+.app-botao-grande {
+  width: 100%;
+  min-height: 54px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #6ee7ef, #4cc2c8);
+  color: #06181b;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 8px;
+  transition: transform 120ms ease;
+}
+.app-botao-grande:active { transform: scale(0.97); }
+
+/* A margem não é enfeite: sem ela, "Nenhum horário livre neste dia."
+   encostava no rótulo da seção seguinte e as duas frases liam como uma
+   só, quebrada no meio. O reset zera a margem de <p>; aqui ela volta. */
+.app-nota { color: #7d8b8f; font-size: 13px; line-height: 1.5; margin: 10px 0 22px; }
+.app-erro { color: #ff9b9b; font-size: 14px; margin-bottom: 14px; }
+.app-vazio { text-align: center; padding: 60px 20px; color: #7d8b8f; }
+.app-vazio-titulo { color: #e8f4f5; font-size: 17px; margin-bottom: 6px; }
+
+/* --- esqueleto --- */
+
+.app-esqueleto, .app-esqueleto-linhas { display: grid; gap: 14px; }
+.app-esqueleto span, .app-esqueleto-linhas span {
+  display: block;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #101d20, #16282c, #101d20);
+  background-size: 200% 100%;
+  animation: brilho 1.4s ease-in-out infinite;
+}
+.app-esqueleto-linhas span { height: 46px; }
+@keyframes brilho {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* =====================================================================
+   Modo sessão — tela cheia, um exercício por vez
+   ===================================================================== */
+
+.sessao {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  background: radial-gradient(120% 70% at 50% 0%, #123036 0%, #060d0f 60%);
+  color: #e8f4f5;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.sessao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+}
+.sessao-fechar {
+  background: none;
+  border: 0;
+  color: #7d8b8f;
+  font-size: 20px;
+  padding: 8px 12px;
+}
+.sessao-dia { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: #6ee7ef; }
+.sessao-contador { color: #7d8b8f; font-size: 14px; }
+
+.sessao-progresso { height: 3px; background: rgba(255, 255, 255, 0.07); margin: 0 20px; border-radius: 999px; }
+.sessao-progresso span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #6ee7ef;
+  box-shadow: 0 0 10px rgba(110, 231, 239, 0.7);
+  transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sessao-corpo {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 20px 24px 40px;
+  text-align: center;
+}
+.sessao-exercicio { font-size: 30px; font-weight: 600; line-height: 1.2; margin: 0; }
+.sessao-equipamento { color: #7d8b8f; margin: 0 0 20px; }
+
+.sessao-numeros {
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+  margin: 16px 0 34px;
+}
+.sessao-numeros strong { display: block; font-size: 34px; font-weight: 600; }
+.sessao-numeros span { color: #7d8b8f; font-size: 12px; }
+
+/* O botão principal é ENORME de propósito: é apertado com a mão suada,
+   sem olhar direito, no meio da série. */
+.sessao-concluir {
+  width: 100%;
+  max-width: 22rem;
+  min-height: 68px;
+  border: 0;
+  border-radius: 20px;
+  background: linear-gradient(120deg, #6ee7ef, #4cc2c8);
+  color: #06181b;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  box-shadow: 0 10px 40px rgba(76, 194, 200, 0.28);
+  transition: transform 120ms ease;
+}
+.sessao-concluir:active { transform: scale(0.96); }
+.sessao-voltar { background: none; border: 0; color: #6d7b7f; font: inherit; font-size: 13px; margin-top: 18px; padding: 10px; }
+
+.sessao-descanso {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.sessao-descanso-rotulo { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #6ee7ef; }
+.sessao-relogio {
+  font-size: 76px;
+  font-weight: 200;
+  line-height: 1;
+  /* Pulsa devagar: dá para ver de longe que o tempo está correndo, sem
+     precisar aproximar o rosto da tela. */
+  animation: pulsar 2s ease-in-out infinite;
+}
+@keyframes pulsar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+.sessao-descanso .app-botao-grande { max-width: 18rem; margin-top: 26px; }
+
+.sessao-fim {
+  grid-template-rows: 1fr;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 30px;
+}
+.sessao-fim h1 { font-size: 28px; margin: 0; }
+.sessao-fim p { color: #7d8b8f; margin: 0 0 20px; }
+.sessao-fim .app-botao-grande { max-width: 18rem; }
+
+/* Quem pediu menos movimento no sistema recebe menos movimento aqui. */
+@media (prefers-reduced-motion: reduce) {
+  .app-anel-valor, .sessao-progresso span { transition: none; }
+  .sessao-relogio, .app-esqueleto span, .app-esqueleto-linhas span { animation: none; }
+}

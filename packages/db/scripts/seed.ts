@@ -31,6 +31,7 @@ const SLUG_DEMO = 'stabilize-demo';
    sem precisar de exceção na política nem de credencial privilegiada. */
 const TENANT_DEMO = '5742411a-0000-4000-8000-000000000001';
 const SENHA_DEMO = 'stabilize-demo-2026';
+const EMAIL_ALUNO_DEMO = 'ana@aluno.demo';
 
 const url = process.env['DATABASE_URL'];
 if (url === undefined) {
@@ -302,6 +303,25 @@ async function main(): Promise<void> {
 
       alunos.push({ id: alunoId, profId, bp, valor, ciclo });
     }
+
+    /* ACESSO AO APLICATIVO DO ALUNO.
+
+       Aluno e usuário são coisas separadas de propósito: a academia
+       cadastra centenas de alunos, e só uma parte deles quer (ou pede)
+       acesso ao aplicativo. O vínculo é `students.user_id`, e é ele que
+       o login usa para colocar o `sid` no token — o identificador que
+       transforma o escopo em SELF e faz o portal responder "os SEUS
+       dados" sem que o aplicativo precise mandar id nenhum na URL.
+
+       Aqui damos acesso à primeira aluna, que é justamente uma das que
+       fazem aniversário hoje e tem agenda cheia — assim a primeira tela
+       do aplicativo tem o que mostrar. */
+    const alunaDemo = alunos[0]!;
+    const usuarioAluno = await criarUsuario(NOMES[0]!, EMAIL_ALUNO_DEMO, 'STUDENT');
+    await client.query('UPDATE students SET user_id = $1 WHERE id = $2', [
+      usuarioAluno,
+      alunaDemo.id,
+    ]);
 
     await client.query('COMMIT');
 
@@ -629,6 +649,7 @@ async function main(): Promise<void> {
     console.log(`    admin@stabilize.demo     ${SENHA_DEMO}   (proprietário)`);
     console.log(`    renata@stabilize.demo    ${SENHA_DEMO}   (profissional)`);
     console.log(`    recepcao@stabilize.demo  ${SENHA_DEMO}   (recepção)`);
+    console.log(`    ${EMAIL_ALUNO_DEMO}            ${SENHA_DEMO}   (aluna — aplicativo)`);
     console.log('\n  Estas senhas são de DEMONSTRAÇÃO. Nunca use este seed');
     console.log('  num banco que vá receber dados reais.\n');
   } catch (erro) {
