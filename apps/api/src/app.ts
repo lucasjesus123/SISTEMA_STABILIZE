@@ -11,6 +11,7 @@ import { recordsRoutes } from './modules/records/records.routes.js';
 import { attachmentsRoutes } from './modules/attachments/attachments.routes.js';
 import { exercisesRoutes, workoutsRoutes } from './modules/workouts/workouts.routes.js';
 import { whatsappRoutes } from './modules/whatsapp/whatsapp.routes.js';
+import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { registrarAgendador } from './modules/whatsapp/agendador.js';
 import multipart from '@fastify/multipart';
 import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
@@ -154,6 +155,7 @@ export async function buildApp(): Promise<FastifyInstance> {
      A URL diz de quem é a coisa, e isso determina como ela é protegida. */
   await app.register(exercisesRoutes, { prefix: '/api/exercises' });
   await app.register(whatsappRoutes, { prefix: '/api/whatsapp' });
+  await app.register(reportsRoutes, { prefix: '/api/relatorios' });
 
   registrarAgendador(app);
   await app.register(scheduleRoutes, { prefix: '/api/schedule' });

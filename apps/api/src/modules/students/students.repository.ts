@@ -186,6 +186,25 @@ export interface FichaAluno {
   temAnamnese: boolean;
 }
 
+/**
+ * Coluna `date` do PostgreSQL em ISO "AAAA-MM-DD".
+ *
+ * O driver devolve `date` como objeto Date, e a versão anterior fazia
+ * `String(valor).slice(0, 10)` — que num Date produz "Sun Mar 2":
+ * os dez primeiros caracteres da representação em INGLÊS. A API então
+ * entregava isso como se fosse ISO, e tanto a tela quanto o PDF exibiam
+ * lixo ou traço. Nenhum teste pegou porque o campo continuava sendo uma
+ * string não vazia; só apareceu ao abrir um relatório impresso.
+ *
+ * `toISOString` é seguro aqui: coluna `date` chega como meia-noite UTC,
+ * então a parte da data não desloca.
+ */
+function dataIso(valor: unknown): string | null {
+  if (valor === null || valor === undefined) return null;
+  if (valor instanceof Date) return valor.toISOString().slice(0, 10);
+  return String(valor).slice(0, 10);
+}
+
 export async function buscarFicha(
   client: TenantClient,
   scope: AccessScope,
@@ -247,11 +266,11 @@ export async function buscarFicha(
     email: txt('email'),
     telefone: txt('phone'),
     whatsapp: txt('whatsapp'),
-    dataNascimento: x['birth_date'] === null ? null : String(x['birth_date']).slice(0, 10),
+    dataNascimento: dataIso(x['birth_date']),
     documento: txt('document'),
     status: String(x['status']),
     observacoes: txt('notes'),
-    inicioEm: x['started_at'] === null ? null : String(x['started_at']).slice(0, 10),
+    inicioEm: dataIso(x['started_at']),
     criadoEm: x['created_at'] as Date,
     endereco: {
       cep: txt('address_zip'),

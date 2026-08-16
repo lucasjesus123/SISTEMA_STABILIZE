@@ -20,9 +20,11 @@ import {
   type ResumoFinanceiro,
 } from './api.js';
 import { Carregando, Erro, GraficoLinha, Indicador, Vazio, reais, type Ponto } from './ui.jsx';
+import { baixarRelatorio } from './api.js';
 import { Marca } from './Marca.jsx';
 import { AbaAnamnese, AbaAnexos, AbaEvolucao } from './Prontuario.jsx';
 import { AbaTreino } from './Treino.jsx';
+import { Whatsapp } from './Whatsapp.jsx';
 import { SeletorTema, useTema } from './tema.jsx';
 
 /**
@@ -35,7 +37,7 @@ import { SeletorTema, useTema } from './tema.jsx';
 const capitalizar = (texto: string): string =>
   texto.charAt(0).toUpperCase() + texto.slice(1);
 
-type Aba = 'painel' | 'alunos' | 'agenda';
+type Aba = 'painel' | 'alunos' | 'agenda' | 'whatsapp';
 
 export default function App(): ReactNode {
   const [principal, setPrincipal] = useState<Principal | null>(null);
@@ -190,6 +192,7 @@ function Sistema({
     { id: 'painel', nome: 'Painel', visivel: pode('finance:report:read') || pode('commission:read') },
     { id: 'alunos', nome: 'Alunos', visivel: pode('student:read') },
     { id: 'agenda', nome: 'Agenda', visivel: pode('schedule:read') },
+    { id: 'whatsapp', nome: 'WhatsApp', visivel: pode('user:write') },
   ];
   const visiveis = abas.filter((a) => a.visivel);
 
@@ -233,6 +236,7 @@ function Sistema({
         {aba === 'painel' && <Painel principal={principal} />}
         {aba === 'alunos' && <Alunos principal={principal} />}
         {aba === 'agenda' && <Agenda />}
+        {aba === 'whatsapp' && <Whatsapp />}
       </main>
     </div>
   );
@@ -872,9 +876,22 @@ function Ficha({
             )}
           </div>
         </div>
-        <button type="button" className="botao-acao" onClick={aoEditar}>
-          Editar
-        </button>
+        <div className="ficha-botoes">
+          {/* O PDF da ficha respeita o mesmo escopo da tela — e o que
+              entra nele depende do papel de quem pede, não de quem lê. */}
+          <button
+            type="button"
+            className="botao-secundario"
+            onClick={() =>
+              void baixarRelatorio(`/api/relatorios/aluno/${f.id}`, `ficha-${f.nome}.pdf`)
+            }
+          >
+            Ficha em PDF
+          </button>
+          <button type="button" className="botao-acao" onClick={aoEditar}>
+            Editar
+          </button>
+        </div>
       </header>
 
       <div className="ficha-resumo">

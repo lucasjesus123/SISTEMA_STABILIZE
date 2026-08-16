@@ -576,3 +576,77 @@ export const removerItemTreino = (alunoId: string, treinoId: string, itemId: str
 
 export const publicarTreino = (alunoId: string, treinoId: string) =>
   api<{ ok: boolean }>(`/api/students/${alunoId}/treinos/${treinoId}/ativar`, { method: 'POST' });
+
+/* --------------------------------------------------------------------
+ * Relatórios e WhatsApp
+ * ------------------------------------------------------------------ */
+
+/**
+ * Baixa um PDF.
+ *
+ * Mesmo motivo do anexo: o token vive em memória e viaja no cabeçalho,
+ * que um `<a href>` não envia. Buscamos os bytes e disparamos o download
+ * por um endereço temporário, revogado depois.
+ */
+export async function baixarRelatorio(caminho: string, nome: string): Promise<void> {
+  const resposta = await fetch(caminho, {
+    headers: accessToken === null ? {} : { Authorization: `Bearer ${accessToken}` },
+    credentials: 'same-origin',
+  });
+
+  if (!resposta.ok) {
+    if (resposta.status === 401 && (await renovar())) return baixarRelatorio(caminho, nome);
+    throw new ApiError(resposta.status, 'ERRO', 'Não foi possível gerar o relatório.');
+  }
+
+  const endereco = URL.createObjectURL(await resposta.blob());
+  try {
+    const link = document.createElement('a');
+    link.href = endereco;
+    link.download = nome;
+    link.click();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(endereco), 10_000);
+  }
+}
+
+export interface ConexaoWhatsapp {
+  id: string;
+  nome: string;
+  numero: string | null;
+  status: string;
+  conectadoEm: string | null;
+}
+
+export interface MensagemWhatsapp {
+  id: string;
+  numero: string;
+  texto: string;
+  tipo: string;
+  status: string;
+  erro: string | null;
+  aluno: string | null;
+  criadoEm: string;
+}
+
+export const buscarWhatsapp = () => api<{ data: ConexaoWhatsapp | null }>('/api/whatsapp');
+
+export const conectarWhatsapp = () =>
+  api<{ data: { qr: string | null; status: string } }>('/api/whatsapp/conectar', {
+    method: 'POST',
+  });
+
+export const buscarMensagens = () =>
+  api<{ data: MensagemWhatsapp[] }>('/api/whatsapp/mensagens');
+
+export const testarWhatsapp = (numero: string, texto: string) =>
+  api<{ ok: boolean }>('/api/whatsapp/testar', {
+    method: 'POST',
+    body: JSON.stringify({ numero, texto }),
+  });
+
+export const dispararAniversarios = () =>
+  api<{ data: { enviadas: number; jaEnviadas: number; falhas: number } }>(
+    '/api/whatsapp/aniversarios/executar',
+    { method: 'POST' },
+  );

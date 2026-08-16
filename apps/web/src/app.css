@@ -1547,3 +1547,59 @@
   .treino-prescricao { white-space: normal; }
   .seletor-filtros { flex-wrap: wrap; }
 }
+
+/* --- WhatsApp --- */
+
+.mensagem-aviso {
+  color: var(--ok);
+  font-size: var(--t-sm);
+  margin: 0 0 var(--e-4);
+}
+
+.ficha-botoes { display: flex; gap: var(--e-3); align-items: center; }
+
+.wa-conexao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding: var(--e-4) 0;
+  border-top: 1px solid var(--fio);
+  border-bottom: 1px solid var(--fio);
+  margin-bottom: var(--e-6);
+}
+.wa-estado { display: flex; align-items: center; gap: var(--e-4); }
+.wa-estado > div { display: grid; gap: 2px; }
+.wa-numero { font-size: var(--t-sm); color: var(--texto-apoio); }
+
+/* Um ponto, e não um texto colorido: o estado tem que ser legível de
+   longe, por quem está com o celular na mão do outro lado da sala. */
+.wa-bolinha {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fio-forte);
+  flex: none;
+}
+.wa-bolinha.ligada { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+
+.wa-qr { max-width: 34rem; margin-bottom: var(--e-6); }
+.wa-qr h2 { font-size: var(--t-base); margin: 0 0 var(--e-3); }
+.wa-passos { margin: 0 0 var(--e-4); padding-left: var(--e-5); color: var(--texto-apoio); font-size: var(--t-sm); }
+.wa-passos li { margin-bottom: var(--e-1); }
+.wa-passos strong { color: var(--texto); font-weight: 500; }
+.wa-qr-imagem {
+  width: 240px;
+  height: 240px;
+  /* Fundo branco SEMPRE: no tema escuro um QR transparente fica ilegível
+     para a câmera, e o problema aparece só na hora de escanear. */
+  background: #fff;
+  padding: var(--e-3);
+  border-radius: var(--raio);
+  image-rendering: pixelated;
+}
+.wa-qr-nota { font-size: var(--t-xs); color: var(--texto-apoio); margin-top: var(--e-3); }
+
+.wa-testes { max-width: 34rem; margin-bottom: var(--e-6); }
+.wa-texto { max-width: 22rem; font-size: var(--t-sm); }
+.wa-erro { display: block; font-size: var(--t-xs); color: var(--erro); }

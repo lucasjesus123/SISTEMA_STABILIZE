@@ -41,6 +41,7 @@ export type AuditAction =
   | 'workout.write'
   // integração
   | 'whatsapp.connect'
+  | 'report.generate'
   // agenda
   | 'appointment.create'
   | 'appointment.update'
