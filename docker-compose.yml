@@ -12,7 +12,14 @@
 # banco começa. Para administrar, use um túnel SSH.
 # =====================================================================
 
-name: stabilize
+# O NOME DA GAVETA.
+#
+# Não é rótulo: o Docker prefixa com ele TODO contêiner, volume e rede
+# deste sistema (stabilize_sistema-api-1, stabilize_sistema_dados-postgres,
+# stabilize_sistema_interna). Numa VPS com vários sistemas, é o que
+# permite olhar `docker ps` e saber de quem é cada coisa — e o que faz
+# `docker compose down` daqui não encostar em nada dos outros.
+name: stabilize_sistema
 
 services:
   postgres:
@@ -131,13 +138,33 @@ services:
       target: web
     restart: unless-stopped
     depends_on: [api]
+    # AS PORTAS SÃO VARIÁVEIS, e isto é o que torna a VPS compartilhável.
+    #
+    # Fixar '80:80' significa tomar a porta 80 da MÁQUINA INTEIRA. Numa
+    # VPS que já hospeda outros sistemas, ou este contêiner não sobe
+    # ("address already in use"), ou sobe primeiro e derruba o vizinho no
+    # próximo reboot. Nos dois casos o estrago é em sistema que não é
+    # este.
+    #
+    # Dois modos, escolhidos pelo .env (o gerar-segredos.sh pergunta):
+    #
+    #   BORDA    — nada mais usa 80/443. Nosso Caddy fica na borda e
+    #              emite o certificado. PORTA_HTTP=80, PORTA_HTTPS=443.
+    #
+    #   INTERNO  — já existe um proxy na frente (nginx, Traefik, outro
+    #              Caddy). Publicamos SÓ no loopback, em porta alta, e o
+    #              proxy de vocês encaminha para cá. Nada nosso aparece
+    #              na internet direto. Ex.: PORTA_HTTP=127.0.0.1:8080.
     ports:
-      - '80:80'
-      - '443:443'
-      - '443:443/udp'   # HTTP/3
+      - '${PORTA_HTTP:-80}:80'
+      - '${PORTA_HTTPS:-443}:443'
+      - '${PORTA_HTTPS:-443}:443/udp'   # HTTP/3, usado no modo borda
     environment:
-      DOMINIO: "${DOMINIO:?defina no .env, ex. sistema.stabilize.com.br}"
-      EMAIL_TLS: "${EMAIL_TLS:?defina no .env, o Let's Encrypt avisa de expiração nele}"
+      # No modo borda é o domínio (o Caddy emite TLS sozinho). No modo
+      # interno é ':80', que serve HTTP puro para o proxy da frente —
+      # tentar emitir certificado sem a porta 80 pública falharia em laço.
+      ENDERECO_CADDY: "${ENDERECO_CADDY:?defina no .env (domínio no modo borda, ':80' no modo interno)}"
+      EMAIL_TLS: "${EMAIL_TLS:-}"
     volumes:
       # O Caddyfile continua vindo do disco: é configuração que o
       # operador pode querer ajustar sem refazer a imagem. Os arquivos

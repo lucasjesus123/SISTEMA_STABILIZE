@@ -6,7 +6,15 @@
 # de sistema pequeno cair não é ataque — é certificado vencido.
 # =====================================================================
 {
-	email {$EMAIL_TLS}
+	# E-mail da conta do Let's Encrypt (avisos de expiração).
+	#
+	# O valor padrão existe só para o MODO INTERNO, onde não há emissão
+	# de certificado nenhuma — sem ele, uma variável vazia quebraria o
+	# parse do Caddyfile com um erro que não diz nada sobre o motivo.
+	# Ele não vira armadilha silenciosa no modo borda: o Let's Encrypt
+	# recusa contato em domínio .invalid, então a emissão falha alto e
+	# claro em vez de passar despercebida.
+	email {$EMAIL_TLS:sem-acme-no-modo-interno@exemplo.invalid}
 	# Servidor não anuncia o que é. Não impede ataque nenhum, mas tira
 	# o sistema das buscas por versão vulnerável.
 	servers {
@@ -14,7 +22,15 @@
 	}
 }
 
-{$DOMINIO} {
+# O endereço vem do ambiente porque decide o MODO de operação:
+#
+#   sistema.dominio.com.br  → Caddy na borda, emite TLS sozinho
+#   :80                     → atrás de outro proxy; HTTP puro, sem ACME
+#
+# Escrever o domínio fixo aqui obrigaria toda VPS que já tem proxy a
+# editar este arquivo — e um Caddy tentando emitir certificado sem a
+# porta 80 pública entra em laço de falha do ACME.
+{$ENDERECO_CADDY} {
 	encode zstd gzip
 
 	header {
