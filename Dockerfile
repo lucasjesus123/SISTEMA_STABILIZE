@@ -7,6 +7,8 @@
 # pode ser usado por quem consegue execução dentro do contêiner.
 #
 #   build     compila tudo (é jogado fora)
+#   seed      build + tsx             → popula dados de demonstração
+#   podado    build sem as ferramentas de desenvolvimento
 #   migrate   psql + os .sql          → roda uma vez e sai
 #   web       Caddy + o front pronto  → o proxy
 #   runtime   só a API                → o que fica no ar
@@ -55,6 +57,24 @@ RUN pnpm --filter @stabilize/shared build \
  && pnpm --filter @stabilize/api build \
  && pnpm --filter @stabilize/web build
 
+# --- estágio 2: dados de demonstração -------------------------------
+#
+# Branca do `build` ANTES da poda, porque o seed roda com tsx, que é
+# dependência de desenvolvimento. Depois da poda ela não existe mais.
+#
+# É uma imagem de FERRAMENTA: sobe, popula, sai. Nunca fica no ar, e o
+# serviço correspondente no compose tem `profiles` para não subir junto.
+FROM build AS seed
+WORKDIR /app
+ENTRYPOINT ["pnpm", "--filter", "@stabilize/db", "seed"]
+
+# --- estágio 3: a árvore podada, só com produção ---------------------
+#
+# Estágio separado, e não mais um `RUN` no `build`, justamente para o
+# `seed` acima poder ramificar de um ponto em que as ferramentas de
+# desenvolvimento ainda existem.
+FROM build AS podado
+
 # Reescreve node_modules só com produção. Precisa vir DEPOIS do build,
 # porque o build usa typescript e vite, que são de desenvolvimento.
 #
@@ -73,7 +93,7 @@ RUN pnpm install --frozen-lockfile --prod --config.confirmModulesPurge=false \
  && rm -rf apps/api/src apps/web/src apps/web/node_modules packages/shared/src \
  && rm -rf /root/.cache /pnpm/store
 
-# --- estágio 2: migrations ------------------------------------------
+# --- estágio 4: migrations ------------------------------------------
 #
 # Imagem separada, e não um comando dentro da imagem da API.
 #
@@ -98,7 +118,7 @@ COPY packages/db/sql ./sql
 COPY packages/db/scripts ./scripts
 ENTRYPOINT ["/db/scripts/migrate.sh"]
 
-# --- estágio 3: o front, dentro do proxy ----------------------------
+# --- estágio 5: o front, dentro do proxy ----------------------------
 #
 # O front é ESTÁTICO e vai junto com o Caddy, em vez de ser montado do
 # disco da VPS.
@@ -114,9 +134,9 @@ ENTRYPOINT ["/db/scripts/migrate.sh"]
 # Assado na imagem, o front que sobe é exatamente o que foi construído a
 # partir daquele commit. Não existe estado no host para divergir.
 FROM caddy:2-alpine AS web
-COPY --from=build /app/apps/web/dist /srv
+COPY --from=podado /app/apps/web/dist /srv
 
-# --- estágio 4: runtime da API --------------------------------------
+# --- estágio 6: runtime da API --------------------------------------
 FROM node:22-bookworm-slim AS runtime
 
 # tini como PID 1. Sem ele o Node vira PID 1 e não trata SIGTERM como
@@ -128,7 +148,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certifi
 ENV NODE_ENV=production
 WORKDIR /app
 
-COPY --from=build --chown=node:node /app /app
+COPY --from=podado --chown=node:node /app /app
 
 # Diretório de anexos. Criado aqui só para existir com o dono certo
 # antes de o volume ser montado por cima.

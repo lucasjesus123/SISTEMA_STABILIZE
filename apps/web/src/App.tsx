@@ -86,7 +86,28 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const { tema, definir } = useTema();
+
+  /* A TELA DE ENTRADA É SEMPRE ESCURA, independente da preferência.
+
+     É a única tela do sistema com identidade fixa: a marca do Stabilize
+     é um traço claro sobre fundo escuro, e é assim que ela foi
+     desenhada. No tema claro o símbolo perde contraste e a tela deixa
+     de parecer a porta de entrada da Stabilize para parecer um
+     formulário genérico.
+
+     A preferência do usuário não é ignorada — é adiada. Ao sair desta
+     tela o atributo volta ao que estava, e o `useTema` do sistema
+     aplica a escolha de quem entrou. Quem trabalha no claro encontra o
+     claro do outro lado do login. */
+  useEffect(() => {
+    const raiz = document.documentElement;
+    const anterior = raiz.getAttribute('data-tema');
+    raiz.setAttribute('data-tema', 'escuro');
+    return () => {
+      if (anterior === null) raiz.removeAttribute('data-tema');
+      else raiz.setAttribute('data-tema', anterior);
+    };
+  }, []);
 
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -122,12 +143,10 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
       </div>
 
       <div className="entrada-cartao">
-        {/* O tema é escolhível ANTES de entrar: quem trabalha no escuro
-            não deveria ter que atravessar uma tela clara para chegar lá. */}
-        <div className="entrada-tema">
-          <SeletorTema tema={tema} definir={definir} />
-        </div>
-
+        {/* Aqui havia o seletor de tema. Saiu junto com a decisão de
+            fixar esta tela no escuro: um controle que não muda nada do
+            que está à vista é pior do que controle nenhum. A escolha de
+            aparência vive no cabeçalho do sistema, depois de entrar. */}
         <Marca altura={104} />
 
         <h1 className="entrada-titulo">Acesso ao sistema</h1>

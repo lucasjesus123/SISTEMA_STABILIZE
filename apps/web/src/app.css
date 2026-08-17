@@ -155,12 +155,6 @@
   color: var(--texto);
 }
 
-.entrada-tema {
-  display: flex;
-  justify-content: center;
-  margin-bottom: var(--e-6);
-}
-
 /* ---------------------------------------------------------------------
    Campo em pílula
    ------------------------------------------------------------------- */
@@ -910,12 +904,6 @@
   background: var(--superficie-alta);
   color: var(--teal);
   box-shadow: var(--sombra-1);
-}
-
-.entrada-tema {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--e-6);
 }
 
 /* No tema escuro o topo ganha um fio aceso na base, como a linha de luz

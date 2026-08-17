@@ -153,6 +153,33 @@ services:
       POSTGRES_SUPERUSER_PASSWORD: "${POSTGRES_SUPERUSER_PASSWORD:?defina no .env}"
     networks: [interna]
 
+  # Popula uma academia de DEMONSTRAÇÃO, separada da real: 30 alunos com
+  # contratos, agenda de verdade, presenças, mensalidades pagas e em
+  # atraso, treinos e prontuário. Serve para navegar o sistema com
+  # informação em todas as telas — e para ver o isolamento funcionando,
+  # já que as duas academias convivem no mesmo banco sem se enxergar.
+  #
+  #   docker compose run --rm -e SEED_FORCE=sim seed
+  #
+  # `SEED_FORCE` é exigido porque o script se recusa a rodar num banco
+  # que já tem empresa de verdade — e aqui tem a sua. Ele apaga e recria
+  # SÓ a academia de demonstração, que tem id fixo; a real não é tocada.
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: seed
+    profiles: [ferramentas]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # A credencial de MIGRAÇÃO: o seed escreve em todas as tabelas e
+      # precisa definir o contexto de empresa a cada transação. A da API
+      # serviria, mas esta é a que já tem o schema como dona.
+      DATABASE_URL: "${DATABASE_MIGRATION_URL:?defina no .env}"
+    networks: [interna]
+
   proxy:
     # O front vai DENTRO desta imagem (estágio `web` do Dockerfile), e
     # não montado do disco: `apps/web/dist` não existe num clone novo,
