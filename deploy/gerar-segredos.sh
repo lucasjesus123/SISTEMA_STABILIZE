@@ -130,7 +130,10 @@ case "$MODO" in
         esac
       done
     fi
-    EMAIL_TLS=""
+    # NÃO pode ficar vazio: o Caddy recebe `email` sem argumento e falha
+    # no parse. Aqui não há emissão de certificado (quem faz é o proxy da
+    # frente), então o valor é um marcador explícito em domínio .invalid.
+    EMAIL_TLS="tls-nao-usado-no-modo-interno@exemplo.invalid"
     # ':80' faz o Caddy servir HTTP puro. Pedir certificado sem a porta
     # 80 pública põe o ACME em laço de falha.
     ENDERECO_CADDY=":80"

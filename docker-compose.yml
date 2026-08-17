@@ -191,7 +191,16 @@ services:
       # interno é ':80', que serve HTTP puro para o proxy da frente —
       # tentar emitir certificado sem a porta 80 pública falharia em laço.
       ENDERECO_CADDY: "${ENDERECO_CADDY:?defina no .env (domínio no modo borda, ':80' no modo interno)}"
-      EMAIL_TLS: "${EMAIL_TLS:-}"
+      # `:-` (com dois-pontos) usa o padrão quando a variável está VAZIA,
+      # e não só quando ela não existe. A diferença derrubou o proxy na
+      # primeira instalação: no modo interno o .env traz `EMAIL_TLS=`
+      # (vazio, porque não há certificado a emitir), o Caddyfile recebia
+      # `email` sem argumento nenhum e falhava no parse — em laço.
+      #
+      # O `{$VAR:padrão}` do próprio Caddy NÃO resolve isto: lá o padrão
+      # só vale para variável inexistente. Foi exatamente o que passou
+      # pelo meu teste, que usava `env -u`.
+      EMAIL_TLS: "${EMAIL_TLS:-tls-nao-usado-no-modo-interno@exemplo.invalid}"
     volumes:
       # O Caddyfile continua vindo do disco: é configuração que o
       # operador pode querer ajustar sem refazer a imagem. Os arquivos
