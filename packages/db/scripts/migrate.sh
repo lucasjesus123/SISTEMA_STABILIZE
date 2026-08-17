@@ -4,8 +4,10 @@
 #
 # A regra é o prefixo do arquivo:
 #
-#   000_*   credencial de SUPERUSUÁRIO — cria os papéis do banco
-#   demais  credencial de MIGRAÇÃO (stabilize_migrator) — cria o schema
+#   000_*        credencial de SUPERUSUÁRIO — cria os papéis do banco
+#   *_super.sql  credencial de SUPERUSUÁRIO — o que exige poder que o
+#                migrator não tem, DEPOIS do schema existir
+#   demais       credencial de MIGRAÇÃO (stabilize_migrator)
 #
 # POR QUE DUAS, e não a de migração para tudo:
 #
@@ -123,6 +125,13 @@ for file in "${SQL_DIR}"/[0-8]*.sql; do
   case "${nome}" in
     000_*)
       continue  # já aplicado logo acima, antes da tabela de registro
+      ;;
+    *_super.sql)
+      # Superusuário e sempre. Ajusta dono de função e privilégio de
+      # papel — idempotente, e reexecutar conserta um banco que ficou
+      # para trás.
+      echo "--> ${nome}  (superusuário, sempre)"
+      aplicar "${DATABASE_SUPERUSER_URL}" "${file}"
       ;;
     *_roles.sql)
       echo "--> ${nome}  (sempre)"
