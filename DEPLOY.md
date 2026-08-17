@@ -214,7 +214,18 @@ docker compose up -d
 ```
 
 Faça backup **antes** de migration que mexa em estrutura. As migrations
-são idempotentes (`IF NOT EXISTS`), então reexecutar é seguro.
+registram o que já rodou numa tabela `schema_migrations`, então
+reexecutar é seguro: cada arquivo é aplicado uma vez só. Os arquivos de
+papéis (`*_roles.sql`) são a exceção e rodam sempre — é reexecutá-los
+que rotaciona as senhas do banco.
+
+> A versão anterior deste texto dizia que as migrations eram idempotentes
+> por usarem `IF NOT EXISTS`. **Não era verdade**: o `001_schema.sql` tem
+> 22 `CREATE TABLE`, 40 `CREATE INDEX`, 23 `CREATE POLICY` e 15
+> `CREATE TRIGGER`, nenhum com guarda — a segunda execução morria em
+> `relation "tenants" already exists`. Descoberto na primeira instalação
+> real e corrigido com o registro em tabela, que vale também para as
+> migrations futuras sem depender de disciplina de quem as escrever.
 
 O `docker compose up -d` recria o proxy junto, e é o que publica o front
 novo — ele mora dentro daquela imagem.

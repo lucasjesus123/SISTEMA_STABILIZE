@@ -28,13 +28,43 @@ CREATE EXTENSION IF NOT EXISTS "citext";     -- e-mail case-insensitive
 -- ---------------------------------------------------------------------
 -- Tipos
 -- ---------------------------------------------------------------------
-CREATE TYPE user_role AS ENUM ('OWNER', 'ADMIN', 'PROFESSIONAL', 'RECEPTION', 'STUDENT');
-CREATE TYPE student_status AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'LEAD');
-CREATE TYPE appointment_status AS ENUM ('SCHEDULED', 'CONFIRMED', 'ATTENDED', 'NO_SHOW', 'CANCELLED');
-CREATE TYPE billing_cycle AS ENUM ('SESSION', 'WEEKLY', 'BIWEEKLY', 'MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL');
-CREATE TYPE entry_status AS ENUM ('OPEN', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED');
-CREATE TYPE payment_method AS ENUM ('PIX', 'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'BANK_TRANSFER', 'BOLETO', 'OTHER');
-CREATE TYPE commission_status AS ENUM ('PENDING', 'APPROVED', 'SETTLED', 'CANCELLED');
+-- CREATE TYPE NÃO ACEITA `IF NOT EXISTS` — é uma lacuna do PostgreSQL,
+-- não um esquecimento aqui. Sem o bloco abaixo, reexecutar a migration
+-- morre em `ERROR: type "user_role" already exists`, e reexecutar é
+-- exatamente o que toda ATUALIZAÇÃO faz. O DEPLOY.md chegou a afirmar
+-- que as migrations eram idempotentes; para as tabelas era verdade
+-- (todas usam IF NOT EXISTS), para os tipos não era.
+DO $tipos$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+    CREATE TYPE user_role AS ENUM ('OWNER', 'ADMIN', 'PROFESSIONAL', 'RECEPTION', 'STUDENT');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'student_status') THEN
+    CREATE TYPE student_status AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'LEAD');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'appointment_status') THEN
+    CREATE TYPE appointment_status AS ENUM ('SCHEDULED', 'CONFIRMED', 'ATTENDED', 'NO_SHOW', 'CANCELLED');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'billing_cycle') THEN
+    CREATE TYPE billing_cycle AS ENUM ('SESSION', 'WEEKLY', 'BIWEEKLY', 'MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'entry_status') THEN
+    CREATE TYPE entry_status AS ENUM ('OPEN', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_method') THEN
+    CREATE TYPE payment_method AS ENUM ('PIX', 'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'BANK_TRANSFER', 'BOLETO', 'OTHER');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'commission_status') THEN
+    CREATE TYPE commission_status AS ENUM ('PENDING', 'APPROVED', 'SETTLED', 'CANCELLED');
+  END IF;
+END
+$tipos$;
 
 -- ---------------------------------------------------------------------
 -- Contexto de tenant
@@ -603,7 +633,15 @@ CREATE POLICY contracts_tenant ON student_contracts
 -- vencimento operam sobre os dois lados; duas tabelas simétricas
 -- dobrariam a lógica e as chances de divergirem.
 -- ---------------------------------------------------------------------
-CREATE TYPE entry_direction AS ENUM ('RECEIVABLE', 'PAYABLE');
+-- Mesmo motivo do bloco de tipos lá em cima: CREATE TYPE não tem
+-- `IF NOT EXISTS`, e sem isto a reexecução falha.
+DO $direcao$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'entry_direction') THEN
+    CREATE TYPE entry_direction AS ENUM ('RECEIVABLE', 'PAYABLE');
+  END IF;
+END
+$direcao$;
 
 CREATE TABLE finance_entries (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),

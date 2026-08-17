@@ -145,6 +145,12 @@ services:
       DATABASE_MIGRATION_URL: "${DATABASE_MIGRATION_URL:?defina no .env}"
       STABILIZE_APP_PASSWORD: "${STABILIZE_APP_PASSWORD:?defina no .env}"
       STABILIZE_MIGRATOR_PASSWORD: "${STABILIZE_MIGRATOR_PASSWORD:?defina no .env}"
+      # A de superusuário é usada por UM arquivo só, o 000_roles.sql, que
+      # cria os papéis — `CREATE ROLE` exige superusuário, e é ele que
+      # cria justamente o `stabilize_migrator`. O migrate.sh monta a URL
+      # a partir destas duas e da de migração; ver o cabeçalho dele.
+      POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_SUPERUSER_PASSWORD: "${POSTGRES_SUPERUSER_PASSWORD:?defina no .env}"
     networks: [interna]
 
   proxy:
