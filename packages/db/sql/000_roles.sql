@@ -69,8 +69,16 @@
   \quit
 \endif
 
+-- `\o /dev/null` NÃO É ENFEITE: `SELECT set_config(...)` DEVOLVE o valor
+-- que acabou de definir, e o psql imprime o resultado. Sem isto, as duas
+-- senhas do banco saíam em texto claro na tela a cada migration — e iam
+-- parar no log de quem redireciona a saída para arquivo. Observado na
+-- primeira instalação real. O `-q` do psql silencia mensagens, não
+-- resultado de consulta.
+\o /dev/null
 SELECT set_config('stabilize.app_password', :'app_password', false);
 SELECT set_config('stabilize.migrator_password', :'migrator_password', false);
+\o
 
 DO $$
 DECLARE
@@ -102,8 +110,10 @@ END
 $$;
 
 -- Tira as senhas da sessão assim que os papéis existem.
+\o /dev/null
 SELECT set_config('stabilize.app_password', '', false);
 SELECT set_config('stabilize.migrator_password', '', false);
+\o
 
 -- Nenhum dos dois pode ignorar RLS nem criar bancos/papéis.
 ALTER ROLE stabilize_app        NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;

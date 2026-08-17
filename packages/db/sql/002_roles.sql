@@ -24,7 +24,21 @@
 -- As tabelas que já existem neste ponto (as do 001).
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO stabilize_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO stabilize_app;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO stabilize_app;
+
+-- NÃO existe aqui um `GRANT EXECUTE ON ALL FUNCTIONS`, e a ausência é
+-- deliberada — ele era redundante e barulhento:
+--
+-- · redundante porque o PostgreSQL já concede EXECUTE a PUBLIC em toda
+--   função nova. As únicas que fogem disso são as seis de 003_auth.sql e
+--   006_jobs.sql, que revogam de PUBLIC de propósito — e cada uma traz o
+--   seu próprio GRANT para stabilize_app, na linha seguinte. Além disso
+--   este arquivo roda ANTES do 003, então nem alcançaria aquelas.
+--
+-- · barulhento porque "ALL FUNCTIONS" inclui as centenas de funções das
+--   extensões (pgcrypto, btree_gist, citext), que o migrator não possui.
+--   Cada uma virava um `WARNING: no privileges were granted for ...`:
+--   250 linhas de aviso inofensivo a cada migration, exatamente o tipo
+--   de ruído em que uma mensagem importante se perde.
 
 -- ---------------------------------------------------------------------
 -- O log de auditoria é append-only também no nível de privilégio.
