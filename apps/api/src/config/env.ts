@@ -19,6 +19,34 @@ const secret = (min: number, label: string) =>
       message: `${label} parece ser um valor de exemplo — gere um segredo real`,
     });
 
+/**
+ * Campo opcional que aceita VAZIO como "não configurado".
+ *
+ * `.optional()` sozinho não basta, e a diferença derrubou a API na
+ * primeira instalação real. Para o Zod, `.optional()` quer dizer "pode
+ * ser undefined" — e uma variável de ambiente vazia NÃO é undefined, é
+ * uma string de zero caractere. O `.env` traz
+ *
+ *   UAZAPI_BASE_URL=
+ *   UAZAPI_ADMIN_TOKEN=
+ *
+ * porque a integração de WhatsApp é opcional; o compose repassa isso
+ * como string vazia, e a validação reprovava com "Invalid url" e
+ * "String must contain at least 8 character(s)". A API se recusava a
+ * subir por causa de uma funcionalidade que a instalação nem usa.
+ *
+ * Este `preprocess` normaliza vazio para ausente ANTES de validar, que é
+ * o que "opcional" significa para quem escreve um arquivo de
+ * configuração. Note que ele NÃO afronxa nada: se a variável vier
+ * preenchida, as regras valem inteiras.
+ *
+ * Foi a terceira vez nesta instalação que "vazio" e "ausente" foram
+ * confundidos — antes disso derrubaram o proxy (`email` do Caddy) e
+ * passaram batido no meu próprio teste, que usava a variável ausente.
+ */
+const opcional = <T extends z.ZodTypeAny>(esquema: T) =>
+  z.preprocess((valor) => (valor === '' ? undefined : valor), esquema.optional());
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -67,8 +95,8 @@ const envSchema = z
     LOGIN_LOCKOUT_MINUTES: z.coerce.number().int().min(1).default(15),
 
     /* Integração WhatsApp (uazapi). Opcional: o sistema opera sem ela. */
-    UAZAPI_BASE_URL: z.string().url().optional(),
-    UAZAPI_ADMIN_TOKEN: z.string().min(8).optional(),
+    UAZAPI_BASE_URL: opcional(z.string().url()),
+    UAZAPI_ADMIN_TOKEN: opcional(z.string().min(8)),
 
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
