@@ -91,11 +91,33 @@ case "$MODO" in
       echo "   Portas já escutando nesta VPS: $em_uso"
     fi
 
+    echo
+    echo "   >>> APERTE ENTER para usar a 8090. Esta pergunta é a PORTA,"
+    echo "       não o modo — não repita o número que você respondeu antes."
     read -rp "Porta local para o proxy encaminhar (enter = 8090): " PORTA_LOCAL
     PORTA_LOCAL="${PORTA_LOCAL:-8090}"
     case "$PORTA_LOCAL" in
-      ''|*[!0-9]*) echo "ERRO: porta inválida."; exit 1 ;;
+      ''|*[!0-9]*) echo "ERRO: '$PORTA_LOCAL' não é um número de porta."; exit 1 ;;
     esac
+
+    # FAIXA, e não só "é número".
+    #
+    # Faltava esta checagem e o resultado apareceu no primeiro uso real:
+    # a resposta anterior era "2" (o modo), a pessoa repetiu "2" aqui, e
+    # o script aceitou — o sistema foi configurado na porta 2. Ela é
+    # reservada a serviço de sistema; o Docker rodando como root até
+    # conseguiria ocupá-la, e o erro só apareceria muito depois.
+    # Validar "é dígito" nunca foi o mesmo que validar "é uma porta".
+    if [ "$PORTA_LOCAL" -lt 1024 ] || [ "$PORTA_LOCAL" -gt 65534 ]; then
+      echo "ERRO: porta $PORTA_LOCAL fora da faixa permitida (1024–65534)."
+      if [ "$PORTA_LOCAL" -lt 1024 ]; then
+        echo "       Abaixo de 1024 é território de serviço de sistema"
+        echo "       (22 = SSH, 80 = HTTP, 443 = HTTPS...)."
+      fi
+      echo "       O limite é 65534 porque a porta seguinte também é usada."
+      echo "       Sugestão: 8090."
+      exit 1
+    fi
     if [ -n "$em_uso" ]; then
       for p in $PORTA_LOCAL $((PORTA_LOCAL + 1)); do
         case " $em_uso " in
