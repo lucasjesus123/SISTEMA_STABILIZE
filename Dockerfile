@@ -57,7 +57,19 @@ RUN pnpm --filter @stabilize/shared build \
 
 # Reescreve node_modules só com produção. Precisa vir DEPOIS do build,
 # porque o build usa typescript e vite, que são de desenvolvimento.
-RUN pnpm install --frozen-lockfile --prod \
+#
+# `--config.confirmModulesPurge=false` NÃO é preciosismo. Trocar a
+# instalação de "dev + prod" para "só prod" faz o pnpm querer apagar e
+# refazer o node_modules do workspace inteiro, e antes disso ele PERGUNTA
+# se pode. Dentro do `docker build` não há terminal para responder, e a
+# resposta dele a isso é desistir:
+#
+#   ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
+#
+# O build morria neste ponto — depois de compilar tudo, que é o pior
+# lugar possível para falhar. Só aparece em workspace com mais de um
+# pacote, que é justamente o nosso caso e não o de um projeto simples.
+RUN pnpm install --frozen-lockfile --prod --config.confirmModulesPurge=false \
  && rm -rf apps/api/src apps/web/src apps/web/node_modules packages/shared/src \
  && rm -rf /root/.cache /pnpm/store
 
