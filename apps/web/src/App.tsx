@@ -216,11 +216,16 @@ function Sistema({
      quem chamar a rota direto recebe 403 de qualquer forma. */
   const pode = (p: string): boolean => principal.permissions.includes(p);
 
-  const abas: { id: Aba; nome: string; visivel: boolean }[] = [
-    { id: 'painel', nome: 'Painel', visivel: pode('finance:report:read') || pode('commission:read') },
-    { id: 'alunos', nome: 'Alunos', visivel: pode('student:read') },
-    { id: 'agenda', nome: 'Agenda', visivel: pode('schedule:read') },
-    { id: 'whatsapp', nome: 'WhatsApp', visivel: pode('user:write') },
+  const abas: { id: Aba; nome: string; icone: ReactNode; visivel: boolean }[] = [
+    {
+      id: 'painel',
+      nome: 'Painel',
+      icone: <IconePainel />,
+      visivel: pode('finance:report:read') || pode('commission:read'),
+    },
+    { id: 'alunos', nome: 'Alunos', icone: <IconeAlunos />, visivel: pode('student:read') },
+    { id: 'agenda', nome: 'Agenda', icone: <IconeAgenda />, visivel: pode('schedule:read') },
+    { id: 'whatsapp', nome: 'WhatsApp', icone: <IconeWhatsapp />, visivel: pode('user:write') },
   ];
   const visiveis = abas.filter((a) => a.visivel);
 
@@ -230,35 +235,46 @@ function Sistema({
         Pular para o conteúdo
       </a>
 
-      <header className="topo">
-        <Marca variante="horizontal" altura={42} />
+      {/* MENU À ESQUERDA, e não em abas no topo.
+          A diferença não é estética: abas no topo competem com o título
+          da tela pelo mesmo eixo, e cada seção nova as espreme mais. Na
+          coluna, o menu cresce para baixo — que é o lado onde sobra
+          espaço — e o olho encontra sempre no mesmo lugar. */}
+      <aside className="lateral">
+        <div className="lateral-marca">
+          <Marca variante="horizontal" altura={36} />
+        </div>
 
-        <nav className="navegacao" aria-label="Seções do sistema">
+        <nav className="lateral-nav" aria-label="Seções do sistema">
           {visiveis.map((a) => (
             <button
               key={a.id}
               type="button"
-              className={`aba ${aba === a.id ? 'ativa' : ''}`}
+              className={`lateral-item ${aba === a.id ? 'ativa' : ''}`}
               aria-current={aba === a.id ? 'page' : undefined}
               onClick={() => setAba(a.id)}
             >
-              {a.nome}
+              <span className="lateral-icone" aria-hidden="true">
+                {a.icone}
+              </span>
+              <span className="lateral-nome">{a.nome}</span>
             </button>
           ))}
         </nav>
 
-        <div className="topo-conta">
+        <div className="lateral-rodape">
           <SeletorTema tema={tema} definir={definir} />
-          <span className="conta-papel">{principal.roleLabel}</span>
-          <button
-            type="button"
-            className="botao-texto"
-            onClick={() => void sair().then(aoSair)}
-          >
+          <div className="lateral-conta">
+            <span className="conta-papel">{principal.roleLabel}</span>
+            <span className="conta-nome" title={principal.name}>
+              {principal.name}
+            </span>
+          </div>
+          <button type="button" className="lateral-sair" onClick={() => void sair().then(aoSair)}>
             Sair
           </button>
         </div>
-      </header>
+      </aside>
 
       <main id="conteudo" className="conteudo">
         {aba === 'painel' && <Painel principal={principal} />}
@@ -267,6 +283,54 @@ function Sistema({
         {aba === 'whatsapp' && <Whatsapp />}
       </main>
     </div>
+  );
+}
+
+/* Ícones do menu. SVG inline, traço de 1,6 e `currentColor`: seguem a
+   cor do item (apagada, acesa quando ativo) sem precisar de uma segunda
+   versão do arquivo, e não custam uma requisição a mais. */
+const svg = {
+  width: 20,
+  height: 20,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+
+function IconePainel(): ReactNode {
+  return (
+    <svg {...svg}>
+      <path d="M3 13h4v8H3zM10 3h4v18h-4zM17 9h4v12h-4z" />
+    </svg>
+  );
+}
+
+function IconeAlunos(): ReactNode {
+  return (
+    <svg {...svg}>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 6.2a3 3 0 0 1 0 5.6M17.5 20a5 5 0 0 0-2.2-4" />
+    </svg>
+  );
+}
+
+function IconeAgenda(): ReactNode {
+  return (
+    <svg {...svg}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+function IconeWhatsapp(): ReactNode {
+  return (
+    <svg {...svg}>
+      <path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.7-5.2A8.5 8.5 0 1 1 21 11.5z" />
+    </svg>
   );
 }
 

@@ -359,62 +359,145 @@
 
 .sistema {
   min-height: 100dvh;
+  /* Duas colunas: menu fixo e conteúdo. A largura do menu é a mesma em
+     qualquer tela larga — menu que muda de largura obriga o olho a
+     reencontrar os itens a cada página. */
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+}
+
+/* ---------------------------------------------------------------------
+   Menu lateral
+   ------------------------------------------------------------------- */
+
+.lateral {
+  /* ESCURO NOS DOIS TEMAS, como a tela de entrada. A marca do Stabilize
+     é traço claro sobre fundo escuro; sobre fundo claro o símbolo perde
+     contraste. E a coluna escura separa navegação de conteúdo sem
+     precisar de borda grossa nem sombra. */
+  background: #0b1618;
+  color: #cfe3e4;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+
+  /* Gruda na tela: rolar uma lista de 300 alunos não pode levar o menu
+     embora junto. */
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+
   display: flex;
   flex-direction: column;
 }
 
-.topo {
+.lateral-marca {
+  padding: var(--e-5) var(--e-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* A PALAVRA "stabilize" É currentColor, e `.marca` a amarra ao tema pelo
+   `--marca-tinta`. Numa coluna que é escura NOS DOIS TEMAS, o tema claro
+   pintava a palavra de cinza-escuro sobre fundo quase preto: a marca
+   sumia e sobrava só o boneco. Herdar de `.lateral-marca` não bastava —
+   `.marca` é mais específico e vencia. Daí a regra apontar para o SVG. */
+.lateral .marca {
+  color: #eaf7f8;
+}
+
+.lateral-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e-3) var(--e-2);
+  /* Com muitas seções a lista rola sozinha, sem empurrar o rodapé para
+     fora da tela. */
+  flex: 1;
+  overflow-y: auto;
+}
+
+.lateral-item {
   display: flex;
   align-items: center;
-  gap: var(--e-7);
-  padding: var(--e-4) clamp(var(--e-4), 4vw, var(--e-7));
-  border-bottom: 1px solid var(--fio);
-  background: var(--superficie-alta);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.navegacao {
-  display: flex;
-  gap: var(--e-1);
-  margin-right: auto;
-}
-
-.aba {
-  padding: var(--e-2) var(--e-3);
+  gap: var(--e-3);
+  width: 100%;
+  padding: 10px var(--e-3);
+  border-radius: var(--raio);
   font-size: var(--t-sm);
   font-weight: 500;
-  color: var(--texto-apoio);
-  border-radius: var(--raio);
-  position: relative;
-  transition: color var(--rapido) var(--saida);
+  color: #93a9ab;
+  text-align: left;
+  transition:
+    color var(--rapido) var(--saida),
+    background var(--rapido) var(--saida);
 }
-.aba:hover {
-  color: var(--texto);
-}
-.aba.ativa {
-  color: var(--texto);
-}
-/* O indicador da aba ativa é um fio, coerente com o resto da
-   interface — não uma pílula preenchida. */
-.aba.ativa::after {
-  content: '';
-  position: absolute;
-  left: var(--e-3);
-  right: var(--e-3);
-  bottom: -13px;
-  height: 2px;
-  background: var(--teal-vivo);
-  /* O fio da aba ativa ACENDE no tema escuro. No claro, --brilho-1 é
-     `none` e sobra o fio sólido — mesma regra, resultado certo nos dois. */
-  box-shadow: var(--brilho-1);
+.lateral-item:hover {
+  color: #eaf7f8;
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.topo-conta {
-  display: flex;
-  align-items: center;
-  gap: var(--e-4);
+.lateral-item.ativa {
+  color: #08171a;
+  background: var(--teal-vivo);
+  font-weight: 600;
+}
+/* O ícone do item ativo não recebe brilho: o fundo aceso já é o
+   destaque, e dois realces no mesmo elemento viram ruído. */
+.lateral-icone {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.lateral-nome {
+  /* Nome de seção não quebra linha: "WhatsApp" partido ao meio numa
+     janela estreita fica ilegível antes de ficar feio. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lateral-rodape {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.lateral-conta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.conta-nome {
+  font-size: var(--t-sm);
+  color: #eaf7f8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lateral-sair {
+  justify-self: start;
+  font-size: var(--t-sm);
+  color: #93a9ab;
+  padding: 6px 0;
+}
+.lateral-sair:hover {
+  color: #eaf7f8;
+  text-decoration: underline;
+}
+
+/* O seletor de tema mora numa coluna escura, então precisa das cores
+   dela — as do tema claro sumiriam no fundo. */
+.lateral .seletor-tema {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.lateral .seletor-opcao {
+  color: #93a9ab;
+}
+.lateral .seletor-opcao.ativa {
+  background: rgba(255, 255, 255, 0.1);
+  color: #eaf7f8;
 }
 
 .conta-papel {
@@ -422,7 +505,65 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--texto-apoio);
+  color: #7d9497;
+}
+
+/* ---------------------------------------------------------------------
+   Tela estreita: a coluna vira uma faixa no topo.
+   
+   Sem gaveta deslizante de propósito. Um menu de quatro itens não
+   justifica o botão a mais, o estado a mais e a armadilha de acessibilidade
+   que um off-canvas traz — e a faixa mostra tudo de uma vez.
+   ------------------------------------------------------------------- */
+
+@media (max-width: 60rem) {
+  .sistema {
+    grid-template-columns: 1fr;
+  }
+
+  .lateral {
+    position: sticky;
+    top: 0;
+    height: auto;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'marca rodape'
+      'nav   nav';
+    align-items: center;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .lateral-marca {
+    grid-area: marca;
+    border-bottom: 0;
+  }
+
+  .lateral-rodape {
+    grid-area: rodape;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--e-4);
+    border-top: 0;
+    padding: var(--e-3) var(--e-4);
+  }
+  /* O nome completo sai; o papel basta para saber com quem se está. */
+  .lateral-rodape .conta-nome {
+    display: none;
+  }
+
+  .lateral-nav {
+    grid-area: nav;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0 var(--e-3) var(--e-3);
+  }
+  .lateral-item {
+    width: auto;
+  }
 }
 
 .conteudo {
@@ -523,29 +664,14 @@
 .tom-atencao  { color: var(--atencao); }
 .tom-negativo { color: var(--erro); }
 
-/* O topo em telas estreitas: a marca encolhe, a navegação rola na
-   horizontal em vez de estourar a borda, e o bloco da conta desce.
-   Sem isto, "Agenda" e o botão Sair ficavam fora da tela — inacessíveis,
-   não apenas feios. */
-@media (max-width: 780px) {
-  .topo {
-    flex-wrap: wrap;
-    gap: var(--e-3);
-    padding-inline: var(--e-4);
-  }
-
-  .navegacao {
-    order: 3;
-    width: 100%;
-    margin-right: 0;
-    overflow-x: auto;
+/* A faixa de menu em tela estreita rola na horizontal em vez de
+   estourar a borda — com seis seções, "WhatsApp" ficaria fora da tela,
+   inacessível e não apenas feio. */
+@media (max-width: 60rem) {
+  .lateral-nav {
     scrollbar-width: none;
-    padding-bottom: 2px;
   }
-  .navegacao::-webkit-scrollbar { display: none; }
-  .aba { white-space: nowrap; }
-  .aba.ativa::after { bottom: -2px; }
-  .topo-conta { margin-left: auto; }
+  .lateral-nav::-webkit-scrollbar { display: none; }
 }
 
 @media (max-width: 640px) {
@@ -904,17 +1030,6 @@
   background: var(--superficie-alta);
   color: var(--teal);
   box-shadow: var(--sombra-1);
-}
-
-/* No tema escuro o topo ganha um fio aceso na base, como a linha de luz
-   de um painel de instrumentos. É a única cor decorativa do sistema, e
-   está num lugar onde não compete com dado nenhum. */
-.topo {
-  border-bottom-color: var(--fio);
-}
-:root[data-tema='escuro'] .topo,
-:root:not([data-tema='claro']) .topo {
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--teal-vivo) 14%, transparent);
 }
 
 /* ---------------------------------------------------------------------
