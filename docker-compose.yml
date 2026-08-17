@@ -29,8 +29,29 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-stabilize}
       POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
       POSTGRES_PASSWORD: "${POSTGRES_SUPERUSER_PASSWORD:?defina no .env}"
-      # Locale pt_BR para ordenação de nomes com acento sair certa.
-      LANG: pt_BR.UTF-8
+      # AQUI NÃO VAI `LANG: pt_BR.UTF-8`, e a ausência é deliberada.
+      #
+      # A imagem oficial do PostgreSQL traz quatro locales e só: C,
+      # C.utf8, en_US.utf8 e POSIX. Apontar o LANG para um que não existe
+      # faz o initdb recusar ANTES de criar o cluster:
+      #
+      #   initdb: error: invalid locale settings; check LANG and LC_*
+      #
+      # O contêiner morre, o Docker reinicia, morre de novo. O sintoma é
+      # "restarting/unhealthy" para sempre, sem o banco jamais ter
+      # subido — e a mensagem fica enterrada num log que se repete.
+      # Aconteceu na primeira instalação real.
+      #
+      # A intenção daquela linha era ordenar nome acentuado direito
+      # ("Álvaro" perto de "Alvaro", e não depois de "Zeca"). O padrão da
+      # imagem, en_US.utf8, já faz isso: é collation UTF-8 sensível a
+      # acento. Quem estraga a ordenação é a collation C, que não é a
+      # nossa. Ou seja: o objetivo estava certo e o meio, errado.
+      #
+      # Para ordenação estritamente brasileira o caminho é ICU, que vem
+      # compilado no PostgreSQL 16 e não depende de locale do sistema
+      # operacional — `ORDER BY nome COLLATE "pt-BR-x-icu"` funciona sem
+      # mudar nada aqui. Fica como refinamento, não como pré-requisito.
     command:
       - postgres
       # Nunca 'all': o 002_roles.sql executa CREATE ROLE ... PASSWORD, e
