@@ -43,6 +43,13 @@ DECLARE
     '#C4566B', '#3F7FBF', '#6FA83C', '#B5567F'
   ];
 BEGIN
+  /* Aqui o `NO FORCE` NÃO precisa de BEGIN explícito, ao contrário do
+     que acontece em 009 e 011: ele está dentro de um bloco `DO`, que é
+     UMA instrução só e portanto atômica. Qualquer erro no meio desfaz o
+     bloco inteiro, incluindo o desligamento do FORCE. Nos outros dois
+     arquivos os ALTER estão no nível de cima, onde o psql confirma
+     comando a comando — e ali um erro entre o `NO FORCE` e o `FORCE`
+     deixaria a barreira entre empresas desligada em silêncio. */
   ALTER TABLE users NO FORCE ROW LEVEL SECURITY;
 
   /* Distribuídas por ORDEM dentro da empresa, e não por hash do id. O

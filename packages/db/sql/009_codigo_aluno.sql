@@ -102,6 +102,14 @@ CREATE TRIGGER trg_students_codigo
 -- que é o DONO da tabela e ainda assim está sob FORCE. Por isso a
 -- desativação temporária logo abaixo, restrita a este bloco.
 -- ---------------------------------------------------------------------
+-- ATENÇÃO AO `BEGIN` ABAIXO. Sem transação explícita, o psql confirma
+-- cada comando isoladamente — e se algo falhasse entre o `NO FORCE` e o
+-- `FORCE`, a tabela ficaria com o FORCE DESLIGADO. O sintoma seria o
+-- pior possível: o sistema continua funcionando, os testes continuam
+-- passando, e a barreira que impede uma empresa de ler a outra some sem
+-- ninguém notar. Dentro da transação, qualquer erro devolve tudo ao
+-- estado anterior.
+BEGIN;  -- protege o NO FORCE
 ALTER TABLE students NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE tenants  NO FORCE ROW LEVEL SECURITY;
 
@@ -128,6 +136,7 @@ UPDATE tenants t
 
 ALTER TABLE students FORCE ROW LEVEL SECURITY;
 ALTER TABLE tenants  FORCE ROW LEVEL SECURITY;
+COMMIT;
 
 COMMENT ON COLUMN students.codigo IS
   'Código interno do aluno, sequencial por empresa. Atribuído por trigger; exibido com quatro dígitos (0042).';

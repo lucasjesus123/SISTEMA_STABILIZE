@@ -129,6 +129,14 @@ ON CONFLICT (nome) DO UPDATE SET
 -- empresa, o CROSS JOIN nenhuma linha, e o INSERT gravava nada com
 -- sucesso. É o pior tipo de falha: silenciosa e marcada como aplicada.
 -- ---------------------------------------------------------------------
+-- ATENÇÃO AO `BEGIN` ABAIXO. Sem transação explícita, o psql confirma
+-- cada comando isoladamente — e se algo falhasse entre o `NO FORCE` e o
+-- `FORCE`, a tabela ficaria com o FORCE DESLIGADO. O sintoma seria o
+-- pior possível: o sistema continua funcionando, os testes continuam
+-- passando, e a barreira que impede uma empresa de ler a outra some sem
+-- ninguém notar. Dentro da transação, qualquer erro devolve tudo ao
+-- estado anterior.
+BEGIN;  -- protege o NO FORCE
 ALTER TABLE tenants   NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE exercises NO FORCE ROW LEVEL SECURITY;
 
@@ -141,3 +149,4 @@ ON CONFLICT (tenant_id, name) DO NOTHING;
 
 ALTER TABLE tenants   FORCE ROW LEVEL SECURITY;
 ALTER TABLE exercises FORCE ROW LEVEL SECURITY;
+COMMIT;
