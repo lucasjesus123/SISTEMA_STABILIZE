@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { enviarAniversariosDoDia } from './aniversarios.js';
 import { envelhecerCobrancas } from '../finance/vencimento.js';
+import { gerarCobrancasDoMes } from '../finance/cobranca-recorrente.js';
 
 /**
  * Agendador de tarefas de fundo.
@@ -48,6 +49,19 @@ export function registrarAgendador(app: FastifyInstance): void {
        É um UPDATE que só toca as linhas que realmente mudaram: quando
        não há nada vencendo, ele não escreve nada. */
     try {
+      /* GERAR ANTES DE ENVELHECER: a mensalidade que nasce hoje com
+         vencimento no dia 10 e hoje já é 15 precisa sair vencida na
+         mesma passada. Na ordem inversa ela ficaria "em aberto" até o
+         próximo tique. */
+      const novas = await gerarCobrancasDoMes(app.log);
+      if (novas.geradas > 0) {
+        app.log.info({ cobrancas: novas }, 'mensalidades geradas a partir dos contratos');
+      }
+    } catch (erro) {
+      app.log.error({ err: erro }, 'tarefa de cobrança recorrente falhou');
+    }
+
+    try {
       const venc = await envelhecerCobrancas(app.log);
       if (venc.vencidas > 0) {
         app.log.info({ vencimento: venc }, 'cobranças marcadas como vencidas');
@@ -91,5 +105,8 @@ export function registrarAgendador(app: FastifyInstance): void {
      depois da meia-noite não pode deixar o financeiro um dia atrasado. */
   void tique();
 
-  app.log.info({ hora: HORA_DO_ENVIO }, 'agendador ativo (vencimentos e aniversários)');
+  app.log.info(
+    { hora: HORA_DO_ENVIO },
+    'agendador ativo (mensalidades, vencimentos e aniversários)',
+  );
 }

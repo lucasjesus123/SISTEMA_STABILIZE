@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { formatCents, reaisToCents, MoneyError } from '@stabilize/shared';
 import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { writeAudit } from '../../audit/audit.js';
-import { conflict, notFound } from '../../http/errors.js';
+import { conflict, notFound, unprocessable } from '../../http/errors.js';
 import { assertStudentInScope } from '../students/students.repository.js';
 import * as repo from './cadastros.repository.js';
 
@@ -363,15 +363,22 @@ export async function contratoRoutes(app: FastifyInstance): Promise<void> {
     return inTenant(request, async (client, principal) => {
       if (!(await assertStudentInScope(client, scope, id))) throw notFound('Aluno');
 
-      const criado = await repo.gravarContrato(client, principal.tenantId, id, {
-        ciclo: body.ciclo,
-        valorCentavos: body.valor,
-        comissaoBp: body.comissaoPercentual,
-        sessoesIncluidas: body.sessoesIncluidas,
-        diaDeCobranca: body.diaDeCobranca,
-        inicioEm: body.inicioEm ?? dataSimples(new Date()),
-        profissionalId: body.profissionalId,
-      });
+      const criado = await repo
+        .gravarContrato(client, principal.tenantId, id, {
+          ciclo: body.ciclo,
+          valorCentavos: body.valor,
+          comissaoBp: body.comissaoPercentual,
+          sessoesIncluidas: body.sessoesIncluidas,
+          diaDeCobranca: body.diaDeCobranca,
+          inicioEm: body.inicioEm ?? dataSimples(new Date()),
+          profissionalId: body.profissionalId,
+        })
+        .catch((e: unknown) => {
+          /* 422 com a data no texto. Sem isto o CHECK do banco estourava
+             e a tela dizia "erro interno" para uma data mal escolhida. */
+          if (e instanceof repo.ContratoAnteriorError) throw unprocessable(e.message);
+          throw e;
+        });
 
       await writeAudit(client, principal.tenantId, {
         action: 'contract.write',

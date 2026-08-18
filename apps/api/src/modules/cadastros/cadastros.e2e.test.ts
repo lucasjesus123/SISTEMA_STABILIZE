@@ -431,6 +431,118 @@ suite('Cadastros da agenda e do financeiro', () => {
     expect(linhas.rows[1]!.is_active).toBe(true);
   });
 
+  /* ==================================================================
+   * A mensalidade que nasce do contrato
+   * ================================================================ */
+
+  it('gera a mensalidade do mês, e rodar de novo NÃO gera a segunda', async () => {
+    const { gerarCobrancasDoMes } = await import('../finance/cobranca-recorrente.js');
+
+    /* Aluno próprio: `alunoDoA` já saiu do teste anterior com um
+       contrato começando em setembro, e este teste precisa de um que
+       comece neste mês. */
+    const novoAluno = await comTenant(ids.tenant, (c) =>
+      c.query<{ id: string }>(
+        `INSERT INTO students (tenant_id, full_name) VALUES ($1,'Mensalista') RETURNING id`,
+        [ids.tenant],
+      ),
+    );
+    const mensalista = novoAluno.rows[0]!.id;
+
+    /* Contrato começando no dia 1 para a cobrança deste mês existir com
+       certeza, independentemente do dia em que o teste rodar. */
+    const hoje = new Date();
+    const primeiro = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+    const criado = await app.inject({
+      method: 'PUT',
+      url: `/api/students/${mensalista}/contrato`,
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: {
+        ciclo: 'MONTHLY',
+        valor: '199,90',
+        comissaoPercentual: 20,
+        diaDeCobranca: 5,
+        inicioEm: primeiro,
+      },
+    });
+    expect(criado.statusCode, criado.body).toBe(200);
+
+    await gerarCobrancasDoMes(app.log);
+    /* A SEGUNDA PASSADA É O TESTE. A tarefa roda de hora em hora; se ela
+       puder inserir a mesma mensalidade duas vezes, o aluno passa a
+       dever o dobro e alguém recebe uma cobrança que não devia. A
+       garantia está no índice único (contrato, competência), não numa
+       trava do agendador — por isso rodar de novo tem de ser inofensivo. */
+    await gerarCobrancasDoMes(app.log);
+    await gerarCobrancasDoMes(app.log);
+
+    const linhas = await comTenant(ids.tenant, (c) =>
+      c.query<{ n: string; amount_cents: string; due_date: Date }>(
+        `SELECT count(*)::text AS n, min(amount_cents)::text AS amount_cents, min(due_date) AS due_date
+           FROM finance_entries
+          WHERE student_id = $1 AND contract_id IS NOT NULL AND cancelled_at IS NULL`,
+        [mensalista],
+      ),
+    );
+    expect(Number(linhas.rows[0]!.n)).toBe(1);
+    expect(linhas.rows[0]!.amount_cents).toBe('19990');
+  });
+
+  it('a primeira mensalidade vence no dia da matrícula quando ela é depois do dia da cobrança', async () => {
+    const { gerarCobrancasDoMes } = await import('../finance/cobranca-recorrente.js');
+
+    const outro = await comTenant(ids.tenant, (c) =>
+      c.query<{ id: string }>(
+        `INSERT INTO students (tenant_id, full_name) VALUES ($1,'Entrou no dia 20') RETURNING id`,
+        [ids.tenant],
+      ),
+    );
+    const alunoId = outro.rows[0]!.id;
+
+    const hoje = new Date();
+    const dia20 = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-20`;
+    await app.inject({
+      method: 'PUT',
+      url: `/api/students/${alunoId}/contrato`,
+      headers: como(await tokenDe(ids.emailDono)),
+      /* Cobrança no dia 5, matrícula no dia 20: a mensalidade deste mês
+         não pode vencer no dia 5, que é antes de o contrato existir. */
+      payload: { ciclo: 'MONTHLY', valor: '100,00', diaDeCobranca: 5, inicioEm: dia20 },
+    });
+
+    await gerarCobrancasDoMes(app.log);
+
+    const linhas = await comTenant(ids.tenant, (c) =>
+      c.query<{ due_date: Date }>(
+        `SELECT due_date FROM finance_entries
+          WHERE student_id = $1 AND contract_id IS NOT NULL`,
+        [alunoId],
+      ),
+    );
+    /* Se o dia 20 já passou no calendário do teste, a cobrança existe e
+       vence no dia 20. Se ainda não chegou, o contrato começa no futuro
+       e nada é gerado — as duas leituras são corretas, e o que NÃO pode
+       acontecer é uma cobrança vencendo no dia 5. */
+    for (const l of linhas.rows) {
+      expect(l.due_date.getDate()).toBe(20);
+    }
+  });
+
+  it('recusa contrato que começa antes de um já existente, com a data no aviso', async () => {
+    /* `alunoDoA` tem um contrato ativo desde 01/09/2026 do teste da
+       troca de plano. Tentar lançar outro começando antes disso fazia o
+       CHECK do banco estourar e a tela dizia "erro interno" para o que é
+       uma data mal escolhida. */
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/students/${ids.alunoDoA}/contrato`,
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: { ciclo: 'MONTHLY', valor: '150,00', inicioEm: '2026-08-01' },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.body).toContain('01/09/2026');
+  });
+
   it('recusa porcentagem acima de 100', async () => {
     const res = await app.inject({
       method: 'PUT',

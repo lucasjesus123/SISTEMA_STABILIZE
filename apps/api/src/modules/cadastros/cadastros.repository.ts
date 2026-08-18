@@ -160,12 +160,44 @@ export interface DadosContrato {
  * conferência de comissão do mês seguinte acusaria uma diferença que
  * ninguém conseguiria explicar.
  */
+export class ContratoAnteriorError extends Error {
+  constructor(readonly desde: string) {
+    super(
+      `Já existe um contrato valendo desde ${desde}. Um contrato novo precisa começar depois dele.`,
+    );
+    this.name = 'ContratoAnteriorError';
+  }
+}
+
 export async function gravarContrato(
   client: TenantClient,
   tenantId: string,
   studentId: string,
   dados: DadosContrato,
 ): Promise<{ id: string }> {
+  /* RETROAGIR PARA ANTES DE UM CONTRATO EXISTENTE É RECUSADO, e com
+     mensagem. O encerramento abaixo põe `ends_on` no dia anterior ao
+     início do novo; se o contrato antigo começar DEPOIS disso, a data de
+     fim cai antes da de início e o CHECK `contract_period_valid` estoura
+     — o usuário via "erro interno" ao tentar corrigir uma data.
+
+     Recusar é a resposta certa e não apenas a mais fácil: o pedido é
+     ambíguo. Se o aluno fechou em setembro por R$ 429 e alguém agora
+     lança agosto por R$ 199, ninguém sabe se setembro deve continuar
+     valendo, ser substituído ou virar histórico — e adivinhar isso no
+     código reescreve silenciosamente o que já foi cobrado. */
+  const { rows: conflito } = await client.query<{ starts_on: Date }>(
+    `SELECT starts_on FROM student_contracts
+      WHERE student_id = $1 AND is_active AND starts_on >= $2::date
+      ORDER BY starts_on DESC LIMIT 1`,
+    [studentId, dados.inicioEm],
+  );
+  if (conflito[0] !== undefined) {
+    const d = conflito[0].starts_on;
+    const br = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    throw new ContratoAnteriorError(br);
+  }
+
   await client.query(
     `UPDATE student_contracts
         SET is_active = false,
