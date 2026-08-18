@@ -96,6 +96,16 @@ GRANT SELECT, INSERT, UPDATE          ON tenants          TO stabilize_plataform
 GRANT SELECT, INSERT, UPDATE          ON users            TO stabilize_plataforma;
 -- Só para CONTAR. Nenhuma função abaixo devolve linha destas tabelas.
 GRANT SELECT ON students TO stabilize_plataforma;
+GRANT SELECT ON appointments        TO stabilize_plataforma;
+GRANT SELECT ON whatsapp_messages   TO stabilize_plataforma;
+GRANT SELECT, INSERT ON audit_log   TO stabilize_plataforma;
+/* `audit_log.id` é bigserial, e INSERT numa coluna serial precisa de
+   USAGE na SEQUÊNCIA além do privilégio na tabela. Sem esta linha o
+   registro do acesso de suporte falhava com `permission denied for
+   sequence audit_log_id_seq` — que o tratador de erros traduz para 404,
+   e a rota inteira respondia "Recurso não encontrado" sem nenhuma pista
+   de que o problema era um GRANT. */
+GRANT USAGE, SELECT ON SEQUENCE audit_log_id_seq TO stabilize_plataforma;
 /* Suspender a empresa derruba as sessões dela — daí o UPDATE. */
 GRANT SELECT, UPDATE ON user_sessions    TO stabilize_plataforma;
 GRANT SELECT, INSERT ON exercises        TO stabilize_plataforma;
@@ -162,6 +172,20 @@ AS $$
   SELECT a.id, a.password_hash, a.full_name, a.is_active, a.locked_until, a.must_change_password
     FROM platform_admins a
    WHERE a.email = p_email
+$$;
+
+/* Mesma coisa, buscando por id: usada quando o operador troca a própria
+   senha e já está autenticado — o token traz o id, não o e-mail. */
+CREATE OR REPLACE FUNCTION plataforma_lookup_admin_por_id(p_id uuid)
+RETURNS TABLE (
+  id uuid, password_hash text, full_name text,
+  is_active boolean, locked_until timestamptz, must_change_password boolean
+)
+LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+  SELECT a.id, a.password_hash, a.full_name, a.is_active, a.locked_until, a.must_change_password
+    FROM platform_admins a
+   WHERE a.id = p_id
 $$;
 
 CREATE OR REPLACE FUNCTION plataforma_registrar_tentativa(p_id uuid, p_sucesso boolean)
@@ -502,6 +526,120 @@ AS $$
   UPDATE platform_settings
      SET uazapi_admin_encrypted = NULL, atualizado_em = now(), atualizado_por = p_admin
    WHERE id;
+$$;
+
+
+-- ---------------------------------------------------------------------
+-- ENTRAR NA CONTA DE UM USUÁRIO
+--
+-- O dono do sistema precisa conseguir olhar o que o cliente está vendo
+-- para dar suporte — "não consigo lançar o pagamento" é impossível de
+-- resolver às cegas.
+--
+-- E ISSO É PODEROSO DEMAIS PARA SER SILENCIOSO. Um operador que entra na
+-- conta de alguém alcança o prontuário daquela academia inteira. O que
+-- torna aceitável não é limitar o poder — é o rastro: cada entrada grava
+-- em `platform_audit` E no `audit_log` DA PRÓPRIA ACADEMIA, onde o dono
+-- dela enxerga. Acesso a dado de saúde que ninguém consegue perceber é o
+-- que uma auditoria chama de problema; acesso registrado dos dois lados
+-- é suporte.
+--
+-- A função devolve só o necessário para emitir um token normal de
+-- usuário. Ela NÃO devolve senha, e não existe caminho daqui para
+-- descobrir a senha de ninguém.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION plataforma_usuario_para_acesso(p_user uuid)
+RETURNS TABLE (user_id uuid, tenant_id uuid, papel text, nome text, email citext,
+               empresa text, aluno_id uuid, ativo boolean, empresa_ativa boolean)
+LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+  SELECT u.id, u.tenant_id, u.role::text, u.full_name, u.email,
+         t.name, s.id, u.is_active, t.is_active
+    FROM users u
+    JOIN tenants t ON t.id = u.tenant_id
+    LEFT JOIN students s ON s.user_id = u.id
+   WHERE u.id = p_user
+$$;
+
+/* Grava no audit_log DA ACADEMIA que o operador entrou na conta de
+   alguém dela.
+   
+   Precisa ser função privilegiada: a policy de `audit_log` só aceita
+   INSERT com `tenant_id = current_tenant_id()`, e o painel roda SEM
+   contexto de empresa. Um INSERT direto dali responde 42501, que o
+   tratador de erros traduz para 404 — o acesso de suporte funcionava
+   pela metade e a rota inteira falhava com "Recurso não encontrado".
+   
+   É de propósito que o registro na academia seja obrigatório e não
+   "melhor esforço": se ele falhar, a rota falha e o acesso não acontece.
+   Acesso a prontuário sem rastro do lado de quem foi acessado é
+   exatamente o que esta funcionalidade não pode produzir. */
+CREATE OR REPLACE FUNCTION plataforma_registrar_acesso_suporte(
+  p_tenant uuid, p_user uuid, p_papel text, p_ip inet, p_operador uuid
+) RETURNS void
+LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+  INSERT INTO audit_log (tenant_id, actor_id, actor_role, action, resource_type,
+                         resource_id, outcome, ip, metadata)
+  VALUES (p_tenant, p_user, p_papel::user_role, 'auth.login', 'user',
+          p_user::text, 'SUCCESS', p_ip,
+          jsonb_build_object('suporte', true, 'operador', p_operador))
+$$;
+
+/* A lista completa de usuários de uma empresa — não só os gestores.
+   Serve à tela de suporte, onde o operador escolhe em nome de quem
+   entrar. Devolve nome, e-mail e papel; nenhum dado de aluno. */
+CREATE OR REPLACE FUNCTION plataforma_listar_usuarios(p_tenant uuid)
+RETURNS TABLE (id uuid, nome text, email citext, papel text, ativo boolean,
+               ultimo_acesso timestamptz)
+LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+  SELECT u.id, u.full_name, u.email, u.role::text, u.is_active, u.last_login_at
+    FROM users u
+   WHERE u.tenant_id = p_tenant
+   ORDER BY
+     CASE u.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1
+                 WHEN 'PROFESSIONAL' THEN 2 WHEN 'RECEPTION' THEN 3 ELSE 4 END,
+     u.full_name
+$$;
+
+/* Métricas do serviço, para o painel de quem opera. NÚMEROS apenas. */
+CREATE OR REPLACE FUNCTION plataforma_metricas()
+RETURNS TABLE (
+  empresas bigint, empresas_ativas bigint, empresas_suspensas bigint,
+  usuarios bigint, alunos bigint, alunos_ativos bigint,
+  agendamentos_30d bigint, mensagens_pendentes bigint, mensagens_falhas bigint,
+  logins_24h bigint, logins_falhos_24h bigint
+)
+LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+  SELECT
+    (SELECT count(*) FROM tenants),
+    (SELECT count(*) FROM tenants WHERE is_active),
+    (SELECT count(*) FROM tenants WHERE NOT is_active),
+    (SELECT count(*) FROM users WHERE is_active),
+    (SELECT count(*) FROM students),
+    (SELECT count(*) FROM students WHERE status = 'ACTIVE'),
+    (SELECT count(*) FROM appointments WHERE created_at > now() - interval '30 days'),
+    (SELECT count(*) FROM whatsapp_messages WHERE status = 'PENDING'),
+    (SELECT count(*) FROM whatsapp_messages WHERE status = 'FAILED'),
+    (SELECT count(*) FROM audit_log WHERE action = 'auth.login'        AND created_at > now() - interval '24 hours'),
+    (SELECT count(*) FROM audit_log WHERE action = 'auth.login_failed' AND created_at > now() - interval '24 hours')
+$$;
+
+/* Os erros recentes de TODAS as academias, para o operador enxergar
+   problema antes de o cliente ligar. Só o que o audit_log registra como
+   negado ou com erro; nenhum conteúdo de prontuário. */
+CREATE OR REPLACE FUNCTION plataforma_erros_recentes(p_limite integer)
+RETURNS TABLE (quando timestamptz, empresa text, acao text, recurso text, resultado text)
+LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+  SELECT a.created_at, coalesce(t.name, '—'), a.action, a.resource_type, a.outcome
+    FROM audit_log a
+    LEFT JOIN tenants t ON t.id = a.tenant_id
+   WHERE a.outcome IN ('DENIED', 'ERROR')
+   ORDER BY a.created_at DESC
+   LIMIT least(coalesce(p_limite, 50), 200)
 $$;
 
 -- ---------------------------------------------------------------------

@@ -180,6 +180,32 @@ services:
       DATABASE_URL: "${DATABASE_MIGRATION_URL:?defina no .env}"
     networks: [interna]
 
+  # Cria o operador da PLATAFORMA — quem cadastra academias, nomeia os
+  # administradores delas e liga o WhatsApp. Não é usuário de academia
+  # nenhuma; mora numa tabela própria, fora da matriz de papéis.
+  #
+  #   docker compose run --rm operador "voce@exemplo.com" "Seu Nome"
+  #
+  # Roda uma vez e sai. `profiles` o mantém fora do `up` — lembre que o
+  # perfil também o exclui do `build`; use `deploy/atualizar.sh`, que já
+  # constrói com `--profile ferramentas`.
+  operador:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: seed
+    profiles: [ferramentas]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # A credencial de MIGRAÇÃO: escrever em `platform_admins` exige um
+      # papel que a API não tem — ela recebe `permission denied` nessa
+      # tabela, de propósito.
+      DATABASE_MIGRATION_URL: "${DATABASE_MIGRATION_URL:?defina no .env}"
+    entrypoint: ["node", "packages/db/scripts/criar-operador.mjs"]
+    networks: [interna]
+
   proxy:
     # O front vai DENTRO desta imagem (estágio `web` do Dockerfile), e
     # não montado do disco: `apps/web/dist` não existe num clone novo,

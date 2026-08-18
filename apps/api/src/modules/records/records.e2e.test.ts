@@ -298,11 +298,17 @@ suite('Prontuário', () => {
     expect(corpo.data.vigente.queixaPrincipal).not.toContain('plantado');
   });
 
-  it('o ADMIN lê a anamnese mas NÃO a escreve', async () => {
-    /* A matriz de papéis dá `anamnesis:read` ao ADMIN e não
-       `anamnesis:write`: quem responde pela conduta clínica é o
-       profissional. Este teste é o que impede alguém "resolver" um
-       chamado de suporte afrouxando a matriz sem perceber. */
+  it('o ADMIN lê E escreve a anamnese, como o dono', async () => {
+    /* MUDOU DE PROPÓSITO. A versão anterior deste teste exigia 403 na
+       escrita, com o argumento de que a conduta clínica é do
+       profissional. O argumento vale para clínica com equipe grande e
+       não vale para academia onde o gerente também atende — e quem
+       decide isso é quem opera.
+
+       A distinção que o sistema sustenta hoje é outra: "quem administra
+       a ACADEMIA" (OWNER e ADMIN, idênticos) contra "quem administra o
+       SERVIÇO", que vive em `platform_admins` e não aparece nesta
+       matriz. */
     const token = await tokenDe(ids.emailAdmin, ids.slugA);
 
     const leu = await app.inject({
@@ -312,13 +318,30 @@ suite('Prontuário', () => {
     });
     expect(leu.statusCode).toBe(200);
 
-    const tentou = await app.inject({
+    const escreveu = await app.inject({
       method: 'POST',
       url: `/api/students/${ids.alunoDoAlfa}/anamnese`,
       headers: como(token),
-      payload: { queixaPrincipal: 'admin escrevendo conduta clínica' },
+      payload: { queixaPrincipal: 'anamnese registrada pela administração' },
     });
-    expect(tentou.statusCode).toBe(403);
+    expect(escreveu.statusCode).toBe(201);
+  });
+
+  it('mas o ADMIN continua preso à PRÓPRIA empresa', async () => {
+    /* O que NÃO mudou, e é o que realmente importa: ampliar o poder do
+       admin dentro da academia dele não pode ampliar o alcance para
+       fora. Este teste é o que garante que a mudança de permissão não
+       encostou na fronteira entre empresas. */
+    const token = await tokenDe(ids.emailAdmin, ids.slugA);
+    const tentou = await app.inject({
+      method: 'GET',
+      url: `/api/students/${ids.alunoOutraEmpresa}/anamnese`,
+      headers: como(token),
+    });
+    /* 404 e não 403: um 403 confirmaria que aquele id existe em alguma
+       outra empresa, e permitiria mapear a base alheia por diferença de
+       resposta. */
+    expect(tentou.statusCode).toBe(404);
   });
 
   it('outra EMPRESA não alcança o prontuário nem com id válido em mãos', async () => {

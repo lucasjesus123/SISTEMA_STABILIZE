@@ -17,6 +17,7 @@ import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { portalRoutes } from './modules/portal/portal.routes.js';
 import { perfilRoutes } from './modules/perfil/perfil.routes.js';
 import { cepRoutes } from './modules/cep/cep.routes.js';
+import { plataformaRoutes } from './modules/plataforma/plataforma.routes.js';
 import { registrarAgendador } from './modules/whatsapp/agendador.js';
 import multipart from '@fastify/multipart';
 import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
@@ -189,6 +190,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   /* Consulta de CEP. Sai para a internet, então é autenticada e o que
      entra são oito dígitos validados — ver o cabeçalho do arquivo. */
   await app.register(cepRoutes, { prefix: '/api/cep' });
+  /* O painel de quem opera o SaaS. Autenticação PRÓPRIA, com audiência de
+     token e cookie separados — token de plataforma não abre rota de
+     academia e vice-versa, e a recusa é da biblioteca de JWT, não de um
+     `if` que alguém possa remover. */
+  await app.register(plataformaRoutes, { prefix: '/api/plataforma' });
 
   registrarAgendador(app);
   await app.register(scheduleRoutes, { prefix: '/api/schedule' });

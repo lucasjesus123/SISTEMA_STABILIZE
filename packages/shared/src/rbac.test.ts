@@ -146,11 +146,34 @@ describe('OWNER e ADMIN', () => {
     expect(hasPermission('OWNER', 'self:booking')).toBe(false);
   });
 
-  it('ADMIN gere a operação e o financeiro, mas não apaga usuários nem muda configuração do tenant', () => {
-    expect(hasPermission('ADMIN', 'finance:report:read')).toBe(true);
-    expect(hasPermission('ADMIN', 'commission:settle')).toBe(true);
-    expect(hasPermission('ADMIN', 'user:delete')).toBe(false);
-    expect(hasPermission('ADMIN', 'tenant:settings')).toBe(false);
+  it('ADMIN tem exatamente o mesmo que OWNER dentro da academia', () => {
+    /* A distinção que importa neste sistema NÃO é "dono contra gerente":
+       os dois tocam a operação inteira e um cobre o outro quando falta.
+       É "quem administra a ACADEMIA" contra "quem administra o SERVIÇO",
+       e o segundo mora em `platform_admins`, fora desta matriz.
+
+       Este teste existe para que a igualdade seja uma DECISÃO e não um
+       acidente: se alguém acrescentar permissão a um dos dois e esquecer
+       o outro, ele falha. */
+    const doDono = permissionsOf('OWNER').filter(
+      (p) => p !== 'self:read' && p !== 'self:write' && p !== 'self:booking',
+    );
+    for (const p of doDono) {
+      expect(hasPermission('ADMIN', p), `ADMIN deveria ter ${p}`).toBe(true);
+    }
+    for (const p of permissionsOf('ADMIN')) {
+      expect(hasPermission('OWNER', p), `OWNER deveria ter ${p}`).toBe(true);
+    }
+  });
+
+  it('nem OWNER nem ADMIN recebem as permissões do app do aluno', () => {
+    /* `self:*` é do aluno olhando o próprio cadastro. Um administrador
+       que as tivesse passaria pelo escopo SELF sem ter `studentId`, e o
+       recorte cairia em cima de uma conta que não é de aluno. */
+    for (const papel of ['OWNER', 'ADMIN'] as const) {
+      expect(hasPermission(papel, 'self:read')).toBe(false);
+      expect(hasPermission(papel, 'self:booking')).toBe(false);
+    }
   });
 
   it('somente OWNER e ADMIN são administradores do tenant', () => {

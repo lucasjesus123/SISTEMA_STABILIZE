@@ -173,3 +173,71 @@ export function refreshCookieOptions(): {
     maxAge: config.JWT_REFRESH_TTL_SECONDS,
   };
 }
+
+/* --------------------------------------------------------------------
+ * Tokens da PLATAFORMA
+ *
+ * Assinados com a mesma chave, mas com AUDIÊNCIA DIFERENTE. É isso que
+ * impede um token de plataforma de abrir uma rota de academia e
+ * vice-versa: `jwtVerify` recusa quando a audiência não bate, antes de
+ * qualquer código nosso rodar.
+ *
+ * Poderia ser uma terceira chave secreta. Não é, e a decisão é
+ * deliberada: mais uma chave é mais uma coisa a gerar, guardar,
+ * rotacionar e esquecer — e a separação por audiência é verificada pela
+ * biblioteca, não por um `if` que alguém pode remover.
+ *
+ * O token da plataforma NÃO TEM `tid`. Não é omissão: ele não pertence a
+ * empresa nenhuma, e é justamente por isso que `verifyAccessToken`, que
+ * exige `tid`, o recusaria mesmo que a audiência batesse.
+ * ------------------------------------------------------------------ */
+
+const AUDIENCIA_PLATAFORMA = 'stabilize-plataforma';
+
+export interface ClaimsPlataforma extends JWTPayload {
+  /** id do administrador de plataforma */
+  sub: string;
+  /** Marca explícita, além da audiência. Cinto e suspensório. */
+  tipo: 'plataforma';
+}
+
+export async function assinarTokenPlataforma(adminId: string): Promise<{
+  token: string;
+  expiresIn: number;
+}> {
+  const ttl = env().JWT_ACCESS_TTL_SECONDS;
+  const jwt = new SignJWT({ tipo: 'plataforma' })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setSubject(adminId)
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCIA_PLATAFORMA)
+    .setIssuedAt()
+    .setExpirationTime(`${ttl}s`)
+    .setJti(randomUUID());
+
+  return { token: await jwt.sign(accessKey()), expiresIn: ttl };
+}
+
+export async function verificarTokenPlataforma(token: string): Promise<ClaimsPlataforma> {
+  try {
+    const { payload } = await jwtVerify(token, accessKey(), {
+      issuer: ISSUER,
+      audience: AUDIENCIA_PLATAFORMA,
+      algorithms: ['HS256'],
+      clockTolerance: 5,
+    });
+
+    if (typeof payload.sub !== 'string' || payload['tipo'] !== 'plataforma') {
+      throw unauthorized('Sessão inválida.');
+    }
+    /* Um token de plataforma com `tid` seria um token adulterado ou um
+       defeito de emissão. Nos dois casos, recusar. */
+    if (payload['tid'] !== undefined) {
+      throw unauthorized('Sessão inválida.');
+    }
+
+    return payload as ClaimsPlataforma;
+  } catch {
+    throw unauthorized('Sessão inválida ou expirada.');
+  }
+}

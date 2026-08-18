@@ -128,6 +128,18 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
     ),
   ],
 
+  /* O ADMIN É O GERENTE DA ACADEMIA e tem tudo o que o dono tem, menos o
+     que é da PLATAFORMA. A distinção que importa neste sistema não é
+     "dono contra gerente" — os dois tocam a operação inteira e um
+     precisa cobrir o outro quando falta. É "quem administra a academia"
+     contra "quem administra o serviço", e essa segunda fica em
+     `platform_admins`, fora desta matriz.
+
+     A versão anterior negava ao admin escrever anamnese, evolução e
+     treino, com o argumento de que a conduta técnica é do profissional.
+     O argumento é bom para uma clínica com equipe grande e ruim para uma
+     academia onde o gerente também atende — e quem decide isso é quem
+     opera, não quem escreve o software. */
   ADMIN: [
     ...grants(
       'ALL',
@@ -136,14 +148,16 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
       'student:delete',
       'student:assign_professional',
       'anamnesis:read',
+      'anamnesis:write',
       'evolution:read',
+      'evolution:write',
       'attachment:read',
       'attachment:write',
+      'attachment:delete',
       'exercise:read',
       'exercise:write',
-      /* Lê a prescrição, não escreve: quem responde pela conduta técnica
-         é o profissional, como na anamnese. */
       'workout:read',
+      'workout:write',
       'schedule:read',
       'schedule:write',
       'schedule:cancel',
@@ -167,6 +181,8 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
       'pricing:read',
       'pricing:write',
       'audit:read',
+      'user:delete',
+      'tenant:settings',
     ),
   ],
 
