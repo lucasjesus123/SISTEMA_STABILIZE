@@ -6,8 +6,10 @@ import {
   atualizarAluno,
   buscarFicha,
   buscarIndicadores,
+  buscarPrincipal,
   buscarResumo,
   criarAluno,
+  definirToken,
   entrar,
   restaurarSessao,
   sair,
@@ -52,11 +54,40 @@ export default function App(): ReactNode {
   const [principal, setPrincipal] = useState<Principal | null>(null);
   const [carregando, setCarregando] = useState(true);
 
+  const [suporte, setSuporte] = useState(false);
+
   // Ao abrir a página, tenta restaurar a sessão pelo cookie de refresh.
   // Sem isto, recarregar a aba pediria a senha de novo — o access token
   // vive só em memória, de propósito.
   useEffect(() => {
     void (async () => {
+      /* ACESSO DE SUPORTE. O painel da plataforma abre esta página numa
+         aba nova com o token no FRAGMENTO da URL (`#suporte=…`).
+
+         O fragmento, e não a query string: ele NÃO é enviado ao
+         servidor, então não entra em log de acesso, em Referer nem em
+         histórico de proxy. É o mesmo lugar onde o OAuth entrega token
+         de fluxo implícito, e pelo mesmo motivo.
+
+         Consumido e apagado do endereço imediatamente: sem isso o token
+         fica no histórico do navegador e reaparece a cada recarga. */
+      const marca = window.location.hash.match(/(?:^|[#&])suporte=([^&]+)/);
+      if (marca?.[1] !== undefined) {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+        definirToken(decodeURIComponent(marca[1]));
+        try {
+          setPrincipal(await buscarPrincipal());
+          setSuporte(true);
+          setCarregando(false);
+          return;
+        } catch {
+          /* Token de suporte expirado (ele dura 15 minutos e não
+             renova): segue para o caminho normal em vez de travar numa
+             tela de erro. */
+          definirToken(null);
+        }
+      }
+
       setPrincipal(await restaurarSessao());
       setCarregando(false);
     })();
@@ -82,7 +113,21 @@ export default function App(): ReactNode {
     return <Aplicativo nome={principal.name} aoSair={() => setPrincipal(null)} />;
   }
 
-  return <Sistema principal={principal} aoSair={() => setPrincipal(null)} />;
+  return (
+    <>
+      {suporte && (
+        /* A faixa existe para que ninguém esqueça em que conta está. Um
+           operador com acesso de suporte enxerga exatamente o que o
+           cliente enxerga — e é justamente por isso que precisa de um
+           lembrete permanente na tela. */
+        <div className="faixa-suporte" role="status">
+          Acesso de suporte como <strong>{principal.name}</strong> · registrado no histórico desta
+          academia · a sessão expira em 15 minutos
+        </div>
+      )}
+      <Sistema principal={principal} aoSair={() => setPrincipal(null)} />
+    </>
+  );
 }
 
 /* ====================================================================

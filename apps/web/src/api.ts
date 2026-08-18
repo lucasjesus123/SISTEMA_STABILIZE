@@ -182,6 +182,18 @@ export async function sair(): Promise<void> {
   accessToken = null;
 }
 
+/**
+ * Quem é o usuário do token que está em memória.
+ *
+ * Separado de `restaurarSessao` porque o acesso de SUPORTE já chega com
+ * o token na mão e não tem cookie de refresh — chamar a restauração
+ * inteira tentaria renovar, falharia, e derrubaria um token que estava
+ * perfeitamente válido.
+ */
+export function buscarPrincipal(): Promise<Principal> {
+  return bruto<Principal>('/api/auth/me');
+}
+
 /** Restaura a sessão ao recarregar a página, usando o cookie. */
 export async function restaurarSessao(): Promise<Principal | null> {
   if (!(await renovar())) return null;

@@ -579,9 +579,15 @@ CREATE OR REPLACE FUNCTION plataforma_registrar_acesso_suporte(
 ) RETURNS void
 LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
 AS $$
+  /* AÇÃO PRÓPRIA, e não 'auth.login' com um campo de metadados dizendo
+     que foi suporte. O dono da academia tem direito de ver que alguém de
+     fora entrou na conta dele, e isso não pode depender de ele abrir o
+     JSON de metadados de um evento que, na listagem, parece uma entrada
+     comum do próprio usuário. Um acesso de suporte que se lê como login
+     normal é, na prática, um acesso sem rastro. */
   INSERT INTO audit_log (tenant_id, actor_id, actor_role, action, resource_type,
                          resource_id, outcome, ip, metadata)
-  VALUES (p_tenant, p_user, p_papel::user_role, 'auth.login', 'user',
+  VALUES (p_tenant, p_user, p_papel::user_role, 'auth.support_access', 'user',
           p_user::text, 'SUCCESS', p_ip,
           jsonb_build_object('suporte', true, 'operador', p_operador))
 $$;

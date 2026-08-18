@@ -204,7 +204,20 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
     );
     const acesso = await assinarTokenPlataforma(sessao.adminId);
     void reply.setCookie(COOKIE_PLATAFORMA, novo.token, opcoesDoCookie());
-    return { accessToken: acesso.token, expiresIn: acesso.expiresIn };
+
+    /* O `admin` vai junto pelo mesmo motivo que vai no login: recarregar
+       a página não pode virar um caminho alternativo. Sem ele a tela não
+       sabe quem entrou (mostraria um nome genérico) nem que a senha
+       ainda é a provisória — e recarregar passaria por cima da troca
+       obrigatória, que é justamente o que ela existe para impedir. */
+    const admin = await repo.buscarAdminPorId(sessao.adminId);
+    if (admin === null || !admin.ativo) throw unauthorized('Sessão inválida.');
+
+    return {
+      accessToken: acesso.token,
+      expiresIn: acesso.expiresIn,
+      admin: { id: admin.id, nome: admin.nome, precisaTrocarSenha: admin.precisaTrocarSenha },
+    };
   });
 
   app.post('/logout', async (request, reply) => {

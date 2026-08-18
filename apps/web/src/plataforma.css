@@ -1,0 +1,422 @@
+/* ---------------------------------------------------------------------
+   PAINEL DA PLATAFORMA
+
+   Reaproveita os tokens de cor e as classes de formulário do sistema —
+   `campo`, `botao-acao`, `rolo`, `mensagem-erro` — porque duplicar isso
+   produziria duas telas que envelhecem em direções diferentes.
+
+   O que é PRÓPRIO daqui é o esqueleto e a identidade: coluna estreita,
+   tipografia menor, densidade maior. É tela de operação, não de
+   atendimento — quem a usa está conferindo números e agindo rápido, não
+   conversando com um aluno.
+   ------------------------------------------------------------------- */
+
+.plt {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  background: var(--superficie);
+}
+
+.plt-carregando {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--superficie);
+}
+
+/* ---- coluna ---------------------------------------------------------
+   Mais escura que a do sistema das academias, de propósito: as duas
+   telas convivem no mesmo navegador e quem opera precisa saber onde
+   está antes de ler qualquer coisa.
+   ------------------------------------------------------------------- */
+.plt-lateral {
+  background: #07100f;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.plt-marca {
+  display: grid;
+  gap: 6px;
+  padding: var(--e-5) var(--e-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.plt-marca .marca {
+  color: #eaf7f8;
+}
+.plt-selo {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--teal);
+}
+
+.plt-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e-3) var(--e-2);
+  flex: 1;
+  overflow-y: auto;
+}
+.plt-item {
+  width: 100%;
+  padding: 9px var(--e-3);
+  border-radius: var(--raio);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: #8fa5a7;
+  text-align: left;
+  transition:
+    color var(--rapido) var(--saida),
+    background var(--rapido) var(--saida);
+}
+.plt-item:hover {
+  color: #eaf7f8;
+  background: rgba(255, 255, 255, 0.05);
+}
+.plt-item.ativa {
+  background: var(--teal);
+  color: #06100f;
+  font-weight: 600;
+}
+
+.plt-rodape {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.plt-quem {
+  font-size: var(--t-sm);
+  color: #eaf7f8;
+}
+.plt-link,
+.plt-sair {
+  justify-self: start;
+  font-size: var(--t-sm);
+  color: #8fa5a7;
+  padding: 4px 0;
+  background: none;
+  text-decoration: none;
+}
+.plt-link:hover,
+.plt-sair:hover {
+  color: #eaf7f8;
+  text-decoration: underline;
+}
+
+.plt-conteudo {
+  padding: var(--e-7) clamp(var(--e-4), 3vw, var(--e-7)) var(--e-9);
+  max-width: 74rem;
+  width: 100%;
+}
+
+/* ---- entrada ------------------------------------------------------- */
+.plt-entrada {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--e-5);
+  background: #06100f;
+}
+.plt-entrada-caixa {
+  width: min(26rem, 100%);
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-6);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--raio-lg);
+  background: #0b1a19;
+}
+.plt-entrada-caixa .marca {
+  color: #eaf7f8;
+  margin-bottom: var(--e-2);
+}
+.plt-entrada-caixa h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #eaf7f8;
+}
+.plt-entrada-caixa .botao-acao {
+  margin-top: var(--e-2);
+}
+
+.plt-eyebrow {
+  margin: 0;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--teal);
+}
+.plt-sub {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  max-width: 62ch;
+}
+
+/* ---- cartões de número --------------------------------------------- */
+.plt-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--e-3);
+  margin-bottom: var(--e-7);
+}
+.plt-cartao {
+  display: grid;
+  gap: 2px;
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+/* A cor entra só quando há algo a olhar. Cartão colorido por padrão
+   ensina o olho a ignorar a cor. */
+.plt-cartao.atencao {
+  border-color: color-mix(in srgb, var(--atencao) 45%, transparent);
+}
+.plt-cartao.erro {
+  border-color: color-mix(in srgb, var(--erro) 45%, transparent);
+}
+.plt-cartao-rotulo {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-apoio);
+}
+.plt-cartao-valor {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--texto);
+}
+.plt-cartao.atencao .plt-cartao-valor {
+  color: var(--atencao);
+}
+.plt-cartao.erro .plt-cartao-valor {
+  color: var(--erro);
+}
+.plt-cartao-nota {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+/* ---- tabela e pilulas ----------------------------------------------
+   `.rolo` é o envelope de rolagem das tabelas: sem ele, uma tabela larga
+   empurra a PÁGINA para o lado e a coluna lateral sai da tela junto. A
+   rolagem tem de acontecer dentro da tabela, não no corpo do documento.
+   ------------------------------------------------------------------- */
+.rolo {
+  overflow-x: auto;
+  /* Sem isto o foco do teclado corta a linha de baixo quando a tabela
+     rola: `overflow` recorta o outline. */
+  padding-bottom: 2px;
+}
+
+/* Dado que se compara caractere a caractere — slug, e-mail, nome de ação,
+   senha provisória — em largura fixa, com os dígitos alinhados. Ler
+   `stz-1I0O` em fonte proporcional é como não ler. */
+.mono {
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+}
+
+.plt-titulo {
+  margin: var(--e-6) 0 var(--e-2);
+  font-size: 1.1rem;
+  color: var(--texto);
+}
+.plt-slug {
+  display: block;
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+}
+.plt-secundario {
+  color: var(--texto-apoio);
+}
+.plt-pilula {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.plt-pilula.ok {
+  background: var(--ok-fundo);
+  color: var(--ok-texto);
+}
+.plt-pilula.erro {
+  background: var(--erro-fundo);
+  color: var(--erro-texto);
+}
+.plt-pilula.atencao {
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+}
+.plt-pilula.neutra {
+  background: var(--superficie-realce);
+  color: var(--texto-corpo);
+}
+
+.linha-clicavel {
+  cursor: pointer;
+}
+.linha-clicavel:hover td {
+  background: var(--superficie-realce);
+}
+
+/* Espaçamento por `gap` sem virar contêiner flex: `display:flex` numa
+   `<td>` a tira do modelo de tabela, e a célula deixa de esticar até a
+   altura da linha — a borda de baixo dela sobe alguns pixels e a coluna
+   inteira fica desalinhada das outras. `inline-flex` nos filhos resolve
+   sem tocar no `display` da célula. */
+.plt-acoes {
+  white-space: nowrap;
+}
+.plt-acoes > * + * {
+  margin-left: var(--e-3);
+}
+
+.plt-cabecalho-acao {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+}
+
+.plt-caixa {
+  padding: var(--e-4);
+  margin: var(--e-3) 0;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+
+.plt-suspensa {
+  padding: var(--e-3) var(--e-4);
+  margin: var(--e-4) 0;
+  border-left: 3px solid var(--erro);
+  border-radius: 0 var(--raio) var(--raio) 0;
+  background: var(--erro-fundo);
+  color: var(--erro-texto);
+  font-size: var(--t-sm);
+}
+
+/* ---- senha provisória ----------------------------------------------
+   Aparece uma vez e some. O destaque é grande de propósito: é para ser
+   copiada agora, não procurada depois.
+   ------------------------------------------------------------------- */
+.plt-senha {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-5);
+  margin: var(--e-4) 0;
+  border: 1px solid color-mix(in srgb, var(--teal) 40%, transparent);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.plt-senha-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-4);
+  margin: 0;
+  flex-wrap: wrap;
+}
+.plt-senha-linha span {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.plt-destaque {
+  font-size: 1.3rem;
+  letter-spacing: 0.04em;
+  color: var(--teal);
+  user-select: all;
+}
+.plt-aviso {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  max-width: 64ch;
+}
+
+/* ---- faixa de suporte, no sistema das academias --------------------
+   Fica no sistema, não no painel: ela avisa a quem está DENTRO de uma
+   academia que aquela sessão é de suporte. Sem ela, o operador esquece
+   em que conta está e edita o dado do cliente achando que é teste.
+   ------------------------------------------------------------------- */
+.faixa-suporte {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: 7px var(--e-4);
+  text-align: center;
+  font-size: var(--t-sm);
+  background: var(--atencao);
+  color: #1c1203;
+}
+.faixa-suporte strong {
+  font-weight: 700;
+}
+
+/* O par sol/lua é `position: fixed` no topo da direita e passaria por
+   baixo da faixa. Quando ela existe, ele desce a altura dela. */
+body:has(.faixa-suporte) .tema-troca {
+  top: calc(var(--e-4) + 2.1rem);
+}
+
+/* ---- tela estreita -------------------------------------------------- */
+@media (max-width: 60rem) {
+  .plt {
+    grid-template-columns: 1fr;
+  }
+  .plt-lateral {
+    position: static;
+    height: auto;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'marca rodape'
+      'nav   nav';
+    align-items: center;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .plt-marca {
+    grid-area: marca;
+    border-bottom: 0;
+  }
+  .plt-rodape {
+    grid-area: rodape;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--e-3);
+    border-top: 0;
+  }
+  .plt-quem {
+    display: none;
+  }
+  .plt-nav {
+    grid-area: nav;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0 var(--e-3) var(--e-3);
+  }
+  .plt-item {
+    width: auto;
+    white-space: nowrap;
+  }
+}

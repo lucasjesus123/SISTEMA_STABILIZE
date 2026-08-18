@@ -103,6 +103,13 @@ jobs:
       - name: Testes da API contra PostgreSQL real
         env:
           TEST_DATABASE_URL: postgresql://stabilize_app:TROQUE_ESTA_SENHA_APP@localhost:5432/stabilize_test
+          # Segunda credencial, usada SÓ pelos testes do painel da
+          # plataforma. `platform_admins` é revogada de `stabilize_app`
+          # de propósito — a API só chega lá pelas funções SECURITY
+          # DEFINER —, então semear o operador exige o papel que criou o
+          # esquema. Sem esta variável a suíte do painel PULA inteira, e
+          # a separação de audiência deixa de ser verificada aqui.
+          TEST_MIGRATION_URL: postgresql://postgres:${{ env.POSTGRES_PASSWORD }}@localhost:5432/stabilize_test
         run: pnpm --filter @stabilize/api test
 
       - name: Análise estática dos invariantes do projeto

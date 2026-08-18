@@ -1,20 +1,34 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
+import Plataforma from './Plataforma.jsx';
 import './fontes.css';
 import './theme.css';
 import './app.css';
 import './app-aluno.css';
+import './plataforma.css';
 
 const raiz = document.getElementById('root');
 if (raiz === null) {
   throw new Error('elemento #root não encontrado no documento');
 }
 
+/*
+ * Duas aplicações, um pacote.
+ *
+ * `/plataforma` é o painel de quem opera o SERVIÇO; todo o resto é o
+ * sistema das ACADEMIAS. Eles não compartilham sessão nem token, e a
+ * separação é por caminho porque não há nada a compartilhar entre os
+ * dois — nem menu, nem cabeçalho, nem estado.
+ *
+ * Um roteador seria uma dependência a mais para decidir entre DUAS
+ * telas. O Caddy já faz `try_files {path} /index.html`, então qualquer
+ * caminho chega aqui e este `startsWith` resolve.
+ */
+const noPainel = window.location.pathname.startsWith('/plataforma');
+
 createRoot(raiz).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  <StrictMode>{noPainel ? <Plataforma /> : <App />}</StrictMode>,
 );
 
 /*
