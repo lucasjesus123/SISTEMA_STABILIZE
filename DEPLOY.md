@@ -206,12 +206,35 @@ problemas às três da manhã.
 ## 6. Atualizar
 
 ```bash
-cd /opt/stabilize
+./deploy/atualizar.sh
+```
+
+O script faz backup, traz o código, constrói as imagens, aplica as
+migrations, sobe e confere — nesta ordem, e parando na primeira falha.
+
+**Use o script, e não a lista de comandos abaixo.** Ela está aqui só
+para explicar o que ele faz:
+
+```bash
+./deploy/backup.sh
 git pull
-docker compose --profile ferramentas build
+docker compose --profile ferramentas build   # <- o --profile NÃO é opcional
 docker compose run --rm migrate
 docker compose up -d
 ```
+
+O `--profile ferramentas` no build é o detalhe que já custou uma
+atualização pela metade. O serviço `migrate` tem `profiles` para ficar
+fora do `docker compose up`; isso também o exclui do `build`. Sem a
+flag, o `run --rm migrate` sobe a imagem ANTIGA, reaplica o que já
+estava aplicado e imprime "migrations aplicadas" com ar de sucesso —
+enquanto a API nova já está no ar esperando colunas que não existem.
+Tudo verde, nada quebrado à vista, e o erro só aparece quando alguém
+abre a tela nova.
+
+Por isso o `migrate.sh` passou a imprimir quantos arquivos de migration
+existem na imagem, e o `atualizar.sh` compara com o disco e PARA antes
+de subir a API se os números divergirem.
 
 Faça backup **antes** de migration que mexa em estrutura. As migrations
 registram o que já rodou numa tabela `schema_migrations`, então

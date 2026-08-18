@@ -149,4 +149,20 @@ for file in "${SQL_DIR}"/[0-8]*.sql; do
   esac
 done
 
+# ---------------------------------------------------------------------
+# QUANTOS ARQUIVOS ESTA IMAGEM TEM.
+#
+# Parece supérfluo e não é: o serviço `migrate` tem `profiles`, e
+# `docker compose build` sem `--profile ferramentas` NÃO reconstrói esta
+# imagem. Quando isso acontece, o container sobe com os arquivos SQL
+# ANTIGOS, reaplica o que já estava aplicado e imprime "migrations
+# aplicadas" com ar de sucesso — enquanto a API nova já está no ar
+# esperando colunas que não existem.
+#
+# Aconteceu numa atualização real. Esta linha é o que permite ao
+# `deploy/atualizar.sh` comparar com o que existe no disco e PARAR antes
+# de subir a API.
+# ---------------------------------------------------------------------
+total=$(find "${SQL_DIR}" -maxdepth 1 -name '[0-8]*.sql' | wc -l | tr -d ' ')
+echo "==> arquivos de migration: ${total}"
 echo "==> migrations aplicadas"
