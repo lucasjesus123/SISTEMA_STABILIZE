@@ -21,6 +21,8 @@ export interface Principal {
   role: string;
   roleLabel: string;
   permissions: string[];
+  /** O fuso da ACADEMIA — é nele que o servidor valida a agenda. */
+  timezone?: string;
   studentId?: string;
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from './api.js';
 import { Erro } from './ui.jsx';
+import { JanelaDeAtendimento } from './JanelaDeAtendimento.jsx';
 import type { Principal } from './api.js';
 
 /**
@@ -640,8 +641,15 @@ function Marcacao({
               </option>
             ))}
           </select>
-          {!podeEscolherProfissional && (
+          {!podeEscolherProfissional ? (
             <span className="campo-dica">Você marca na sua própria agenda.</span>
+          ) : (
+            <JanelaDeAtendimento
+              profissionalId={profissional}
+              dia={`${inicio.getFullYear()}-${String(inicio.getMonth() + 1).padStart(2, '0')}-${String(inicio.getDate()).padStart(2, '0')}`}
+              hora={`${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`}
+              {...(principal.timezone !== undefined ? { fuso: principal.timezone } : {})}
+            />
           )}
         </label>
 

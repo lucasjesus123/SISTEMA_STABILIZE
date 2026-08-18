@@ -2406,3 +2406,47 @@
   color: var(--atencao-texto);
   max-width: 62ch;
 }
+
+/* ---- fecho do cadastro ---------------------------------------------- */
+.conc-caixa {
+  padding: var(--e-5);
+  margin: var(--e-5) 0;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+  max-width: 52rem;
+}
+.conc-caixa p {
+  margin: 0;
+  color: var(--texto-corpo);
+}
+.conc-pronto {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: var(--ok-fundo);
+}
+.conc-pronto p {
+  color: var(--ok-texto);
+}
+.conc-aviso {
+  padding: var(--e-4) var(--e-5);
+  margin: var(--e-5) 0;
+  border-left: 3px solid var(--atencao);
+  border-radius: 0 var(--raio) var(--raio) 0;
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+  max-width: 62ch;
+}
+.conc-form {
+  margin-top: var(--e-5);
+}
+
+/* A janela de atendimento fala em dois tons: informa quando bate, avisa
+   quando não bate. Cor só no segundo caso — dica colorida por padrão
+   ensina o olho a ignorá-la. */
+.jan-alerta {
+  color: var(--atencao-texto) !important;
+  font-weight: 500;
+}
+.jan-ok {
+  color: var(--ok-texto) !important;
+}

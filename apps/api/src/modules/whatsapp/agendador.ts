@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { enviarAniversariosDoDia } from './aniversarios.js';
+import { envelhecerCobrancas } from '../finance/vencimento.js';
 
 /**
  * Agendador de tarefas de fundo.
@@ -36,6 +37,25 @@ export function registrarAgendador(app: FastifyInstance): void {
 
   const tique = async (): Promise<void> => {
     const agora = new Date();
+
+    /* ENVELHECER COBRANÇAS RODA A CADA TIQUE, e não uma vez por dia numa
+       hora fixa como os aniversários. O motivo é o fuso: cada academia
+       vira o dia numa hora diferente do relógio deste servidor, e uma
+       tarefa presa às 9h de UTC deixaria a academia mais a oeste com o
+       status errado por horas todo dia. De hora em hora, o pior atraso
+       é de uma hora para qualquer fuso.
+
+       É um UPDATE que só toca as linhas que realmente mudaram: quando
+       não há nada vencendo, ele não escreve nada. */
+    try {
+      const venc = await envelhecerCobrancas(app.log);
+      if (venc.vencidas > 0) {
+        app.log.info({ vencimento: venc }, 'cobranças marcadas como vencidas');
+      }
+    } catch (erro) {
+      app.log.error({ err: erro }, 'tarefa de vencimento falhou');
+    }
+
     if (agora.getHours() !== HORA_DO_ENVIO) return;
 
     /* Guarda de dia: o tique de hora em hora cairia duas vezes dentro da
@@ -67,5 +87,9 @@ export function registrarAgendador(app: FastifyInstance): void {
     clearInterval(relogio);
   });
 
-  app.log.info({ hora: HORA_DO_ENVIO }, 'agendador de aniversários ativo');
+  /* Uma passada agora, sem esperar a primeira hora: reiniciar a API
+     depois da meia-noite não pode deixar o financeiro um dia atrasado. */
+  void tique();
+
+  app.log.info({ hora: HORA_DO_ENVIO }, 'agendador ativo (vencimentos e aniversários)');
 }

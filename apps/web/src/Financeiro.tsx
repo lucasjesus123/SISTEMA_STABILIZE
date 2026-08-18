@@ -79,16 +79,18 @@ const hojeIso = (): string => {
 };
 
 /**
- * A situação REAL do lançamento.
+ * A situação do lançamento, conferida contra o calendário.
  *
- * O `status` gravado no banco só vira OVERDUE quando alguma rotina passa
- * e o atualiza. Enquanto ela não passa, a linha diz "em aberto" com
- * vencimento de uma semana atrás — e o cartão do topo, que conta pela
- * DATA, diz "12 cobranças vencidas". Os dois números na mesma tela, se
- * contradizendo.
+ * QUEM MANTÉM O `status` É O SERVIDOR — uma tarefa de fundo que roda de
+ * hora em hora (`envelhecerCobrancas`) e marca como vencido o que passou
+ * da data, no fuso de cada academia. Isso é de propósito: se cada tela
+ * calculasse "vencido" por conta própria, o relatório, a API e a régua
+ * de cobrança calculariam de três jeitos e um dia divergiriam.
  *
- * Vencido é um fato do calendário, não um estado a ser mantido. Quem
- * decide aqui é a data.
+ * ESTA FUNÇÃO NÃO SUBSTITUI AQUILO — cobre a fresta entre a virada do
+ * dia e o próximo tique da tarefa, que é de no máximo uma hora. Sem ela,
+ * nessa fresta, o cartão do topo (que conta pela data) diria "12
+ * vencidas" enquanto as 12 linhas diriam "em aberto".
  */
 function situacaoReal(l: api.Lancamento): api.StatusLancamento {
   if (l.status === 'PAID' || l.status === 'CANCELLED') return l.status;

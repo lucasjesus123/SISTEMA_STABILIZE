@@ -33,6 +33,15 @@ import { Perfil } from './Perfil.jsx';
 import { Financeiro } from './Financeiro.jsx';
 import { Agenda } from './Agenda.jsx';
 import {
+  CadastroConcluido,
+  SecaoDoPlano,
+  gravarPlano,
+  planoVazio,
+  useEquipe,
+  usePlanoExistente,
+  type DadosDoPlano,
+} from './PlanoDoAluno.jsx';
+import {
   e164ParaMascara,
   mascararCep,
   mascararTelefone,
@@ -169,8 +178,14 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
     setErro(null);
     setEnviando(true);
     try {
-      const r = await entrar(email.trim(), senha);
-      aoEntrar(r.user);
+      await entrar(email.trim(), senha);
+      /* O `/me` logo depois do login, e não o `user` que o login
+         devolve. São duas formas quase iguais do mesmo objeto, e a do
+         login não traz o fuso da academia — que a agenda precisa para
+         conferir horário do mesmo jeito que o servidor confere. Duas
+         formas do mesmo dado é como uma delas fica para trás; esta
+         chamada extra, uma vez por login, elimina a divergência. */
+      aoEntrar(await buscarPrincipal());
     } catch (erroCapturado) {
       /* A mensagem vem do servidor e é deliberadamente igual para
          "e-mail não existe" e "senha errada" — distinguir permitiria
@@ -726,7 +741,13 @@ function Alunos({ principal }: { principal: Principal }): ReactNode {
   /* Três telas no mesmo lugar: lista, ficha e formulário. Sem
      roteador por enquanto — o custo de um seria maior que o ganho com
      três destinos, e trocar depois é local. */
-  const [vendo, setVendo] = useState<{ tela: 'lista' } | { tela: 'ficha'; id: string } | { tela: 'novo' } | { tela: 'editar'; id: string }>({ tela: 'lista' });
+  const [vendo, setVendo] = useState<
+    | { tela: 'lista' }
+    | { tela: 'ficha'; id: string }
+    | { tela: 'novo' }
+    | { tela: 'editar'; id: string }
+    | { tela: 'concluido'; id: string; nome: string; aviso: string | null }
+  >({ tela: 'lista' });
   const [lista, setLista] = useState<Aluno[]>([]);
   const [total, setTotal] = useState(0);
   const [busca, setBusca] = useState('');
@@ -767,10 +788,37 @@ function Alunos({ principal }: { principal: Principal }): ReactNode {
     return <Ficha principal={principal} id={vendo.id} aoVoltar={() => setVendo({ tela: 'lista' })} aoEditar={() => setVendo({ tela: 'editar', id: vendo.id })} />;
   }
   if (vendo.tela === 'novo') {
-    return <FormularioAluno aoSair={() => setVendo({ tela: 'lista' })} aoSalvar={(id) => setVendo({ tela: 'ficha', id })} />;
+    return (
+      <FormularioAluno
+        principal={principal}
+        aoSair={() => setVendo({ tela: 'lista' })}
+        /* Aluno NOVO cai no fecho do cadastro, não na ficha: o passo
+           seguinte de quem acabou de cadastrar alguém é marcar o
+           primeiro horário, e a ficha o mandaria procurar outra aba. */
+        aoSalvar={(id, nome, aviso) => setVendo({ tela: 'concluido', id, nome, aviso })}
+      />
+    );
+  }
+  if (vendo.tela === 'concluido') {
+    return (
+      <CadastroConcluido
+        alunoId={vendo.id}
+        nome={vendo.nome}
+        principal={principal}
+        avisoDoPlano={vendo.aviso}
+        aoAbrirFicha={() => setVendo({ tela: 'ficha', id: vendo.id })}
+      />
+    );
   }
   if (vendo.tela === 'editar') {
-    return <FormularioAluno id={vendo.id} aoSair={() => setVendo({ tela: 'ficha', id: vendo.id })} aoSalvar={(id) => setVendo({ tela: 'ficha', id })} />;
+    return (
+      <FormularioAluno
+        id={vendo.id}
+        principal={principal}
+        aoSair={() => setVendo({ tela: 'ficha', id: vendo.id })}
+        aoSalvar={(id) => setVendo({ tela: 'ficha', id })}
+      />
+    );
   }
 
   return (
@@ -1273,14 +1321,27 @@ function semMascara(dados: DadosAluno): DadosAluno {
 
 function FormularioAluno({
   id,
+  principal,
   aoSair,
   aoSalvar,
 }: {
   id?: string;
+  principal: Principal;
   aoSair: () => void;
-  aoSalvar: (id: string) => void;
+  aoSalvar: (id: string, nome: string, aviso: string | null) => void;
 }): ReactNode {
   const [dados, setDados] = useState<DadosAluno>({});
+  const [plano, setPlano] = useState<DadosDoPlano>(planoVazio);
+  const equipe = useEquipe();
+  const planoGravado = usePlanoExistente(id);
+  /* Só quem administra define preço. O servidor exige `pricing:write`;
+     aqui os campos ficam visíveis mas travados, para que a recepção
+     saiba que o plano existe e a quem pedir. */
+  const planoBloqueado = !principal.permissions.includes('pricing:write');
+
+  useEffect(() => {
+    if (planoGravado !== null) setPlano(planoGravado);
+  }, [planoGravado]);
   const [erro, setErro] = useState<string | null>(null);
   const [detalhes, setDetalhes] = useState<{ campo: string; problema: string }[]>([]);
   const [enviando, setEnviando] = useState(false);
@@ -1328,12 +1389,34 @@ function FormularioAluno({
     setEnviando(true);
     try {
       const paraEnviar = semMascara(dados);
+      const nome = (dados['nome'] ?? '').trim();
+
+      /* O PLANO É GRAVADO DEPOIS, e a falha dele não derruba o cadastro.
+         Aluno sem plano é cadastro legítimo — alguém que veio conhecer e
+         ainda não fechou. Perder dezoito campos preenchidos porque o
+         valor saiu com vírgula errada seria trocar um problema pequeno
+         por um grande. A tela seguinte diz o que faltou. */
+      const salvarPlano = async (alunoId: string): Promise<string | null> => {
+        if (planoBloqueado) return null;
+        try {
+          await gravarPlano(alunoId, plano);
+          return null;
+        } catch (x) {
+          return x instanceof ApiError ? x.message : 'O valor não foi aceito.';
+        }
+      };
+
       if (id === undefined) {
         const r = await criarAluno(paraEnviar);
-        aoSalvar(r.data.id);
+        aoSalvar(r.data.id, nome, await salvarPlano(r.data.id));
       } else {
         await atualizarAluno(id, paraEnviar);
-        aoSalvar(id);
+        const aviso = await salvarPlano(id);
+        if (aviso !== null) {
+          setErro(`O cadastro foi salvo, mas o plano não: ${aviso}`);
+          return;
+        }
+        aoSalvar(id, nome, null);
       }
     } catch (e) {
       if (e instanceof ApiError) {
@@ -1421,6 +1504,15 @@ function FormularioAluno({
             ))}
           </Fragment>
         ))}
+
+        <SecaoDoPlano
+          plano={plano}
+          aoMudar={setPlano}
+          equipe={equipe}
+          bloqueado={planoBloqueado}
+        />
+
+        <h2 className="formulario-secao campo-cheia">Situação e observações</h2>
 
         <label className="campo campo-meia">
           <span className="campo-rotulo">Situação</span>

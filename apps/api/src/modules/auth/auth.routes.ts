@@ -192,9 +192,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const { rows } = await withTenant(
       { tenantId: principal.tenantId, userId: principal.userId },
       (client) =>
-        client.query<{ full_name: string }>('SELECT full_name FROM users WHERE id = $1', [
-          principal.userId,
-        ]),
+        client.query<{ full_name: string; timezone: string }>(
+          `SELECT u.full_name, t.timezone
+             FROM users u JOIN tenants t ON t.id = u.tenant_id
+            WHERE u.id = $1`,
+          [principal.userId],
+        ),
     );
 
     return {
@@ -203,6 +206,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       role: principal.role,
       roleLabel: ROLE_LABELS[principal.role],
       permissions: permissionsOf(principal.role),
+      /* O FUSO DA ACADEMIA, e não o do navegador.
+         A agenda é validada no servidor contra a janela de atendimento
+         convertida para ESTE fuso. Se a tela conferir a mesma coisa no
+         fuso de quem está olhando, os dois discordam para qualquer
+         pessoa que abra o sistema de fora do país — e a tela promete um
+         horário que o servidor recusa. */
+      timezone: rows[0]?.timezone ?? 'America/Sao_Paulo',
       ...(principal.studentId !== undefined ? { studentId: principal.studentId } : {}),
     };
   });
