@@ -306,6 +306,7 @@ export const buscarIndicadores = () =>
 
 export interface FichaAluno {
   id: string;
+  codigo: string | null;
   nome: string;
   email: string | null;
   telefone: string | null;

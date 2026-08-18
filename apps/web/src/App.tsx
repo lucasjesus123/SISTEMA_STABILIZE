@@ -59,6 +59,31 @@ import { mesclarEndereco, useBuscaDeCep } from './endereco.js';
 const capitalizar = (texto: string): string =>
   texto.charAt(0).toUpperCase() + texto.slice(1);
 
+/**
+ * Primeira letra do primeiro e do último nome.
+ *
+ * Ignora as partículas — "Ana Beatriz de Souza" vira AS, não AD. Uma
+ * inicial "de" não identifica ninguém.
+ */
+function iniciais(nome: string): string {
+  const partes = nome
+    .trim()
+    .split(/\s+/)
+    .filter((p) => p.length > 2 || /^[A-ZÀ-Ý]/.test(p[0] ?? ''));
+  const primeira = partes[0]?.[0] ?? '?';
+  const ultima = partes.length > 1 ? partes[partes.length - 1]?.[0] : '';
+  return (primeira + (ultima ?? '')).toUpperCase();
+}
+
+/* O mesmo vocabulário de tons do financeiro: a cor entra onde há
+   decisão a tomar, e o resto fica neutro. */
+const TOM_DO_ALUNO: Record<string, string> = {
+  ACTIVE: 'ok',
+  LEAD: 'atencao',
+  SUSPENDED: 'erro',
+  INACTIVE: 'neutra',
+};
+
 type Aba = 'painel' | 'alunos' | 'agenda' | 'financeiro' | 'whatsapp' | 'perfil';
 
 export default function App(): ReactNode {
@@ -531,37 +556,54 @@ function Painel({ principal }: { principal: Principal }): ReactNode {
         </p>
       </div>
 
-      {/* Fileira de indicadores separada por fios, não por cards. Card
-          para cada número criaria caixa dentro de caixa e roubaria a
-          atenção do dado, que é o que importa aqui. */}
-      <section className="indicadores" aria-label="Indicadores do mês">
-        <Indicador
-          rotulo="Recebido"
-          valorCentavos={resumo.recebidoCentavos}
-          detalhe={`de ${reais(resumo.aReceberCentavos)} previstos`}
-          tom="positivo"
-        />
-        <Indicador
-          rotulo="Pago"
-          valorCentavos={resumo.pagoCentavos}
-          detalhe={`de ${reais(resumo.aPagarCentavos)} previstos`}
-        />
-        <Indicador
-          rotulo="Saldo realizado"
-          valorCentavos={resumo.saldoRealizadoCentavos}
-          detalhe="entradas menos saídas efetivadas"
-          tom={saldoPositivo ? 'positivo' : 'negativo'}
-        />
-        <Indicador
-          rotulo="Em atraso"
-          valorCentavos={resumo.inadimplenteCentavos}
-          detalhe={
-            resumo.inadimplentesQtd === 1
-              ? '1 cobrança vencida'
-              : `${resumo.inadimplentesQtd} cobranças vencidas`
-          }
-          tom={resumo.inadimplenteCentavos > 0 ? 'atencao' : 'neutro'}
-        />
+      {/* O MESMO ARRANJO DO FINANCEIRO: um número grande e quatro de
+          apoio. Antes eram quatro indicadores do mesmo tamanho, cada um
+          com sua cor — verde, verde, verde, âmbar —, e cor em todos é o
+          mesmo que cor em nenhum: o olho aprende a ignorá-la e o único
+          número que exigia ação passava despercebido no meio. */}
+      <section className="fin-topo" aria-label="Indicadores do mês">
+        <div className="fin-hero">
+          <span className="fin-hero-rotulo">Saldo realizado</span>
+          <strong className={`fin-hero-valor ${saldoPositivo ? '' : 'negativo'}`}>
+            {reais(resumo.saldoRealizadoCentavos)}
+          </strong>
+          <span className="fin-hero-nota">
+            <span className="fin-entrou">{reais(resumo.recebidoCentavos)} entrou</span>
+            <span className="fin-sep" aria-hidden="true" />
+            <span className="fin-saiu">{reais(resumo.pagoCentavos)} saiu</span>
+          </span>
+        </div>
+
+        <div className="fin-kpis">
+          <div className={`fin-kpi ${resumo.inadimplenteCentavos > 0 ? 'erro' : ''}`}>
+            <span className="fin-kpi-rotulo">Em atraso</span>
+            <strong className="fin-kpi-valor">{reais(resumo.inadimplenteCentavos)}</strong>
+            <span className="fin-kpi-nota">
+              {resumo.inadimplentesQtd === 1
+                ? '1 cobrança vencida'
+                : `${resumo.inadimplentesQtd} cobranças vencidas`}
+            </span>
+          </div>
+          <div className="fin-kpi">
+            <span className="fin-kpi-rotulo">Vence hoje</span>
+            <strong className="fin-kpi-valor">{reais(resumo.venceHojeCentavos)}</strong>
+            <span className="fin-kpi-nota">
+              {resumo.venceHojeQtd === 0
+                ? 'nada para hoje'
+                : `${resumo.venceHojeQtd} cobrança${resumo.venceHojeQtd === 1 ? '' : 's'}`}
+            </span>
+          </div>
+          <div className="fin-kpi">
+            <span className="fin-kpi-rotulo">Previsto a receber</span>
+            <strong className="fin-kpi-valor">{reais(resumo.aReceberCentavos)}</strong>
+            <span className="fin-kpi-nota">{reais(resumo.recebidoCentavos)} já entrou</span>
+          </div>
+          <div className="fin-kpi">
+            <span className="fin-kpi-rotulo">Previsto a pagar</span>
+            <strong className="fin-kpi-valor">{reais(resumo.aPagarCentavos)}</strong>
+            <span className="fin-kpi-nota">{reais(resumo.pagoCentavos)} já saiu</span>
+          </div>
+        </div>
       </section>
 
       <section className="bloco" aria-labelledby="titulo-fluxo">
@@ -886,12 +928,24 @@ function Alunos({ principal }: { principal: Principal }): ReactNode {
                 }}
               >
                 <td>
-                  <span className="celula-forte">{a.nome}</span>
-                  {a.email !== null && <span className="celula-apoio">{a.email}</span>}
+                  {/* AS INICIAIS, e não uma foto. A lista traz vinte e
+                      cinco alunos e a foto de cada um seria uma
+                      requisição por linha; a inicial é grátis, e é o
+                      suficiente para o olho reencontrar um nome que já
+                      viu no meio da lista. */}
+                  <span className="aluno-linha">
+                    <span className="aluno-inicial" aria-hidden="true">
+                      {iniciais(a.nome)}
+                    </span>
+                    <span className="aluno-nome">
+                      <span className="celula-forte">{a.nome}</span>
+                      {a.email !== null && <span className="celula-apoio">{a.email}</span>}
+                    </span>
+                  </span>
                 </td>
                 <td className="tabular">{a.telefone ?? a.whatsapp ?? '—'}</td>
                 <td>
-                  <span className={`selo selo-${a.status.toLowerCase()}`}>
+                  <span className={`fin-selo ${TOM_DO_ALUNO[a.status] ?? 'neutra'}`}>
                     {ROTULO_STATUS[a.status] ?? a.status}
                   </span>
                 </td>
@@ -983,8 +1037,12 @@ function Ficha({
       <header className="ficha-topo">
         <div>
           <h1>{f.nome}</h1>
+          {/* O CÓDIGO INTERNO logo abaixo do nome. É por ele que a
+              academia chama o aluno no balcão e na carteirinha, e até
+              agora ele existia no banco sem aparecer em lugar nenhum. */}
+          {f.codigo !== null && <p className="ficha-codigo">Aluno nº {f.codigo}</p>}
           <div className="ficha-selos">
-            <span className={`selo selo-${f.status.toLowerCase()}`}>
+            <span className={`fin-selo ${TOM_DO_ALUNO[f.status] ?? 'neutra'}`}>
               {ROTULO_STATUS[f.status] ?? f.status}
             </span>
             {f.contrato !== null && (

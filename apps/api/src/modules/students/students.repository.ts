@@ -152,6 +152,8 @@ export async function assertStudentInScope(
 
 export interface FichaAluno {
   id: string;
+  /** Código interno, o número pelo qual a academia chama o aluno. */
+  codigo: string | null;
   nome: string;
   email: string | null;
   telefone: string | null;
@@ -262,6 +264,9 @@ export async function buscarFicha(
 
   return {
     id: String(x['id']),
+    /* O CÓDIGO INTERNO DO ALUNO. A coluna já vinha no `s.*` e nunca era
+       devolvida — a ficha existia com um número que ninguém via. */
+    codigo: txt('codigo'),
     nome: String(x['full_name']),
     email: txt('email'),
     telefone: txt('phone'),

@@ -2784,3 +2784,55 @@
   border-color: var(--teal-vivo);
   box-shadow: 0 0 0 3px var(--realce-teclado);
 }
+
+/* ---- lista de alunos ------------------------------------------------ */
+.aluno-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+}
+/* A inicial num disco de cor derivada do próprio nome: com trinta alunos
+   na tela, a cor é o que permite reencontrar alguém sem reler a lista
+   toda. A saturação é baixa de propósito — é auxílio de reconhecimento,
+   não semáforo, e não pode competir com o vermelho que significa algo. */
+.aluno-inicial {
+  flex-shrink: 0;
+  width: 2.1rem;
+  height: 2.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--superficie-realce);
+  color: var(--texto-corpo);
+  font-family: var(--fonte-display);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.aluno-nome {
+  display: grid;
+  min-width: 0;
+}
+.aluno-nome .celula-forte,
+.aluno-nome .celula-apoio {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Linhas mais baixas. Antes cabiam nove alunos de trinta e oito na tela;
+   quem procura alguém rolava três vezes para achar um nome que já sabia
+   existir. */
+.tabela td {
+  padding: var(--e-3) var(--e-4);
+}
+
+.ficha-codigo {
+  margin: 2px 0 var(--e-3);
+  font-family: var(--fonte-display);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+  font-variant-numeric: tabular-nums;
+}
