@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   ApiError,
   buscarAgenda,
@@ -26,7 +26,15 @@ import { AbaAnamnese, AbaAnexos, AbaEvolucao } from './Prontuario.jsx';
 import { AbaTreino } from './Treino.jsx';
 import { Whatsapp } from './Whatsapp.jsx';
 import { Aplicativo } from './Aplicativo.jsx';
-import { SeletorTema, useTema } from './tema.jsx';
+import { BotaoTema, useTema } from './tema.jsx';
+import { Perfil } from './Perfil.jsx';
+import {
+  e164ParaMascara,
+  mascararCep,
+  mascararTelefone,
+  telefoneParaE164,
+} from '@stabilize/shared';
+import { mesclarEndereco, useBuscaDeCep } from './endereco.js';
 
 /**
  * Primeira letra maiúscula, o resto intocado.
@@ -38,7 +46,7 @@ import { SeletorTema, useTema } from './tema.jsx';
 const capitalizar = (texto: string): string =>
   texto.charAt(0).toUpperCase() + texto.slice(1);
 
-type Aba = 'painel' | 'alunos' | 'agenda' | 'whatsapp';
+type Aba = 'painel' | 'alunos' | 'agenda' | 'whatsapp' | 'perfil';
 
 export default function App(): ReactNode {
   const [principal, setPrincipal] = useState<Principal | null>(null);
@@ -208,7 +216,7 @@ function Sistema({
   aoSair: () => void;
 }): ReactNode {
   const [aba, setAba] = useState<Aba>('painel');
-  const { tema, definir } = useTema();
+  const { efetivo, definir } = useTema();
 
   /* O menu é montado a partir das permissões do papel. Isto é
      conveniência de interface, NÃO segurança: esconder um botão não
@@ -226,6 +234,10 @@ function Sistema({
     { id: 'alunos', nome: 'Alunos', icone: <IconeAlunos />, visivel: pode('student:read') },
     { id: 'agenda', nome: 'Agenda', icone: <IconeAgenda />, visivel: pode('schedule:read') },
     { id: 'whatsapp', nome: 'WhatsApp', icone: <IconeWhatsapp />, visivel: pode('user:write') },
+    /* SEMPRE VISÍVEL, e é a única assim. As outras seções dependem de
+       permissão porque são dados da empresa; o perfil é a própria
+       pessoa, e não existe papel que não possa editar o próprio nome. */
+    { id: 'perfil', nome: 'Perfil', icone: <IconePerfil />, visivel: true },
   ];
   const visiveis = abas.filter((a) => a.visivel);
 
@@ -263,7 +275,6 @@ function Sistema({
         </nav>
 
         <div className="lateral-rodape">
-          <SeletorTema tema={tema} definir={definir} />
           <div className="lateral-conta">
             <span className="conta-papel">{principal.roleLabel}</span>
             <span className="conta-nome" title={principal.name}>
@@ -276,11 +287,18 @@ function Sistema({
         </div>
       </aside>
 
+      {/* O CANTO SUPERIOR DIREITO DA TELA, e não mais o rodapé do menu.
+          Fixo na janela em tela larga; na estreita, o CSS o devolve para
+          dentro da faixa do topo, que já é o canto superior direito de
+          lá. Ver `.tema-troca` em app.css. */}
+      <BotaoTema efetivo={efetivo} definir={definir} />
+
       <main id="conteudo" className="conteudo">
         {aba === 'painel' && <Painel principal={principal} />}
         {aba === 'alunos' && <Alunos principal={principal} />}
         {aba === 'agenda' && <Agenda />}
         {aba === 'whatsapp' && <Whatsapp />}
+        {aba === 'perfil' && <Perfil principal={principal} />}
       </main>
     </div>
   );
@@ -322,6 +340,15 @@ function IconeAgenda(): ReactNode {
     <svg {...svg}>
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+function IconePerfil(): ReactNode {
+  return (
+    <svg {...svg}>
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
     </svg>
   );
 }
@@ -1166,23 +1193,124 @@ function formatarData(iso: string): string {
  * Formulário
  * ================================================================== */
 
-const CAMPOS: { nome: string; rotulo: string; tipo?: string; dica?: string; largura?: 'meia' | 'terco' }[] = [
-  { nome: 'nome', rotulo: 'Nome completo' },
-  { nome: 'email', rotulo: 'E-mail', tipo: 'email', largura: 'meia' },
-  { nome: 'telefone', rotulo: 'Telefone', largura: 'meia' },
-  { nome: 'whatsapp', rotulo: 'WhatsApp', dica: 'Com país e DDD: +5531988887777', largura: 'meia' },
-  { nome: 'dataNascimento', rotulo: 'Nascimento', tipo: 'date', largura: 'meia' },
-  { nome: 'documento', rotulo: 'CPF', largura: 'meia' },
-  { nome: 'cep', rotulo: 'CEP', largura: 'meia' },
-  { nome: 'logradouro', rotulo: 'Logradouro' },
-  { nome: 'numero', rotulo: 'Número', largura: 'terco' },
-  { nome: 'complemento', rotulo: 'Complemento', largura: 'terco' },
-  { nome: 'bairro', rotulo: 'Bairro', largura: 'terco' },
-  { nome: 'cidade', rotulo: 'Cidade', largura: 'meia' },
-  { nome: 'uf', rotulo: 'Estado', dica: 'Sigla, como MG', largura: 'meia' },
-  { nome: 'contatoEmergencia', rotulo: 'Contato de emergência', largura: 'meia' },
-  { nome: 'telefoneEmergencia', rotulo: 'Telefone de emergência', largura: 'meia' },
+interface CampoForm {
+  nome: string;
+  rotulo: string;
+  tipo?: string;
+  dica?: string;
+  largura?: 'meia' | 'terco';
+  /* Como o que se digita vira o que se vê. `undefined` é texto livre. */
+  mascara?: 'telefone' | 'cep' | 'uf';
+  maximo?: number;
+  autoComplete?: string;
+  modoTeclado?: 'tel' | 'numeric';
+}
+
+/**
+ * O formulário em três blocos, e não numa lista corrida de dezoito
+ * campos. Quinze linhas iguais uma atrás da outra não dão ao olho
+ * nenhum lugar para descansar, e quem preenche perde o fio no meio.
+ *
+ * O CEP ABRE O BLOCO DE ENDEREÇO, e a posição é o recurso: preenchê-lo
+ * traz rua, bairro, cidade e estado sozinho. Vindo depois do logradouro,
+ * a pessoa digitaria à mão justamente o que o campo de cima ia
+ * preencher — e a ordem, sozinha, ensina isso sem precisar de aviso.
+ */
+const SECOES: { titulo: string; campos: CampoForm[] }[] = [
+  {
+    titulo: 'Dados pessoais',
+    campos: [
+      { nome: 'nome', rotulo: 'Nome completo', autoComplete: 'name' },
+      { nome: 'email', rotulo: 'E-mail', tipo: 'email', largura: 'meia', autoComplete: 'email' },
+      {
+        nome: 'telefone',
+        rotulo: 'Telefone',
+        largura: 'meia',
+        mascara: 'telefone',
+        modoTeclado: 'tel',
+        autoComplete: 'tel',
+      },
+      {
+        nome: 'whatsapp',
+        rotulo: 'WhatsApp',
+        dica: 'É por aqui que a academia manda os lembretes.',
+        largura: 'meia',
+        mascara: 'telefone',
+        modoTeclado: 'tel',
+      },
+      { nome: 'dataNascimento', rotulo: 'Nascimento', tipo: 'date', largura: 'meia' },
+      { nome: 'documento', rotulo: 'CPF', largura: 'meia', modoTeclado: 'numeric' },
+    ],
+  },
+  {
+    titulo: 'Endereço',
+    campos: [
+      {
+        nome: 'cep',
+        rotulo: 'CEP',
+        largura: 'meia',
+        mascara: 'cep',
+        modoTeclado: 'numeric',
+        autoComplete: 'postal-code',
+      },
+      { nome: 'logradouro', rotulo: 'Logradouro', largura: 'meia', autoComplete: 'address-line1' },
+      { nome: 'numero', rotulo: 'Número', largura: 'terco' },
+      { nome: 'complemento', rotulo: 'Complemento', largura: 'terco' },
+      { nome: 'bairro', rotulo: 'Bairro', largura: 'terco' },
+      { nome: 'cidade', rotulo: 'Cidade', largura: 'meia' },
+      { nome: 'uf', rotulo: 'Estado', dica: 'Sigla, como RS', largura: 'meia', mascara: 'uf', maximo: 2 },
+    ],
+  },
+  {
+    titulo: 'Em caso de emergência',
+    campos: [
+      { nome: 'contatoEmergencia', rotulo: 'Quem avisar', largura: 'meia' },
+      {
+        nome: 'telefoneEmergencia',
+        rotulo: 'Telefone',
+        largura: 'meia',
+        mascara: 'telefone',
+        modoTeclado: 'tel',
+      },
+    ],
+  },
 ];
+
+/* Achatado para procurar o rótulo de um campo que o servidor recusou. */
+const CAMPOS: CampoForm[] = SECOES.flatMap((s) => s.campos);
+
+function aplicarMascara(campo: CampoForm, valor: string): string {
+  switch (campo.mascara) {
+    case 'telefone':
+      return mascararTelefone(valor);
+    case 'cep':
+      return mascararCep(valor);
+    case 'uf':
+      return valor.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+    default:
+      return valor;
+  }
+}
+
+/**
+ * Desfaz as máscaras antes de enviar.
+ *
+ * A tela guarda `(51) 99266-8095` porque é isso que a pessoa lê. O
+ * servidor exige `+5551992668095` no WhatsApp — é o formato do CHECK no
+ * banco — e o CEP em dígitos, para que uma busca por CEP não dependa de
+ * quem digitou ter posto o hífen.
+ *
+ * SEM ISTO O CADASTRO PARARIA DE SALVAR no momento em que a máscara
+ * entrou: o campo passaria a mandar parênteses para uma validação que
+ * espera `+55`, e a mensagem seria "Use o formato +5531999998888" num
+ * campo onde ninguém digitou nada errado.
+ */
+function semMascara(dados: DadosAluno): DadosAluno {
+  const saida: DadosAluno = { ...dados };
+  if (dados.whatsapp !== undefined) saida.whatsapp = telefoneParaE164(dados.whatsapp) ?? '';
+  if (dados.cep !== undefined) saida.cep = dados.cep.replace(/\D/g, '');
+  return saida;
+}
 
 function FormularioAluno({
   id,
@@ -1207,13 +1335,16 @@ function FormularioAluno({
         setDados({
           nome: f.nome,
           email: f.email ?? '',
-          telefone: f.telefone ?? '',
-          whatsapp: f.whatsapp ?? '',
+          /* O banco guarda o dado; a tela mostra a máscara. Sem esta
+             tradução, editar um aluno já cadastrado exibiria
+             "+5551992668095" num campo que promete "(51) 99999-9999". */
+          telefone: e164ParaMascara(f.telefone),
+          whatsapp: e164ParaMascara(f.whatsapp),
           dataNascimento: f.dataNascimento ?? '',
           documento: f.documento ?? '',
           status: f.status,
           observacoes: f.observacoes ?? '',
-          cep: f.endereco.cep ?? '',
+          cep: mascararCep(f.endereco.cep ?? ''),
           logradouro: f.endereco.logradouro ?? '',
           numero: f.endereco.numero ?? '',
           complemento: f.endereco.complemento ?? '',
@@ -1221,7 +1352,7 @@ function FormularioAluno({
           cidade: f.endereco.cidade ?? '',
           uf: f.endereco.uf ?? '',
           contatoEmergencia: f.emergencia.contato ?? '',
-          telefoneEmergencia: f.emergencia.telefone ?? '',
+          telefoneEmergencia: e164ParaMascara(f.emergencia.telefone),
         });
       } catch (e) {
         setErro(e instanceof ApiError ? e.message : 'Não foi possível carregar o cadastro.');
@@ -1237,11 +1368,12 @@ function FormularioAluno({
     setDetalhes([]);
     setEnviando(true);
     try {
+      const paraEnviar = semMascara(dados);
       if (id === undefined) {
-        const r = await criarAluno(dados);
+        const r = await criarAluno(paraEnviar);
         aoSalvar(r.data.id);
       } else {
-        await atualizarAluno(id, dados);
+        await atualizarAluno(id, paraEnviar);
         aoSalvar(id);
       }
     } catch (e) {
@@ -1260,6 +1392,23 @@ function FormularioAluno({
     }
   };
 
+  /* Assim que o CEP fica completo, o endereço chega sozinho — e só
+     preenche o que está em branco, para não apagar a rua que alguém
+     corrigiu à mão. Ver `useBuscaDeCep`. */
+  const { buscando: buscandoCep, naoEncontrado: cepNaoEncontrado } = useBuscaDeCep(
+    dados['cep'] ?? '',
+    (achado) => {
+      setDados((d) =>
+        mesclarEndereco(d, achado, {
+          logradouro: 'logradouro',
+          bairro: 'bairro',
+          cidade: 'cidade',
+          uf: 'uf',
+        }),
+      );
+    },
+  );
+
   if (carregando) return <Carregando rotulo="Carregando o cadastro" />;
 
   const mudar = (campo: string, valor: string): void =>
@@ -1277,18 +1426,41 @@ function FormularioAluno({
       </div>
 
       <form className="formulario" onSubmit={(e) => void enviar(e)} noValidate>
-        {CAMPOS.map((c) => (
-          <label key={c.nome} className={`campo campo-${c.largura ?? 'cheia'}`}>
-            <span className="campo-rotulo">{c.rotulo}</span>
-            <input
-              type={c.tipo ?? 'text'}
-              value={dados[c.nome] ?? ''}
-              onChange={(e) => mudar(c.nome, e.target.value)}
-              required={c.nome === 'nome'}
-              autoFocus={c.nome === 'nome'}
-            />
-            {c.dica !== undefined && <span className="campo-dica">{c.dica}</span>}
-          </label>
+        {SECOES.map((secao) => (
+          <Fragment key={secao.titulo}>
+            <h2 className="formulario-secao campo-cheia">{secao.titulo}</h2>
+            {secao.campos.map((c) => (
+              <label key={c.nome} className={`campo campo-${c.largura ?? 'cheia'}`}>
+                <span className="campo-rotulo">{c.rotulo}</span>
+                <input
+                  type={c.tipo ?? 'text'}
+                  value={dados[c.nome] ?? ''}
+                  onChange={(e) => mudar(c.nome, aplicarMascara(c, e.target.value))}
+                  required={c.nome === 'nome'}
+                  autoFocus={c.nome === 'nome'}
+                  {...(c.maximo !== undefined ? { maxLength: c.maximo } : {})}
+                  {...(c.modoTeclado !== undefined ? { inputMode: c.modoTeclado } : {})}
+                  {...(c.autoComplete !== undefined ? { autoComplete: c.autoComplete } : {})}
+                  {...(c.mascara === 'telefone' ? { placeholder: '(51) 99999-9999' } : {})}
+                  {...(c.mascara === 'cep' ? { placeholder: '99999-999' } : {})}
+                />
+                {c.nome === 'cep' ? (
+                  /* O estado da busca ocupa o lugar da dica, em vez de
+                     abrir uma linha nova: um campo que cresce e encolhe
+                     empurra o formulário inteiro a cada tecla. */
+                  <span className="campo-dica" aria-live="polite">
+                    {buscandoCep
+                      ? 'Buscando o endereço…'
+                      : cepNaoEncontrado
+                        ? 'CEP não encontrado. Preencha o endereço abaixo.'
+                        : 'Preencha o CEP e o endereço vem sozinho.'}
+                  </span>
+                ) : (
+                  c.dica !== undefined && <span className="campo-dica">{c.dica}</span>
+                )}
+              </label>
+            ))}
+          </Fragment>
         ))}
 
         <label className="campo campo-meia">

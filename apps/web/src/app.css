@@ -486,20 +486,6 @@
   text-decoration: underline;
 }
 
-/* O seletor de tema mora numa coluna escura, então precisa das cores
-   dela — as do tema claro sumiriam no fundo. */
-.lateral .seletor-tema {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-.lateral .seletor-opcao {
-  color: #93a9ab;
-}
-.lateral .seletor-opcao.ativa {
-  background: rgba(255, 255, 255, 0.1);
-  color: #eaf7f8;
-}
-
 .conta-papel {
   font-size: var(--t-xs);
   font-weight: 600;
@@ -998,38 +984,208 @@
 }
 
 /* ---------------------------------------------------------------------
-   Seletor de tema
+   Sol e lua, no canto superior direito da tela
 
-   Grupo de três, não interruptor de dois: um switch binário não
-   consegue representar "siga o sistema", e é por isso que tantos
-   aplicativos perdem essa opção pelo caminho.
+   Dois ícones, não um que alterna: um botão que troca de ícone obriga a
+   decidir se ele mostra o estado atual ou o resultado do clique, e
+   metade das pessoas lê ao contrário. Com os dois visíveis o aceso é
+   onde você está e o apagado é para onde você vai.
+
+   FIXO NA JANELA, e não dentro do conteúdo que rola: em tela larga ele
+   fica onde o pedido dizia — no canto — e continua lá depois de rolar
+   uma lista de trezentos alunos.
    ------------------------------------------------------------------- */
 
-.seletor-tema {
+.tema-troca {
+  position: fixed;
+  top: var(--e-4);
+  right: var(--e-4);
+  z-index: 20;
   display: inline-flex;
-  padding: 2px;
+  gap: 2px;
+  padding: 3px;
   border: 1px solid var(--fio);
-  border-radius: var(--raio-md);
-  background: var(--superficie-baixa);
+  border-radius: 999px;
+  background: var(--superficie-alta);
+  box-shadow: var(--sombra-1);
 }
 
-.seletor-opcao {
-  padding: 3px var(--e-3);
-  font-size: var(--t-xs);
-  font-weight: 600;
+.tema-icone {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
   color: var(--texto-apoio);
-  border-radius: calc(var(--raio-md) - 2px);
   transition:
     color var(--rapido) var(--saida),
     background var(--rapido) var(--saida);
 }
-.seletor-opcao:hover {
+.tema-icone:hover {
+  color: var(--texto);
+  background: var(--superficie-realce);
+}
+.tema-icone.ativa {
+  background: var(--teal);
+  /* Branco fixo, e não `--superficie`: o botão aceso é teal nos DOIS
+     temas, e no tema escuro a superfície é quase preta — o ícone sumiria
+     dentro do próprio destaque. */
+  color: #ffffff;
+}
+
+/* Em tela estreita a faixa do topo já ocupa o canto, e um botão fixo por
+   cima cobriria o nome de quem está logado. Ele entra na própria faixa,
+   que continua sendo o canto superior direito. */
+@media (max-width: 60rem) {
+  .tema-troca {
+    position: absolute;
+    top: 10px;
+    right: var(--e-4);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
+  }
+  .tema-icone {
+    color: #93a9ab;
+  }
+  .tema-icone:hover {
+    color: #eaf7f8;
+    background: rgba(255, 255, 255, 0.1);
+  }
+  /* O `.sistema` vira a âncora do `position: absolute` acima. */
+  .sistema {
+    position: relative;
+  }
+  /* Abre espaço à direita da faixa para o botão não cobrir o "Sair". */
+  .lateral-rodape {
+    padding-right: 5.5rem;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Perfil: retrato, campos fixos e seções do formulário
+   ------------------------------------------------------------------- */
+
+.retrato {
+  display: flex;
+  align-items: center;
+  gap: var(--e-5);
+  flex-wrap: wrap;
+  padding: var(--e-5);
+  margin-bottom: var(--e-6);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+
+.retrato-imagem {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--superficie-realce);
+  border: 1px solid var(--fio-forte);
+}
+.retrato-imagem img {
+  width: 100%;
+  height: 100%;
+  /* `cover` e não `contain`: retrato cortado nas bordas é retrato;
+     retrato com tarja nas laterais parece erro de upload. */
+  object-fit: cover;
+  display: block;
+}
+.retrato-iniciais {
+  font-size: 1.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--texto-apoio);
+}
+
+.retrato-acoes {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.retrato-titulo {
+  margin: 0;
+  font-weight: 600;
   color: var(--texto);
 }
-.seletor-opcao.ativa {
-  background: var(--superficie-alta);
-  color: var(--teal);
-  box-shadow: var(--sombra-1);
+.retrato-dica {
+  margin: 0 0 var(--e-3);
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.retrato-botoes {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  flex-wrap: wrap;
+}
+/* O input de arquivo some da tela mas continua alcançável pelo teclado e
+   pelo leitor de tela: `display: none` o tiraria da ordem de foco, e o
+   `<label>` deixaria de ter o que rotular. */
+.retrato-entrada {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.retrato-entrada:focus-visible + .retrato-botoes label,
+.retrato-botoes label:hover {
+  cursor: pointer;
+}
+.retrato-erro {
+  margin: var(--e-3) 0 0;
+  font-size: var(--t-sm);
+  color: var(--erro);
+}
+
+/* Campo que é informação, não entrada. Sem cara de input desabilitado:
+   um campo cinza que não aceita clique parece defeito do sistema. */
+.campo-fixo-valor {
+  margin: 0;
+  padding: 9px 0;
+  font-size: var(--t-md);
+  color: var(--texto);
+  word-break: break-word;
+}
+
+.formulario-secao {
+  margin: var(--e-5) 0 calc(var(--e-2) * -1);
+  padding-bottom: var(--e-2);
+  border-bottom: 1px solid var(--fio);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-apoio);
+}
+.formulario-secao:first-child {
+  margin-top: 0;
+}
+
+.botao-texto-perigo {
+  font-size: var(--t-sm);
+  color: var(--erro);
+  padding: 6px 0;
+}
+.botao-texto-perigo:hover {
+  text-decoration: underline;
+}
+
+.aviso-salvo {
+  margin-right: auto;
+  font-size: var(--t-sm);
+  color: var(--ok);
 }
 
 /* ---------------------------------------------------------------------

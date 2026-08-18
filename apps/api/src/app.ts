@@ -9,10 +9,13 @@ import { authRoutes } from './modules/auth/auth.routes.js';
 import { studentsRoutes } from './modules/students/students.routes.js';
 import { recordsRoutes } from './modules/records/records.routes.js';
 import { attachmentsRoutes } from './modules/attachments/attachments.routes.js';
+import { fotoAlunoRoutes } from './modules/students/foto.routes.js';
 import { exercisesRoutes, workoutsRoutes } from './modules/workouts/workouts.routes.js';
 import { whatsappRoutes } from './modules/whatsapp/whatsapp.routes.js';
 import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { portalRoutes } from './modules/portal/portal.routes.js';
+import { perfilRoutes } from './modules/perfil/perfil.routes.js';
+import { cepRoutes } from './modules/cep/cep.routes.js';
 import { registrarAgendador } from './modules/whatsapp/agendador.js';
 import multipart from '@fastify/multipart';
 import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
@@ -168,6 +171,7 @@ export async function buildApp(): Promise<FastifyInstance> {
      solta — existe DE um aluno, e é o aluno que passa pelo escopo. */
   await app.register(recordsRoutes, { prefix: '/api/students' });
   await app.register(attachmentsRoutes, { prefix: '/api/students' });
+  await app.register(fotoAlunoRoutes, { prefix: '/api/students' });
   await app.register(workoutsRoutes, { prefix: '/api/students' });
   /* A biblioteca tem raiz própria porque é da EMPRESA, não de um aluno.
      A URL diz de quem é a coisa, e isso determina como ela é protegida. */
@@ -177,6 +181,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   /* O portal do aluno. A URL não tem id de aluno em lugar nenhum: ele
      vem do token, e o que não é parâmetro não é adulterável. */
   await app.register(portalRoutes, { prefix: '/api/eu' });
+  /* O perfil da própria pessoa, seja ela dona, recepcionista ou aluno.
+     Como o portal, não carrega id na URL: o id vem do token. */
+  await app.register(perfilRoutes, { prefix: '/api/perfil' });
+  /* Consulta de CEP. Sai para a internet, então é autenticada e o que
+     entra são oito dígitos validados — ver o cabeçalho do arquivo. */
+  await app.register(cepRoutes, { prefix: '/api/cep' });
 
   registrarAgendador(app);
   await app.register(scheduleRoutes, { prefix: '/api/schedule' });

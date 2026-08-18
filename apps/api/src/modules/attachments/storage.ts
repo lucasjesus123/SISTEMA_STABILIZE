@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, open, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
@@ -166,6 +166,40 @@ function confere(inicio: Buffer, assinaturas: readonly Uint8Array[]): boolean {
 /** Fluxo de leitura do anexo, para o download. */
 export function ler(tenantId: string, chave: string): Readable {
   return createReadStream(caminhoDe(tenantId, chave));
+}
+
+/**
+ * O tipo real da imagem, lido dos primeiros bytes do arquivo.
+ *
+ * Existe para a foto de perfil, que precisa ir com `Content-Type`
+ * correto — um blob de `application/octet-stream` não vira `<img>` de
+ * forma confiável em todo navegador.
+ *
+ * PODERIA SER UMA COLUNA `avatar_mime` no banco, e não é de propósito:
+ * uma coluna guarda o que foi DECLARADO no upload e passa a poder
+ * discordar do arquivo (restore parcial, correção manual, migração de
+ * dados). Lendo do próprio arquivo, o cabeçalho e o conteúdo não têm
+ * como divergir. Custa quatro bytes de leitura por foto servida.
+ *
+ * Devolve `null` para qualquer coisa que não seja imagem raster
+ * conhecida — e quem chama trata isso como arquivo inservível, não como
+ * "manda assim mesmo".
+ */
+export async function tipoDeImagem(tenantId: string, chave: string): Promise<string | null> {
+  const IMAGENS = ['image/jpeg', 'image/png', 'image/webp'] as const;
+  const arquivo = await open(caminhoDe(tenantId, chave), 'r');
+  try {
+    const inicio = Buffer.alloc(16);
+    const { bytesRead } = await arquivo.read(inicio, 0, 16, 0);
+    const lido = inicio.subarray(0, bytesRead);
+    for (const tipo of IMAGENS) {
+      const aceito = TIPOS_ACEITOS.get(tipo);
+      if (aceito !== undefined && confere(lido, aceito.assinaturas)) return tipo;
+    }
+    return null;
+  } finally {
+    await arquivo.close();
+  }
 }
 
 export async function existe(tenantId: string, chave: string): Promise<boolean> {

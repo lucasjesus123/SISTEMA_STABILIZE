@@ -55,6 +55,11 @@ export type AuditAction =
   | 'finance.report.read'
   | 'commission.read'
   | 'commission.settle'
+  // perfil próprio — quem mudou o próprio contato, e quando. Entra na
+  // auditoria porque telefone e WhatsApp são o canal por onde a academia
+  // fala com a pessoa: uma troca silenciosa é como se desvia a conversa.
+  | 'profile.update'
+  | 'profile.photo'
   // administração
   | 'user.create'
   | 'user.update'

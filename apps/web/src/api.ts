@@ -725,3 +725,139 @@ export const agendar = (dados: {
 
 export const desmarcar = (id: string) =>
   api<{ ok: boolean }>(`/api/eu/agendamentos/${id}`, { method: 'DELETE' });
+
+/* --------------------------------------------------------------------
+ * Perfil de quem está autenticado
+ *
+ * Vale para todo mundo: dono, recepção, profissional e aluno. Nenhuma
+ * destas rotas carrega id — ele vem do token, e o que não é parâmetro
+ * não é adulterável.
+ * ------------------------------------------------------------------ */
+
+export interface EnderecoPerfil {
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+}
+
+export interface Perfil {
+  id: string;
+  nome: string;
+  email: string;
+  papel: string;
+  telefone: string | null;
+  whatsapp: string | null;
+  dataNascimento: string | null;
+  temFoto: boolean;
+  endereco: EnderecoPerfil;
+}
+
+export interface PerfilEntrada {
+  nome: string;
+  telefone: string | null;
+  whatsapp: string | null;
+  dataNascimento: string | null;
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+}
+
+export const lerPerfil = () => api<{ data: Perfil }>('/api/perfil');
+
+export const salvarPerfil = (dados: PerfilEntrada) =>
+  api<{ data: Perfil }>('/api/perfil', { method: 'PUT', body: JSON.stringify(dados) });
+
+/**
+ * Envia a foto.
+ *
+ * `FormData` sem `Content-Type` escrito à mão: o navegador precisa
+ * gerar a fronteira do multipart, e sobrescrever o cabeçalho faz o
+ * servidor não achá-la. O `bruto()` já trata esse caso.
+ */
+export function enviarFotoPerfil(arquivo: File) {
+  const corpo = new FormData();
+  corpo.append('arquivo', arquivo);
+  return api<{ data: { ok: boolean } }>('/api/perfil/foto', { method: 'POST', body: corpo });
+}
+
+export const removerFotoPerfil = () => api<{ ok: boolean }>('/api/perfil/foto', { method: 'DELETE' });
+
+export function enviarFotoAluno(alunoId: string, arquivo: File) {
+  const corpo = new FormData();
+  corpo.append('arquivo', arquivo);
+  return api<{ data: { ok: boolean } }>(`/api/students/${alunoId}/foto`, {
+    method: 'POST',
+    body: corpo,
+  });
+}
+
+export const removerFotoAluno = (alunoId: string) =>
+  api<{ ok: boolean }>(`/api/students/${alunoId}/foto`, { method: 'DELETE' });
+
+/**
+ * Busca uma foto e devolve um endereço temporário para usar em `<img>`.
+ *
+ * NÃO DÁ PARA APONTAR O `<img src>` DIRETO PARA A ROTA. O access token
+ * vive em memória e viaja no cabeçalho Authorization; o carregador de
+ * imagem do navegador não manda cabeçalho nenhum, então a requisição
+ * chegaria sem autenticação e voltaria 401. É o mesmo motivo do
+ * download de anexo e do PDF.
+ *
+ * Devolve `null` para 404 — quem ainda não tem foto não é um erro a
+ * mostrar na tela, é o estado normal de quem acabou de ser cadastrado.
+ *
+ * QUEM CHAMA PRECISA REVOGAR o endereço quando trocar de foto ou sair da
+ * tela. Um blob vivo segura a imagem inteira na memória da aba.
+ */
+export async function buscarFoto(caminho: string): Promise<string | null> {
+  const resposta = await fetch(caminho, {
+    headers: accessToken === null ? {} : { Authorization: `Bearer ${accessToken}` },
+    credentials: 'same-origin',
+  });
+
+  if (resposta.status === 404) return null;
+  if (!resposta.ok) {
+    if (resposta.status === 401 && (await renovar())) return buscarFoto(caminho);
+    return null;
+  }
+
+  return URL.createObjectURL(await resposta.blob());
+}
+
+/* --------------------------------------------------------------------
+ * CEP
+ *
+ * Passa pelo nosso servidor, não direto para os Correios: a CSP da
+ * página é `default-src 'self'` e o IP do aluno não precisa ir para um
+ * terceiro a cada digitação. Ver o cabeçalho de `cep.routes.ts`.
+ * ------------------------------------------------------------------ */
+
+export interface EnderecoDeCep {
+  cep: string;
+  logradouro: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+}
+
+/**
+ * Busca o endereço. Devolve `null` para CEP inexistente ou serviço fora
+ * do ar — os dois casos terminam do mesmo jeito na tela: a pessoa
+ * preenche à mão, sem mensagem de erro atravessada.
+ */
+export async function buscarCep(oitoDigitos: string): Promise<EnderecoDeCep | null> {
+  try {
+    const { data } = await api<{ data: EnderecoDeCep }>(`/api/cep/${oitoDigitos}`);
+    return data;
+  } catch {
+    return null;
+  }
+}

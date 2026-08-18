@@ -3,11 +3,21 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 /**
  * Seleção de tema.
  *
- * Três estados, não dois: claro, escuro e SISTEMA. O terceiro é o
- * padrão, e é ele que importa — quem já configurou o computador em
- * modo escuro não deveria ter que repetir essa decisão em cada
- * aplicação. Só depois de uma escolha explícita o sistema operacional
- * deixa de mandar.
+ * TRÊS ESTADOS POR DENTRO, DOIS BOTÕES POR FORA — e a diferença é
+ * deliberada.
+ *
+ * O estado inicial é `sistema`: quem já pôs o computador em modo escuro
+ * não deveria ter que repetir a decisão em cada aplicação, e o
+ * navegador nos conta isso de graça pelo `prefers-color-scheme`. Só que
+ * "seguir o sistema" não cabe num par de ícones, e a tela não deve
+ * ganhar um terceiro botão de texto só para representar um padrão que
+ * quase ninguém troca conscientemente.
+ *
+ * A saída: enquanto ninguém clicou, o modo é `sistema` e o ícone aceso é
+ * o que o sistema operacional está pedindo naquele momento — a tela
+ * nunca parece "sem seleção". No primeiro clique a escolha vira
+ * explícita e passa a mandar. É a mesma coisa que qualquer aplicativo de
+ * celular faz, e não custa um controle a mais.
  *
  * A escolha vai para localStorage. É preferência de exibição, não dado
  * sensível: não há problema em ficar legível para script da página, ao
@@ -33,12 +43,28 @@ function aplicar(tema: Tema): void {
   }
 }
 
-export function useTema(): { tema: Tema; definir: (t: Tema) => void } {
+/** O que o sistema operacional está pedindo agora. */
+function preferenciaDoSistema(): 'claro' | 'escuro' {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro';
+}
+
+export function useTema(): {
+  tema: Tema;
+  /** O tema que está NA TELA — nunca 'sistema'. É o que o botão acende. */
+  efetivo: 'claro' | 'escuro';
+  definir: (t: Tema) => void;
+} {
   const [tema, setTema] = useState<Tema>(() => {
     const inicial = lerPreferencia();
     aplicar(inicial);
     return inicial;
   });
+
+  /* Guardado em estado, e não calculado na renderização: o resultado do
+     matchMedia muda sem o React saber, e um valor derivado direto
+     deixaria o ícone aceso errado até a próxima renderização por outro
+     motivo. */
+  const [doSistema, setDoSistema] = useState<'claro' | 'escuro'>(preferenciaDoSistema);
 
   const definir = useCallback((novo: Tema) => {
     setTema(novo);
@@ -47,55 +73,103 @@ export function useTema(): { tema: Tema; definir: (t: Tema) => void } {
     else localStorage.setItem(CHAVE, novo);
   }, []);
 
-  /* Se o usuário está em "sistema" e muda o modo do computador com a
-     aba aberta, a tela acompanha na hora. Sem este ouvinte, ele teria
-     que recarregar — e a preferência pareceria não funcionar. */
+  /* Se o usuário está em "sistema" e muda o modo do computador com a aba
+     aberta, a tela acompanha na hora. Sem este ouvinte, ele teria que
+     recarregar — e a preferência pareceria não funcionar.
+
+     O ouvinte fica montado SEMPRE, mesmo com escolha explícita, porque
+     ele também mantém `doSistema` em dia: quem escolheu claro à mão e
+     depois volta para o automático precisa que o ícone certo acenda. */
   useEffect(() => {
-    if (tema !== 'sistema') return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const aoMudar = (): void => aplicar('sistema');
+    const aoMudar = (): void => {
+      setDoSistema(mq.matches ? 'escuro' : 'claro');
+      if (lerPreferencia() === 'sistema') aplicar('sistema');
+    };
     mq.addEventListener('change', aoMudar);
     return () => mq.removeEventListener('change', aoMudar);
-  }, [tema]);
+  }, []);
 
-  return { tema, definir };
+  return { tema, efetivo: tema === 'sistema' ? doSistema : tema, definir };
 }
 
 /**
- * Seletor de três posições.
+ * Sol e lua.
  *
- * Um interruptor de dois estados não consegue representar "siga o
- * sistema", e é por isso que tantos aplicativos perdem essa opção. Três
- * botões num grupo resolvem, e ainda deixam o estado atual visível sem
- * precisar interpretar um ícone.
+ * Dois ícones lado a lado, e não um só que alterna. Um botão que troca
+ * de ícone obriga a decidir se ele mostra o estado atual ou o resultado
+ * do clique — e qualquer que seja a resposta, metade das pessoas lê ao
+ * contrário. Com os dois visíveis não há o que interpretar: o aceso é
+ * onde você está, o apagado é para onde você vai.
+ *
+ * `aria-pressed` em cada um, e não `role="switch"`: são duas opções
+ * excludentes, que é o que um leitor de tela anuncia corretamente com
+ * dois botões alternáveis.
  */
-export function SeletorTema({
-  tema,
+export function BotaoTema({
+  efetivo,
   definir,
 }: {
-  tema: Tema;
+  efetivo: 'claro' | 'escuro';
   definir: (t: Tema) => void;
 }): ReactNode {
-  const opcoes: { id: Tema; nome: string; rotulo: string }[] = [
-    { id: 'claro', nome: 'Claro', rotulo: 'Usar tema claro' },
-    { id: 'sistema', nome: 'Auto', rotulo: 'Seguir a preferência do sistema' },
-    { id: 'escuro', nome: 'Escuro', rotulo: 'Usar tema escuro' },
-  ];
-
   return (
-    <div className="seletor-tema" role="group" aria-label="Aparência">
-      {opcoes.map((o) => (
-        <button
-          key={o.id}
-          type="button"
-          className={`seletor-opcao ${tema === o.id ? 'ativa' : ''}`}
-          aria-pressed={tema === o.id}
-          title={o.rotulo}
-          onClick={() => definir(o.id)}
-        >
-          {o.nome}
-        </button>
-      ))}
+    <div className="tema-troca" role="group" aria-label="Aparência">
+      <button
+        type="button"
+        className={`tema-icone ${efetivo === 'claro' ? 'ativa' : ''}`}
+        aria-pressed={efetivo === 'claro'}
+        aria-label="Tema claro"
+        title="Tema claro"
+        onClick={() => definir('claro')}
+      >
+        <IconeSol />
+      </button>
+      <button
+        type="button"
+        className={`tema-icone ${efetivo === 'escuro' ? 'ativa' : ''}`}
+        aria-pressed={efetivo === 'escuro'}
+        aria-label="Tema escuro"
+        title="Tema escuro"
+        onClick={() => definir('escuro')}
+      >
+        <IconeLua />
+      </button>
     </div>
+  );
+}
+
+/* Traço de 1,6 e `currentColor`, como os ícones do menu: seguem a cor do
+   botão (apagada, acesa quando ativo) sem precisar de uma segunda versão
+   do arquivo. */
+const svg = {
+  width: 17,
+  height: 17,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+  'aria-hidden': true,
+};
+
+function IconeSol(): ReactNode {
+  return (
+    <svg {...svg}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" />
+    </svg>
+  );
+}
+
+function IconeLua(): ReactNode {
+  return (
+    <svg {...svg}>
+      {/* Crescente por subtração de arco, não por duas formas sobrepostas:
+          sobreposição só funciona quando o fundo é opaco, e este ícone
+          vive sobre a coluna escura e sobre o conteúdo claro. */}
+      <path d="M20.5 14.3A8.6 8.6 0 0 1 9.7 3.5a8.6 8.6 0 1 0 10.8 10.8z" />
+    </svg>
   );
 }
