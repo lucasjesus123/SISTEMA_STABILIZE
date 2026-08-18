@@ -42,6 +42,7 @@ GRANT USAGE ON SCHEMA public TO stabilize_plataforma;
 GRANT SELECT, INSERT, UPDATE, DELETE ON platform_admins   TO stabilize_plataforma;
 GRANT SELECT, INSERT, UPDATE, DELETE ON platform_sessions TO stabilize_plataforma;
 GRANT SELECT, INSERT                  ON platform_audit   TO stabilize_plataforma;
+GRANT SELECT, UPDATE                  ON platform_settings TO stabilize_plataforma;
 GRANT USAGE, SELECT ON SEQUENCE platform_audit_id_seq     TO stabilize_plataforma;
 GRANT SELECT, INSERT, UPDATE          ON tenants          TO stabilize_plataforma;
 GRANT SELECT, INSERT, UPDATE          ON users            TO stabilize_plataforma;
@@ -398,6 +399,60 @@ AS $$
     LEFT JOIN tenants t ON t.id = p.tenant_id
    ORDER BY p.created_at DESC
    LIMIT least(coalesce(p_limite, 100), 500)
+$$;
+
+
+-- ---------------------------------------------------------------------
+-- Configuração da integração de WhatsApp
+--
+-- O endereço e o token administrativo da uazapi saíram do .env da VPS e
+-- vieram para o painel: ligar a integração deixou de exigir SSH, editar
+-- arquivo e reiniciar contêiner.
+--
+-- O TOKEN ENTRA E SAI CIFRADO destas funções. A cifra e a decifra
+-- acontecem na API (AES-256-GCM, `segredo.ts`), não aqui — o banco nunca
+-- vê o token em claro, e um dump não o entrega. É o mesmo tratamento do
+-- token de instância de cada academia.
+--
+-- `plataforma_ler_config` é a única destas funções que a API chama fora
+-- do painel: ela precisa do endereço e do token a cada envio de
+-- mensagem. Devolve o texto CIFRADO; sem a ENCRYPTION_KEY, que vive na
+-- variável de ambiente e não no banco, ele não serve para nada.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION plataforma_ler_config()
+RETURNS TABLE (uazapi_base_url text, uazapi_admin_encrypted text, atualizado_em timestamptz)
+LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+  SELECT s.uazapi_base_url, s.uazapi_admin_encrypted, s.atualizado_em
+    FROM platform_settings s WHERE s.id
+$$;
+
+CREATE OR REPLACE FUNCTION plataforma_gravar_config(
+  p_url text, p_token_cifrado text, p_admin uuid
+) RETURNS void
+LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+  UPDATE platform_settings SET
+    /* Endereço vazio vira NULL: string em branco passaria pela
+       verificação de "está configurado?" e falharia só na hora do envio,
+       com um erro de URL inválida que não explica nada. */
+    uazapi_base_url = nullif(btrim(p_url), ''),
+    /* Token nulo MANTÉM o que está lá. O painel reexibe a configuração
+       sem o token — ele nunca volta para a tela —, então salvar o
+       formulário sem redigitá-lo não pode apagar a integração. */
+    uazapi_admin_encrypted = coalesce(p_token_cifrado, uazapi_admin_encrypted),
+    atualizado_em = now(),
+    atualizado_por = p_admin
+  WHERE id;
+$$;
+
+CREATE OR REPLACE FUNCTION plataforma_limpar_token(p_admin uuid)
+RETURNS void
+LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+  UPDATE platform_settings
+     SET uazapi_admin_encrypted = NULL, atualizado_em = now(), atualizado_por = p_admin
+   WHERE id;
 $$;
 
 -- ---------------------------------------------------------------------
