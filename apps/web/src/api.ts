@@ -215,6 +215,8 @@ export interface ResumoFinanceiro {
   pagoCentavos: number;
   inadimplenteCentavos: number;
   inadimplentesQtd: number;
+  venceHojeCentavos: number;
+  venceHojeQtd: number;
   saldoRealizadoCentavos: number;
 }
 

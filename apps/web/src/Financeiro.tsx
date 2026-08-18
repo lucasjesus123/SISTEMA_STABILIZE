@@ -101,6 +101,10 @@ function situacaoReal(l: api.Lancamento): api.StatusLancamento {
 
 export function Financeiro({ principal }: { principal: Principal }): ReactNode {
   const [painel, setPainel] = useState<Painel>('receber');
+  /* Um contador em vez de um booleano: clicar em "Vencido" duas vezes
+     precisa reaplicar o filtro, e um booleano já `true` não dispara
+     efeito nenhum. */
+  const [pedidoDeVencidos, setPedidoDeVencidos] = useState(0);
   const [mes, setMes] = useState(() => new Date());
   const [resumo, setResumo] = useState<api.ResumoFinanceiro | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -142,7 +146,15 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
 
       {erro !== null && <Erro mensagem={erro} />}
 
-      {resumo !== null && <Cartoes resumo={resumo} />}
+      {resumo !== null && (
+        <Cartoes
+          resumo={resumo}
+          aoFiltrarVencidos={() => {
+            setPainel('receber');
+            setPedidoDeVencidos((v) => v + 1);
+          }}
+        />
+      )}
 
       <div className="fin-abas" role="tablist" aria-label="Áreas do financeiro">
         {(
@@ -172,6 +184,7 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
           direcao={painel === 'receber' ? 'RECEIVABLE' : 'PAYABLE'}
           de={de}
           ate={ate}
+          pedidoDeVencidos={pedidoDeVencidos}
           aoMudar={carregarResumo}
         />
       )}
@@ -183,48 +196,101 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
  * Os números do mês
  * ================================================================== */
 
-function Cartoes({ resumo }: { resumo: api.ResumoFinanceiro }): ReactNode {
-  /* A ORDEM É DELIBERADA: o que está vencido vem primeiro porque é o
-     único número desta tela que exige uma ligação hoje. O saldo, que é o
-     mais bonito de olhar, vem por último. */
-  const cartoes: { rotulo: string; valor: number; nota: string; tom?: string }[] = [
-    {
-      rotulo: 'Em atraso',
-      valor: resumo.inadimplenteCentavos,
-      nota:
-        resumo.inadimplentesQtd === 0
-          ? 'ninguém em atraso'
-          : `${resumo.inadimplentesQtd} cobrança${resumo.inadimplentesQtd === 1 ? '' : 's'} vencida${resumo.inadimplentesQtd === 1 ? '' : 's'}`,
-      ...(resumo.inadimplenteCentavos > 0 ? { tom: 'erro' } : {}),
-    },
-    {
-      rotulo: 'A receber',
-      valor: resumo.aReceberCentavos,
-      nota: `${formatCents(resumo.recebidoCentavos)} já entrou`,
-    },
-    {
-      rotulo: 'A pagar',
-      valor: resumo.aPagarCentavos,
-      nota: `${formatCents(resumo.pagoCentavos)} já saiu`,
-    },
-    {
-      rotulo: 'Saldo realizado',
-      valor: resumo.saldoRealizadoCentavos,
-      nota: 'o que entrou menos o que saiu',
-      ...(resumo.saldoRealizadoCentavos < 0 ? { tom: 'erro' } : {}),
-    },
-  ];
+function Cartoes({
+  resumo,
+  aoFiltrarVencidos,
+}: {
+  resumo: api.ResumoFinanceiro;
+  aoFiltrarVencidos: () => void;
+}): ReactNode {
+  const positivo = resumo.saldoRealizadoCentavos >= 0;
 
   return (
-    <div className="fin-cartoes">
-      {cartoes.map((c) => (
-        <div key={c.rotulo} className={`fin-cartao ${c.tom ?? ''}`}>
-          <span className="fin-cartao-rotulo">{c.rotulo}</span>
-          <strong className="fin-cartao-valor">{formatCents(c.valor)}</strong>
-          <span className="fin-cartao-nota">{c.nota}</span>
-        </div>
-      ))}
-    </div>
+    <section className="fin-topo">
+      {/* O NÚMERO GRANDE É O SALDO REALIZADO — o que sobrou de verdade,
+          entradas menos saídas efetivadas. Quatro cartões do mesmo
+          tamanho não têm hierarquia nenhuma: o olho tem de escolher por
+          onde começar, e escolhe errado. Aqui a resposta principal tem
+          o tamanho de resposta principal, e o resto apoia. */}
+      <div className="fin-hero">
+        <span className="fin-hero-rotulo">Saldo do mês</span>
+        <strong className={`fin-hero-valor ${positivo ? '' : 'negativo'}`}>
+          {formatCents(resumo.saldoRealizadoCentavos)}
+        </strong>
+        <span className="fin-hero-nota">
+          <span className="fin-entrou">{formatCents(resumo.recebidoCentavos)} entrou</span>
+          <span className="fin-sep" aria-hidden="true" />
+          <span className="fin-saiu">{formatCents(resumo.pagoCentavos)} saiu</span>
+        </span>
+      </div>
+
+      <div className="fin-kpis">
+        <Kpi
+          rotulo="Vence hoje"
+          valor={resumo.venceHojeCentavos}
+          nota={
+            resumo.venceHojeQtd === 0
+              ? 'nada para hoje'
+              : `${resumo.venceHojeQtd} cobrança${resumo.venceHojeQtd === 1 ? '' : 's'}`
+          }
+        />
+        {/* VENCIDO É CLICÁVEL. Um número que não leva a lugar nenhum
+            vira decoração — e este é justamente o que faz alguém pegar
+            o telefone. */}
+        <Kpi
+          rotulo="Vencido"
+          valor={resumo.inadimplenteCentavos}
+          nota={
+            resumo.inadimplentesQtd === 0
+              ? 'ninguém em atraso'
+              : `${resumo.inadimplentesQtd} em atraso · ver`
+          }
+          tom={resumo.inadimplenteCentavos > 0 ? 'erro' : undefined}
+          {...(resumo.inadimplenteCentavos > 0 ? { aoClicar: aoFiltrarVencidos } : {})}
+        />
+        <Kpi
+          rotulo="A receber no mês"
+          valor={resumo.aReceberCentavos}
+          nota={`${formatCents(resumo.recebidoCentavos)} já entrou`}
+        />
+        <Kpi
+          rotulo="A pagar no mês"
+          valor={resumo.aPagarCentavos}
+          nota={`${formatCents(resumo.pagoCentavos)} já saiu`}
+        />
+      </div>
+    </section>
+  );
+}
+
+function Kpi({
+  rotulo,
+  valor,
+  nota,
+  tom,
+  aoClicar,
+}: {
+  rotulo: string;
+  valor: number;
+  nota: string;
+  tom?: 'erro' | undefined;
+  aoClicar?: (() => void) | undefined;
+}): ReactNode {
+  const conteudo = (
+    <>
+      <span className="fin-kpi-rotulo">{rotulo}</span>
+      <strong className="fin-kpi-valor">{formatCents(valor)}</strong>
+      <span className="fin-kpi-nota">{nota}</span>
+    </>
+  );
+  const classe = `fin-kpi ${tom ?? ''}`;
+
+  return aoClicar === undefined ? (
+    <div className={classe}>{conteudo}</div>
+  ) : (
+    <button type="button" className={`${classe} clicavel`} onClick={aoClicar}>
+      {conteudo}
+    </button>
   );
 }
 
@@ -236,16 +302,19 @@ function Lancamentos({
   direcao,
   de,
   ate,
+  pedidoDeVencidos,
   aoMudar,
 }: {
   direcao: api.DirecaoLancamento;
   de: Date;
   ate: Date;
+  pedidoDeVencidos: number;
   aoMudar: () => void;
 }): ReactNode {
   const [linhas, setLinhas] = useState<api.Lancamento[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [emAberto, setEmAberto] = useState(false);
+  const [soVencidos, setSoVencidos] = useState(false);
   const [baixando, setBaixando] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
   const [versao, setVersao] = useState(0);
@@ -270,6 +339,12 @@ function Lancamentos({
     };
   }, [direcao, de, ate, emAberto, versao]);
 
+  useEffect(() => {
+    if (pedidoDeVencidos === 0) return;
+    setSoVencidos(true);
+    setEmAberto(true);
+  }, [pedidoDeVencidos]);
+
   const recarregar = (): void => {
     setVersao((v) => v + 1);
     aoMudar();
@@ -279,12 +354,13 @@ function Lancamentos({
      responde à pergunta com que a pessoa abriu a tela. */
   const ordenadas = useMemo(() => {
     if (linhas === null) return null;
+    const base = soVencidos ? linhas.filter((l) => situacaoReal(l) === 'OVERDUE') : linhas;
     const peso = (l: api.Lancamento): number => {
       const s = situacaoReal(l);
       return s === 'OVERDUE' ? 0 : s === 'PAID' || s === 'CANCELLED' ? 2 : 1;
     };
-    return [...linhas].sort((a, b) => peso(a) - peso(b) || a.vencimento.localeCompare(b.vencimento));
-  }, [linhas]);
+    return [...base].sort((a, b) => peso(a) - peso(b) || a.vencimento.localeCompare(b.vencimento));
+  }, [linhas, soVencidos]);
 
   if (criando) {
     return (
@@ -302,14 +378,31 @@ function Lancamentos({
   return (
     <>
       <div className="fin-barra">
-        <label className="fin-chave">
-          <input
-            type="checkbox"
-            checked={emAberto}
-            onChange={(e) => setEmAberto(e.target.checked)}
-          />
-          <span>Só o que falta receber</span>
-        </label>
+        <div className="fin-filtros">
+          <label className="fin-chave">
+            <input
+              type="checkbox"
+              checked={emAberto}
+              onChange={(e) => {
+                setEmAberto(e.target.checked);
+                if (!e.target.checked) setSoVencidos(false);
+              }}
+            />
+            <span>Só o que falta {direcao === 'RECEIVABLE' ? 'receber' : 'pagar'}</span>
+          </label>
+          {/* O filtro aplicado FICA VISÍVEL e sai com um clique. Filtro
+              invisível é a origem de "sumiram meus lançamentos". */}
+          {soVencidos && (
+            <button
+              type="button"
+              className="fin-marcador"
+              onClick={() => setSoVencidos(false)}
+            >
+              só vencidos <span aria-hidden="true">×</span>
+              <span className="apenas-leitor-de-tela">remover filtro</span>
+            </button>
+          )}
+        </div>
         <button type="button" className="botao-acao" onClick={() => setCriando(true)}>
           {direcao === 'RECEIVABLE' ? 'Nova cobrança' : 'Nova despesa'}
         </button>
@@ -334,8 +427,11 @@ function Lancamentos({
               <tr>
                 <th scope="col">Vence</th>
                 <th scope="col">{direcao === 'RECEIVABLE' ? 'Cobrança' : 'Despesa'}</th>
-                <th scope="col">Valor</th>
-                <th scope="col">Falta</th>
+                <th scope="col" className="fin-col-num">Valor</th>
+                {/* PAGO / DEVIDO na mesma célula. Só "pendente" não conta
+                    a história, e o operador dá baixa duas vezes na conta
+                    que já recebeu metade. */}
+                <th scope="col" className="fin-col-num">Pago</th>
                 <th scope="col">Situação</th>
                 <th scope="col" />
               </tr>
@@ -374,35 +470,53 @@ function Linha({
 }): ReactNode {
   const situacao = situacaoReal(l);
   const quitado = l.saldoCentavos <= 0 || l.status === 'CANCELLED';
+  const parcial = l.pagoCentavos > 0 && !quitado;
 
   return (
     <>
-      <tr className={situacao === 'OVERDUE' ? 'fin-vencida' : ''}>
-        <td className="fin-data">{diaMes(l.vencimento)}</td>
+      <tr className={`fin-linha ${situacao === 'OVERDUE' ? 'vencida' : ''} ${quitado ? 'quitada' : ''}`}>
+        <td className="fin-data">
+          <span className="fin-dia">{diaMes(l.vencimento)}</span>
+          {situacao === 'OVERDUE' && (
+            <span className="fin-atraso">{diasDeAtraso(l.vencimento)}d</span>
+          )}
+        </td>
         <td>
-          <span className="celula-forte">{l.descricao}</span>
+          <span className="celula-forte">{l.aluno?.nome ?? l.fornecedor ?? l.descricao}</span>
           <span className="celula-apoio">
-            {l.aluno?.nome ?? l.fornecedor ?? l.categoria ?? '—'}
+            {l.aluno !== null || l.fornecedor !== null ? l.descricao : (l.categoria ?? '—')}
             {l.parcela !== null && ` · parcela ${l.parcela}`}
           </span>
         </td>
-        <td className="fin-numero">{l.valorFormatado}</td>
-        <td className="fin-numero">
-          {quitado ? <span className="plt-secundario">—</span> : formatCents(l.saldoCentavos)}
+        <td className="fin-col-num">
+          <span className="dinheiro">{l.valorFormatado}</span>
+        </td>
+        <td className="fin-col-num">
+          {quitado ? (
+            <span className="dinheiro fin-quitado">{l.valorFormatado}</span>
+          ) : parcial ? (
+            /* "R$ 300 de R$ 500" em vez de um status vago. */
+            <span className="fin-parcial">
+              <span className="dinheiro">{formatCents(l.pagoCentavos)}</span>
+              <span className="fin-parcial-falta">faltam {formatCents(l.saldoCentavos)}</span>
+            </span>
+          ) : (
+            <span className="fin-nada">—</span>
+          )}
         </td>
         <td>
-          <span className={`plt-pilula ${TOM_DO_STATUS[situacao]}`}>{NOME_DO_STATUS[situacao]}</span>
+          <span className={`fin-selo ${TOM_DO_STATUS[situacao]}`}>{NOME_DO_STATUS[situacao]}</span>
         </td>
         <td className="fin-acao">
           {!quitado && (
-            <button type="button" className="botao-texto" onClick={aoAbrir}>
+            <button type="button" className="fin-botao-baixa" onClick={aoAbrir}>
               {aberta ? 'Fechar' : 'Dar baixa'}
             </button>
           )}
         </td>
       </tr>
       {aberta && (
-        <tr>
+        <tr className="fin-linha-baixa">
           <td colSpan={6} className="fin-baixa-celula">
             <FormularioDeBaixa lancamento={l} aoBaixar={aoBaixar} />
           </td>
@@ -410,6 +524,15 @@ function Linha({
       )}
     </>
   );
+}
+
+/** Quantos dias uma cobrança está atrasada, contados no calendário. */
+function diasDeAtraso(vencimento: string): number {
+  const [a, m, d] = vencimento.slice(0, 10).split('-').map(Number);
+  const venceu = new Date(a!, m! - 1, d!);
+  const hoje = new Date();
+  const zero = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  return Math.max(0, Math.round((zero.getTime() - venceu.getTime()) / 86_400_000));
 }
 
 /**
@@ -448,29 +571,63 @@ function FormularioDeBaixa({
     }
   };
 
+  /* O RESULTADO CALCULADO AO VIVO. É o detalhe que mais reduz erro de
+     digitação: a pessoa confere antes de confirmar, em vez de descobrir
+     depois na listagem que digitou 3500 no lugar de 350,00. */
+  const centavos = Math.round(Number(valor.replace(/\./g, '').replace(',', '.')) * 100);
+  const valido = Number.isFinite(centavos) && centavos > 0;
+  const restante = valido ? l.saldoCentavos - centavos : l.saldoCentavos;
+
   return (
     <form className="fin-baixa" onSubmit={(e) => void enviar(e)}>
-      <label className="campo">
-        <span className="campo-rotulo">Valor recebido</span>
-        <input inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} required autoFocus />
-      </label>
-      <label className="campo">
-        <span className="campo-rotulo">Forma</span>
-        <select value={metodo} onChange={(e) => setMetodo(e.target.value as api.MetodoPagamento)}>
-          {METODOS.map((m) => (
-            <option key={m.valor} value={m.valor}>
-              {m.nome}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="campo">
-        <span className="campo-rotulo">Quando</span>
-        <input type="date" value={quando} onChange={(e) => setQuando(e.target.value)} required />
-      </label>
-      <button type="submit" className="botao-acao" disabled={enviando}>
-        {enviando ? 'Registrando…' : 'Confirmar'}
-      </button>
+      <div className="fin-baixa-conta">
+        <span className="fin-baixa-rotulo">Em aberto</span>
+        <strong className="dinheiro fin-baixa-devido">{formatCents(l.saldoCentavos)}</strong>
+        {l.pagoCentavos > 0 && (
+          <span className="fin-baixa-ja">de {l.valorFormatado} · {formatCents(l.pagoCentavos)} já pago</span>
+        )}
+      </div>
+
+      <div className="fin-baixa-campos">
+        <label className="campo">
+          <span className="campo-rotulo">Valor recebido</span>
+          <input
+            inputMode="decimal"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            required
+            autoFocus
+          />
+        </label>
+        <label className="campo">
+          <span className="campo-rotulo">Forma</span>
+          <select value={metodo} onChange={(e) => setMetodo(e.target.value as api.MetodoPagamento)}>
+            {METODOS.map((m) => (
+              <option key={m.valor} value={m.valor}>
+                {m.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="campo">
+          <span className="campo-rotulo">Quando</span>
+          <input type="date" value={quando} onChange={(e) => setQuando(e.target.value)} required />
+        </label>
+        <button type="submit" className="botao-acao" disabled={enviando || !valido}>
+          {enviando ? 'Registrando…' : 'Confirmar'}
+        </button>
+      </div>
+
+      {valido && (
+        <p className={`fin-previsao ${restante <= 0 ? 'quita' : ''}`} aria-live="polite">
+          {restante <= 0
+            ? restante < 0
+              ? `A conta fica QUITADA, com ${formatCents(-restante)} a mais que o devido.`
+              : 'A conta fica QUITADA.'
+            : `A conta continua aberta, com ${formatCents(restante)} a receber.`}
+        </p>
+      )}
+
       {erro !== null && (
         <p className="mensagem-erro fin-baixa-erro" role="alert">
           {erro}
@@ -677,18 +834,16 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
 
   return (
     <>
-      <div className="fin-barra">
-        <label className="campo campo-busca">
-          <span className="campo-rotulo">Profissional</span>
-          <select value={quem} onChange={(e) => setQuem(e.target.value)}>
-            {equipe.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nome}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <label className="campo fin-selecao">
+        <span className="campo-rotulo">Profissional</span>
+        <select value={quem} onChange={(e) => setQuem(e.target.value)}>
+          {equipe.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nome}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {erro !== null && <Erro mensagem={erro} />}
       {carregando ? (
@@ -700,31 +855,29 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
         />
       ) : (
         <>
-          <div className="fin-cartoes">
-            <div className="fin-cartao">
-              <span className="fin-cartao-rotulo">A repassar</span>
-              <strong className="fin-cartao-valor">{fechamento.data.totalFormatado}</strong>
-              <span className="fin-cartao-nota">
-                {fechamento.data.itens.length} recebimento
-                {fechamento.data.itens.length === 1 ? '' : 's'}
-              </span>
-            </div>
-            <div className="fin-cartao">
-              <span className="fin-cartao-rotulo">Base de cálculo</span>
-              <strong className="fin-cartao-valor">
-                {formatCents(fechamento.data.baseTotalCentavos)}
-              </strong>
-              <span className="fin-cartao-nota">o que entrou por este profissional</span>
-            </div>
-            <div className="fin-cartao">
-              <span className="fin-cartao-rotulo">Percentual médio</span>
-              <strong className="fin-cartao-valor">
+          {/* Os MESMOS indicadores da lista, e não um segundo conjunto
+              de cartões parecido: duas caixas de número quase iguais na
+              mesma tela é como uma delas envelhece diferente. */}
+          <div className="fin-kpis fin-kpis-largo">
+            <Kpi
+              rotulo="A repassar"
+              valor={fechamento.data.totalCentavos}
+              nota={`${fechamento.data.itens.length} recebimento${fechamento.data.itens.length === 1 ? '' : 's'}`}
+            />
+            <Kpi
+              rotulo="Base de cálculo"
+              valor={fechamento.data.baseTotalCentavos}
+              nota="o que entrou por este profissional"
+            />
+            <div className="fin-kpi">
+              <span className="fin-kpi-rotulo">Percentual médio</span>
+              <strong className="fin-kpi-valor">
                 {(fechamento.data.aliquotaMediaBp / 100).toLocaleString('pt-BR', {
                   maximumFractionDigits: 2,
                 })}
                 %
               </strong>
-              <span className="fin-cartao-nota">ponderado pelo valor</span>
+              <span className="fin-kpi-nota">ponderado pelo valor</span>
             </div>
           </div>
 
@@ -737,16 +890,20 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
               <thead>
                 <tr>
                   <th scope="col">Recebimento</th>
-                  <th scope="col">Base</th>
-                  <th scope="col">Comissão</th>
+                  <th scope="col" className="fin-col-num">Base</th>
+                  <th scope="col" className="fin-col-num">Comissão</th>
                 </tr>
               </thead>
               <tbody>
                 {fechamento.data.itens.map((i, n) => (
                   <tr key={`${i.descricao}-${n}`}>
                     <td>{i.descricao}</td>
-                    <td className="fin-numero">{i.baseFormatada}</td>
-                    <td className="fin-numero">{i.valorFormatado}</td>
+                    <td className="fin-col-num">
+                      <span className="dinheiro">{i.baseFormatada}</span>
+                    </td>
+                    <td className="fin-col-num">
+                      <span className="dinheiro">{i.valorFormatado}</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

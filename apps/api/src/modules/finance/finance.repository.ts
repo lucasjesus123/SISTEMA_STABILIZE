@@ -279,6 +279,8 @@ export interface ResumoFinanceiro {
   pagoCentavos: Cents;
   inadimplenteCentavos: Cents;
   inadimplentesQtd: number;
+  venceHojeCentavos: Cents;
+  venceHojeQtd: number;
 }
 
 export async function resumoDoPeriodo(
@@ -287,16 +289,31 @@ export async function resumoDoPeriodo(
   ate: Date,
 ): Promise<ResumoFinanceiro> {
   const r = await client.query<ResumoFinanceiro>(
-    `SELECT
+    /* O "HOJE" É O DA ACADEMIA, NÃO O DO SERVIDOR.
+       `CURRENT_DATE` numa VPS em UTC vira o dia seguinte às 21h de
+       Brasília: às nove da noite o dono via as contas de hoje saltarem
+       para "vencidas" sozinhas, na frente dele. */
+    `WITH hoje AS (
+       SELECT (now() AT TIME ZONE t.timezone)::date AS d
+         FROM tenants t WHERE t.id = current_tenant_id()
+     )
+     SELECT
        COALESCE(SUM(amount_cents) FILTER (WHERE direction='RECEIVABLE'), 0)::bigint AS "aReceberCentavos",
        COALESCE(SUM(paid_cents)   FILTER (WHERE direction='RECEIVABLE'), 0)::bigint AS "recebidoCentavos",
        COALESCE(SUM(amount_cents) FILTER (WHERE direction='PAYABLE'), 0)::bigint    AS "aPagarCentavos",
        COALESCE(SUM(paid_cents)   FILTER (WHERE direction='PAYABLE'), 0)::bigint    AS "pagoCentavos",
        COALESCE(SUM(amount_cents - paid_cents)
-                FILTER (WHERE direction='RECEIVABLE' AND due_date < CURRENT_DATE
+                FILTER (WHERE direction='RECEIVABLE' AND due_date < (SELECT d FROM hoje)
                           AND status <> 'PAID'), 0)::bigint                          AS "inadimplenteCentavos",
-       count(*) FILTER (WHERE direction='RECEIVABLE' AND due_date < CURRENT_DATE
-                          AND status <> 'PAID')::int                                 AS "inadimplentesQtd"
+       count(*) FILTER (WHERE direction='RECEIVABLE' AND due_date < (SELECT d FROM hoje)
+                          AND status <> 'PAID')::int                                 AS "inadimplentesQtd",
+       /* Vence HOJE e ainda não foi pago: é o número que a recepção
+          precisa antes de abrir a porta. */
+       COALESCE(SUM(amount_cents - paid_cents)
+                FILTER (WHERE direction='RECEIVABLE' AND due_date = (SELECT d FROM hoje)
+                          AND status <> 'PAID'), 0)::bigint                          AS "venceHojeCentavos",
+       count(*) FILTER (WHERE direction='RECEIVABLE' AND due_date = (SELECT d FROM hoje)
+                          AND status <> 'PAID')::int                                 AS "venceHojeQtd"
      FROM finance_entries
      WHERE due_date BETWEEN $1::date AND $2::date
        AND cancelled_at IS NULL`,
@@ -311,5 +328,7 @@ export async function resumoDoPeriodo(
     pagoCentavos: Number(linha?.pagoCentavos ?? 0),
     inadimplenteCentavos: Number(linha?.inadimplenteCentavos ?? 0),
     inadimplentesQtd: Number(linha?.inadimplentesQtd ?? 0),
+    venceHojeCentavos: Number(linha?.venceHojeCentavos ?? 0),
+    venceHojeQtd: Number(linha?.venceHojeQtd ?? 0),
   };
 }

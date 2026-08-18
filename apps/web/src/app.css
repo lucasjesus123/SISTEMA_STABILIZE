@@ -634,6 +634,10 @@
   white-space: nowrap;
   font-weight: 400;
   letter-spacing: -0.03em;
+  /* Figuras de largura fixa: sem isto o "1" é mais estreito que o "8" e
+     uma coluna de valores fica com as vírgulas em posições diferentes,
+     o que se lê como desalinho antes de se ler como número. */
+  font-variant-numeric: tabular-nums;
   color: var(--texto);
   line-height: 1;
 }
@@ -1223,6 +1227,7 @@
   letter-spacing: -.02em;
   line-height: 1;
   color: var(--texto);
+  font-variant-numeric: tabular-nums;
 }
 
 .mini-nota {
@@ -1865,6 +1870,11 @@
 
 /* =====================================================================
    FINANCEIRO
+
+   A tela responde três perguntas, em ordem de tamanho: quanto sobrou,
+   o que precisa de ação hoje, e a lista. O tamanho de cada coisa na
+   tela é a resposta à pergunta "por onde eu começo" — quatro cartões
+   iguais não respondem, e o olho escolhe errado.
    ================================================================== */
 
 .fin-cabecalho {
@@ -1877,87 +1887,203 @@
 .fin-mes {
   display: flex;
   align-items: center;
-  gap: var(--e-2);
+  gap: var(--e-1);
+  padding: 3px;
+  border: 1px solid var(--fio);
+  border-radius: 999px;
+  background: var(--superficie-alta);
+}
+.fin-mes button {
+  width: 1.9rem;
+  height: 1.9rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--texto-apoio);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+}
+.fin-mes button:hover {
+  background: var(--superficie-realce);
+  color: var(--texto);
 }
 .fin-mes-nome {
-  min-width: 10rem;
+  min-width: 9.5rem;
   text-align: center;
-  font-weight: 600;
+  font-family: var(--fonte-display);
+  font-weight: 500;
+  font-size: var(--t-base);
   color: var(--texto);
-  /* Largura mínima fixa: sem ela, "maio" e "setembro" empurram as setas
-     para lados diferentes e o botão foge do dedo a cada mês. */
-  /* Sem `text-transform`: quem capitaliza é o JavaScript, que sabe que
-     "de" fica minúsculo. Ver `capitalizar` em Financeiro.tsx. */
 }
 
-.fin-cartoes {
+/* ---- o número grande + a fila de indicadores ----------------------- */
+.fin-topo {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 1px;
-  background: var(--fio);
-  border: 1px solid var(--fio);
-  margin: var(--e-5) 0 var(--e-6);
+  grid-template-columns: minmax(16rem, 22rem) 1fr;
+  gap: var(--e-6);
+  align-items: stretch;
+  margin: var(--e-6) 0 var(--e-7);
 }
-.fin-cartao {
+
+.fin-hero {
   display: grid;
-  gap: 3px;
-  padding: var(--e-4) var(--e-5);
-  background: var(--superficie);
+  align-content: center;
+  gap: var(--e-2);
+  padding: var(--e-6);
+  border-radius: var(--raio-md);
+  /* A única superfície escura da tela clara, e vice-versa. Ela existe
+     para dizer "comece por aqui" sem precisar de seta nem de rótulo
+     maior que o número. */
+  background: var(--fin-hero-fundo);
+  color: var(--fin-hero-texto);
+  /* No tema escuro o bloco fica a poucos pontos do fundo da página: sem
+     um contorno ele deixa de ser um bloco e vira uma mancha. No claro a
+     borda some contra o próprio bloco e não atrapalha. */
+  border: 1px solid var(--fin-hero-fio);
 }
-.fin-cartao-rotulo {
+.fin-hero-rotulo {
   font-size: var(--t-xs);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--texto-apoio);
+  letter-spacing: 0.12em;
+  opacity: 0.65;
 }
-.fin-cartao-valor {
-  font-size: 1.6rem;
-  font-weight: 600;
-  line-height: 1.15;
-  color: var(--texto);
+.fin-hero-valor {
+  font-family: var(--fonte-display);
+  font-size: clamp(2.1rem, 4.4vw, 2.9rem);
+  font-weight: 500;
+  line-height: 1;
+  /* Tracking negativo em número grande: os dígitos da Outfit são largos
+     e, no tamanho de manchete, o valor parece esparramado sem isto. */
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
-/* A cor entra só onde há decisão a tomar. Painel colorido inteiro ensina
-   o olho a ignorar a cor. */
-.fin-cartao.erro .fin-cartao-valor {
+.fin-hero-valor.negativo {
+  color: var(--fin-hero-negativo);
+}
+.fin-hero-nota {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  font-size: var(--t-sm);
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+.fin-sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+/* DOIS POR DOIS, e não uma fila de quatro.
+   Numa fila, ao lado do bloco do saldo, cada indicador ficava com menos
+   de 12rem e `R$ 10.546,80` quebrava em duas linhas — o "R$" numa e o
+   número noutra. Com `auto-fit` o quarto caía sozinho para baixo e
+   deixava uma célula cinza vazia ao lado. Dois por dois cabe, alinha
+   com a altura do bloco ao lado e não sobra buraco. */
+.fin-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--fio);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  overflow: hidden;
+}
+.fin-kpi {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  padding: var(--e-4);
+  background: var(--superficie-alta);
+  text-align: left;
+  border: 0;
+  font: inherit;
+}
+.fin-kpi.clicavel {
+  cursor: pointer;
+  transition: background var(--rapido) var(--saida);
+}
+.fin-kpi.clicavel:hover {
+  background: var(--superficie-realce);
+}
+.fin-kpi.clicavel:hover .fin-kpi-nota {
+  color: var(--texto-corpo);
+}
+.fin-kpi-rotulo {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-apoio);
+}
+.fin-kpi-valor {
+  font-family: var(--fonte-display);
+  font-size: clamp(1.15rem, 1.7vw, 1.4rem);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+  /* Valor de dinheiro não quebra linha. Preferimos encolher a fonte a
+     partir o "R$" do número. */
+  white-space: nowrap;
+}
+/* Cor só onde há decisão a tomar. Painel colorido inteiro ensina o olho
+   a ignorar a cor, e aí o vermelho que importa passa despercebido. */
+.fin-kpi.erro .fin-kpi-valor {
   color: var(--erro);
 }
-.fin-cartao-nota {
+.fin-kpi-nota {
   font-size: var(--t-sm);
   color: var(--texto-apoio);
 }
 
+/* ---- abas ----------------------------------------------------------- */
 .fin-abas {
   display: flex;
-  gap: var(--e-1);
+  gap: var(--e-5);
   border-bottom: 1px solid var(--fio);
   margin-bottom: var(--e-5);
 }
 .fin-aba {
-  padding: var(--e-3) var(--e-4);
-  font-size: var(--t-sm);
-  font-weight: 600;
+  padding: 0 0 var(--e-3);
+  font-size: var(--t-base);
+  font-weight: 500;
   color: var(--texto-apoio);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   background: none;
-  transition: color var(--rapido) var(--saida), border-color var(--rapido) var(--saida);
+  transition:
+    color var(--rapido) var(--saida),
+    border-color var(--rapido) var(--saida);
 }
 .fin-aba:hover {
   color: var(--texto);
 }
 .fin-aba.ativa {
-  color: var(--teal);
-  border-bottom-color: var(--teal);
+  color: var(--texto);
+  font-weight: 600;
+  border-bottom-color: var(--teal-vivo);
 }
 
 .fin-barra {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: var(--e-4);
   margin-bottom: var(--e-4);
+  flex-wrap: wrap;
+}
+.fin-filtros {
+  display: flex;
+  align-items: center;
+  gap: var(--e-4);
   flex-wrap: wrap;
 }
 .fin-chave {
@@ -1969,46 +2095,178 @@
   cursor: pointer;
 }
 .fin-chave input {
-  width: 1rem;
-  height: 1rem;
+  width: 0.95rem;
+  height: 0.95rem;
   accent-color: var(--teal);
 }
-
-.fin-data,
-.fin-numero {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.fin-marcador {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: 3px var(--e-3);
+  border: 1px solid color-mix(in srgb, var(--erro) 35%, transparent);
+  border-radius: 999px;
+  background: var(--erro-fundo);
+  color: var(--erro-texto);
+  font-size: var(--t-xs);
+  font-weight: 600;
 }
-.fin-numero {
+.fin-marcador:hover {
+  border-color: var(--erro);
+}
+
+/* ---- a lista -------------------------------------------------------- */
+/* Números de dinheiro na face de display, tabulares e com tracking
+   apertado: em coluna, a vírgula tem de cair sempre no mesmo lugar, e
+   é isso que faz uma lista de valores ser lida como uma lista de
+   valores e não como texto. */
+.dinheiro {
+  font-family: var(--fonte-display);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--texto);
+}
+
+.fin-col-num {
   text-align: right;
 }
+.fin-linha td {
+  padding: var(--e-3) var(--e-4);
+}
+/* FUNDO, e não só texto vermelho. Numa lista longa a cor de fundo se
+   enxerga com o olho passando; a cor do texto exige parar e ler. */
+.fin-linha.vencida td {
+  background: var(--erro-fundo);
+}
+.fin-linha.vencida:hover td {
+  background: color-mix(in srgb, var(--erro) 12%, var(--superficie));
+}
+.fin-linha.quitada .celula-forte,
+.fin-linha.quitada .dinheiro {
+  color: var(--texto-corpo);
+  font-weight: 400;
+}
+
+.fin-data {
+  white-space: nowrap;
+}
+.fin-dia {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+.fin-atraso {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--erro);
+}
+
+.fin-parcial {
+  display: grid;
+  gap: 1px;
+  justify-items: end;
+}
+.fin-parcial-falta {
+  font-size: var(--t-xs);
+  color: var(--erro-texto);
+  font-variant-numeric: tabular-nums;
+}
+.fin-quitado {
+  color: var(--ok) !important;
+}
+.fin-nada {
+  color: var(--texto-apoio);
+}
+
+/* O selo é texto com peso, não pílula colorida em toda linha: uma lista
+   de trinta pílulas vira um mosaico e nenhuma delas é lida. */
+.fin-selo {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+  white-space: nowrap;
+}
+.fin-selo.erro {
+  color: var(--erro);
+}
+.fin-selo.ok {
+  color: var(--ok);
+}
+.fin-selo.atencao {
+  color: var(--atencao);
+}
+
 .fin-acao {
   text-align: right;
   white-space: nowrap;
 }
-/* Uma barra vermelha à esquerda da linha vencida. Vale mais que a
-   pílula: ela marca a LINHA, e o olho encontra a linha antes da célula. */
-.fin-vencida td:first-child {
-  box-shadow: inset 3px 0 0 var(--erro);
+.fin-botao-baixa {
+  padding: 5px var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-alta);
+  color: var(--texto-corpo);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  transition:
+    border-color var(--rapido) var(--saida),
+    color var(--rapido) var(--saida);
+}
+.fin-botao-baixa:hover {
+  border-color: var(--teal);
+  color: var(--teal);
 }
 
-.fin-baixa-celula {
+/* ---- a baixa -------------------------------------------------------- */
+.fin-linha-baixa td {
   padding: 0 !important;
+}
+.fin-baixa-celula {
   background: var(--superficie-baixa);
+  box-shadow: inset 0 2px 0 var(--teal-vivo);
 }
 .fin-baixa {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-5);
+}
+.fin-baixa-conta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e-3);
+  flex-wrap: wrap;
+}
+.fin-baixa-rotulo {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-apoio);
+}
+.fin-baixa-devido {
+  font-size: var(--t-md);
+}
+.fin-baixa-ja {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  font-variant-numeric: tabular-nums;
+}
+.fin-baixa-campos {
   display: flex;
   align-items: flex-end;
   gap: var(--e-3);
-  padding: var(--e-4);
   flex-wrap: wrap;
 }
-.fin-baixa .campo {
+.fin-baixa-campos .campo {
   margin-bottom: 0;
-  min-width: 9rem;
+  min-width: 8.5rem;
 }
-.fin-baixa select,
-.fin-baixa input {
+.fin-baixa-campos input,
+.fin-baixa-campos select {
   width: 100%;
   padding: var(--e-2) var(--e-3);
   border: 1px solid var(--fio-forte);
@@ -2017,9 +2275,34 @@
   color: var(--texto);
   font-size: var(--t-sm);
 }
-.fin-baixa-erro {
-  flex-basis: 100%;
+/* A frase que diz o que vai acontecer ANTES de acontecer. É o que pega
+   R$ 3.500 digitado no lugar de R$ 350,00. */
+.fin-previsao {
   margin: 0;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--texto-corpo);
+  border-left: 2px solid var(--fio-forte);
+  padding-left: var(--e-3);
+}
+.fin-previsao.quita {
+  border-left-color: var(--ok);
+  color: var(--ok-texto);
+}
+.fin-baixa-erro {
+  margin: 0;
+}
+
+@media (max-width: 62rem) {
+  .fin-topo {
+    grid-template-columns: 1fr;
+    gap: var(--e-4);
+  }
+}
+@media (max-width: 34rem) {
+  .fin-kpis {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* =====================================================================
@@ -2449,4 +2732,55 @@
 }
 .jan-ok {
   color: var(--ok-texto) !important;
+}
+
+/* Nas comissões a fila é de três e ocupa a largura toda — não há bloco
+   de saldo ao lado disputando espaço. */
+.fin-kpis-largo {
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  margin-bottom: var(--e-6);
+}
+
+/* Dentro do bloco escuro do saldo, entrada e saída se distinguem por um
+   ponto de cor cada — não por um verde e um vermelho chapados, que
+   sobre fundo escuro brigam com o número principal. */
+.fin-entrou::before,
+.fin-saiu::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  margin-right: 6px;
+  vertical-align: 0.08em;
+}
+.fin-entrou::before {
+  background: var(--menta-vivo);
+}
+.fin-saiu::before {
+  background: var(--fin-hero-negativo);
+}
+
+/* O seletor de profissional das comissões. Fora de um `.formulario`, o
+   <select> não herda estilo nenhum e aparece como o controle cru do
+   navegador — cinza, quadrado, de outro produto. */
+.fin-selecao {
+  display: block;
+  max-width: 20rem;
+  margin-bottom: var(--e-5);
+}
+.fin-selecao select {
+  width: 100%;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-alta);
+  color: var(--texto);
+  font-size: var(--t-base);
+  font-family: inherit;
+}
+.fin-selecao select:focus {
+  outline: none;
+  border-color: var(--teal-vivo);
+  box-shadow: 0 0 0 3px var(--realce-teclado);
 }

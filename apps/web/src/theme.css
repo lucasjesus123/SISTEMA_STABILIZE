@@ -81,6 +81,18 @@
   --selecao: color-mix(in srgb, var(--teal-vivo) 26%, transparent);
   --selecao-texto: #101617;
 
+  /* O bloco do número principal do financeiro. É a ÚNICA superfície
+     invertida da tela clara, e a inversão é o que diz "comece por
+     aqui" sem precisar de seta nem de rótulo maior que o número.
+     Verde-petróleo profundo, da mesma família do teal da marca — um
+     cinza-escuro genérico aqui faria a tela parecer de outro produto. */
+  --fin-hero-fundo: #123033;
+  --fin-hero-fio: #123033;
+  --fin-hero-texto: #e8f6f6;
+  /* Saldo negativo no bloco escuro: o vermelho do tema claro some sobre
+     ele, então usa-se o coral que sobrevive ao fundo escuro. */
+  --fin-hero-negativo: #ff8a7a;
+
   color-scheme: light;
 }
 
@@ -151,6 +163,14 @@
   --selecao: color-mix(in srgb, var(--teal-vivo) 30%, transparent);
   --selecao-texto: #eaf7f8;
 
+  /* No escuro a inversão é a outra: o bloco do número principal CLAREIA
+     em vez de escurecer. Repetir o petróleo do tema claro aqui daria um
+     retângulo quase igual ao fundo, e o destaque desapareceria. */
+  --fin-hero-fundo: #16383c;
+  --fin-hero-fio: #29565c;
+  --fin-hero-texto: #eaf7f8;
+  --fin-hero-negativo: #ff9c8d;
+
   color-scheme: dark;
 }
 
@@ -203,6 +223,11 @@
     --realce-teclado: color-mix(in srgb, var(--teal-vivo) 34%, transparent);
     --selecao: color-mix(in srgb, var(--teal-vivo) 30%, transparent);
     --selecao-texto: #eaf7f8;
+
+    --fin-hero-fundo: #16383c;
+    --fin-hero-fio: #29565c;
+    --fin-hero-texto: #eaf7f8;
+    --fin-hero-negativo: #ff9c8d;
 
     color-scheme: dark;
   }
