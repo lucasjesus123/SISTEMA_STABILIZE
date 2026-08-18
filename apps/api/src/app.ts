@@ -10,6 +10,7 @@ import { studentsRoutes } from './modules/students/students.routes.js';
 import { recordsRoutes } from './modules/records/records.routes.js';
 import { attachmentsRoutes } from './modules/attachments/attachments.routes.js';
 import { fotoAlunoRoutes } from './modules/students/foto.routes.js';
+import { medidasRoutes } from './modules/medidas/medidas.routes.js';
 import { exercisesRoutes, workoutsRoutes } from './modules/workouts/workouts.routes.js';
 import { whatsappRoutes } from './modules/whatsapp/whatsapp.routes.js';
 import { reportsRoutes } from './modules/reports/reports.routes.js';
@@ -172,6 +173,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(recordsRoutes, { prefix: '/api/students' });
   await app.register(attachmentsRoutes, { prefix: '/api/students' });
   await app.register(fotoAlunoRoutes, { prefix: '/api/students' });
+  await app.register(medidasRoutes, { prefix: '/api/students' });
   await app.register(workoutsRoutes, { prefix: '/api/students' });
   /* A biblioteca tem raiz própria porque é da EMPRESA, não de um aluno.
      A URL diz de quem é a coisa, e isso determina como ela é protegida. */

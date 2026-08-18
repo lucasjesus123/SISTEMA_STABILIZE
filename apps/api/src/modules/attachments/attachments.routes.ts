@@ -230,7 +230,7 @@ export async function attachmentsRoutes(app: FastifyInstance): Promise<void> {
         // Dado de saúde não fica em cache de proxy nem de navegador.
         .header('Cache-Control', 'private, no-store');
 
-      return reply.send(ler(tenantDe(request), anexo.chave));
+      return reply.send(await ler(tenantDe(request), anexo.chave));
     },
   );
 

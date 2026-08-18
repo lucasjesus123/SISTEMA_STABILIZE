@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, open, rename, rm, stat } from 'node:fs/promises';
+import { appendFile, mkdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 import { env } from '../../config/env.js';
 import { badRequest, unprocessable } from '../../http/errors.js';
+import { abrirParaLeitura, cifrarFluxo } from './cifra-de-arquivo.js';
 
 /**
  * Armazenamento de anexos em disco.
@@ -115,6 +116,15 @@ export async function gravar(
   let tamanho = 0;
   let inicio: Buffer | null = null;
 
+  /* CIFRA AO ESCREVER. O hash e a contagem são do conteúdo EM CLARO, e
+     de propósito: o checksum serve para conferir que o exame recebido é
+     o exame guardado, e o tamanho é o que o cliente vai baixar. Os dois
+     ficariam sem sentido se medissem o envelope. O arquivo no disco é
+     `BYTES_DE_ENVELOPE` maior; ninguém precisa saber disso além daqui. */
+  const { cabecalho, cifra, tag } = cifrarFluxo();
+  const destinoTemp = createWriteStream(temporario);
+  destinoTemp.write(cabecalho);
+
   try {
     await pipeline(
       fluxo,
@@ -127,8 +137,13 @@ export async function gravar(
           yield bloco;
         }
       },
-      createWriteStream(temporario),
+      cifra,
+      destinoTemp,
     );
+
+    /* A tag do GCM só existe depois do último byte cifrado, então vai no
+       FIM do arquivo. Ver o diagrama em `cifra-de-arquivo.ts`. */
+    await appendFile(temporario, tag());
 
     /* O limite é aplicado pelo próprio multipart, que corta o fluxo. Se
        cortou, o que está em disco é um pedaço — não serve como anexo. */
@@ -163,9 +178,16 @@ function confere(inicio: Buffer, assinaturas: readonly Uint8Array[]): boolean {
   );
 }
 
-/** Fluxo de leitura do anexo, para o download. */
-export function ler(tenantId: string, chave: string): Readable {
-  return createReadStream(caminhoDe(tenantId, chave));
+/**
+ * Fluxo de leitura do anexo, para o download.
+ *
+ * Passa por `abrirParaLeitura`, que decifra quando o arquivo tem a marca
+ * e entrega como está quando não tem — os anexos enviados antes da cifra
+ * continuam abrindo. É assíncrono porque descobrir onde está a tag de
+ * autenticação exige olhar o tamanho do arquivo primeiro.
+ */
+export function ler(tenantId: string, chave: string): Promise<Readable> {
+  return abrirParaLeitura(caminhoDe(tenantId, chave));
 }
 
 /**
@@ -187,19 +209,35 @@ export function ler(tenantId: string, chave: string): Readable {
  */
 export async function tipoDeImagem(tenantId: string, chave: string): Promise<string | null> {
   const IMAGENS = ['image/jpeg', 'image/png', 'image/webp'] as const;
-  const arquivo = await open(caminhoDe(tenantId, chave), 'r');
+
+  /* Lê pelo mesmo caminho do download, e não do arquivo cru: com a cifra
+     em repouso, os primeiros bytes do arquivo são o cabeçalho do
+     envelope, não a assinatura do JPEG. Ler cru devolveria `null` para
+     toda foto e a rota responderia 404 para imagens perfeitamente
+     válidas. */
+  const fluxo = await abrirParaLeitura(caminhoDe(tenantId, chave));
   try {
-    const inicio = Buffer.alloc(16);
-    const { bytesRead } = await arquivo.read(inicio, 0, 16, 0);
-    const lido = inicio.subarray(0, bytesRead);
+    const lido = await primeirosBytes(fluxo, 16);
     for (const tipo of IMAGENS) {
       const aceito = TIPOS_ACEITOS.get(tipo);
       if (aceito !== undefined && confere(lido, aceito.assinaturas)) return tipo;
     }
     return null;
   } finally {
-    await arquivo.close();
+    fluxo.destroy();
   }
+}
+
+/** Os primeiros `n` bytes de um fluxo, sem consumi-lo inteiro. */
+async function primeirosBytes(fluxo: Readable, n: number): Promise<Buffer> {
+  const pedacos: Buffer[] = [];
+  let total = 0;
+  for await (const pedaco of fluxo) {
+    pedacos.push(pedaco as Buffer);
+    total += (pedaco as Buffer).length;
+    if (total >= n) break;
+  }
+  return Buffer.concat(pedacos).subarray(0, n);
 }
 
 export async function existe(tenantId: string, chave: string): Promise<boolean> {

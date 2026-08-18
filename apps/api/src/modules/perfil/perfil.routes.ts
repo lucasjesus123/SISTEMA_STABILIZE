@@ -249,7 +249,7 @@ export async function perfilRoutes(app: FastifyInstance): Promise<void> {
          O cliente busca por blob e revoga; não há o que reaproveitar. */
       .header('Cache-Control', 'private, no-store');
 
-    return reply.send(ler(tenantDe(request), chave));
+    return reply.send(await ler(tenantDe(request), chave));
   });
 
   /* ------------------------------------------------------------------

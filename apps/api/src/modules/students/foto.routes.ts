@@ -152,7 +152,7 @@ export async function fotoAlunoRoutes(app: FastifyInstance): Promise<void> {
       .header('Content-Security-Policy', "default-src 'none'; sandbox")
       .header('Cache-Control', 'private, no-store');
 
-    return reply.send(ler(tenantDe(request), chave));
+    return reply.send(await ler(tenantDe(request), chave));
   });
 
   /* ------------------------------------------------------------------
