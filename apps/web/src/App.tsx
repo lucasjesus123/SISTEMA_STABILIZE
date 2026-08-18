@@ -32,6 +32,7 @@ import { BotaoTema, useTema } from './tema.jsx';
 import { Perfil } from './Perfil.jsx';
 import { Financeiro } from './Financeiro.jsx';
 import { Agenda } from './Agenda.jsx';
+import { Equipe } from './Equipe.jsx';
 import {
   CadastroConcluido,
   SecaoDoPlano,
@@ -84,7 +85,7 @@ const TOM_DO_ALUNO: Record<string, string> = {
   INACTIVE: 'neutra',
 };
 
-type Aba = 'painel' | 'alunos' | 'agenda' | 'financeiro' | 'whatsapp' | 'perfil';
+type Aba = 'painel' | 'alunos' | 'agenda' | 'financeiro' | 'equipe' | 'whatsapp' | 'perfil';
 
 export default function App(): ReactNode {
   const [principal, setPrincipal] = useState<Principal | null>(null);
@@ -332,6 +333,11 @@ function Sistema({
       icone: <IconeFinanceiro />,
       visivel: pode('finance:report:read') || pode('commission:read'),
     },
+    /* A EQUIPE fica depois do financeiro e antes do WhatsApp: é
+       administração da academia, não operação do dia. Quem não tem
+       `user:read` não vê — recepção e profissional não administram
+       quadro de pessoal. */
+    { id: 'equipe', nome: 'Equipe', icone: <IconeEquipe />, visivel: pode('user:read') },
     { id: 'whatsapp', nome: 'WhatsApp', icone: <IconeWhatsapp />, visivel: pode('user:write') },
     /* SEMPRE VISÍVEL, e é a única assim. As outras seções dependem de
        permissão porque são dados da empresa; o perfil é a própria
@@ -397,6 +403,7 @@ function Sistema({
         {aba === 'alunos' && <Alunos principal={principal} />}
         {aba === 'agenda' && <Agenda principal={principal} />}
         {aba === 'financeiro' && <Financeiro principal={principal} />}
+        {aba === 'equipe' && <Equipe principal={principal} />}
         {aba === 'whatsapp' && <Whatsapp />}
         {aba === 'perfil' && <Perfil principal={principal} />}
       </main>
@@ -451,6 +458,18 @@ function IconeFinanceiro(): ReactNode {
     <svg {...svg}>
       <path d="M4 20V10M10 20V4M16 20v-7" />
       <path d="M20 20V8m0 0h-3m3 0-5 5" />
+    </svg>
+  );
+}
+
+/* Duas pessoas, uma à frente da outra: é quadro de pessoal, e não o
+   perfil de alguém — que já usa a silhueta única logo abaixo. */
+function IconeEquipe(): ReactNode {
+  return (
+    <svg {...svg}>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 20a5.5 5.5 0 0 1 11 0" />
+      <path d="M16 5.5a3.2 3.2 0 0 1 0 6.2M17 14.4a5.5 5.5 0 0 1 3.5 5.1" />
     </svg>
   );
 }

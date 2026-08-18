@@ -312,3 +312,136 @@ export async function gravarHorarios(
   }
   return faixas.length;
 }
+
+/* --------------------------------------------------------------------
+ * Equipe: criar, editar, desligar
+ *
+ * A ACADEMIA CADASTRA A PRÓPRIA EQUIPE. Até aqui só o painel da
+ * plataforma criava gente, e só criava OWNER e ADMIN — a academia não
+ * tinha como cadastrar um personal nem uma recepcionista, que são
+ * justamente os papéis que ela contrata e demite sozinha.
+ *
+ * Nenhuma função aqui filtra tenant à mão: tudo roda sob `inTenant`, e é
+ * a RLS que prende cada consulta à academia de quem pergunta.
+ * ------------------------------------------------------------------ */
+
+export interface LinhaUsuario {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  phone: string | null;
+  cor: string | null;
+  is_active: boolean;
+  last_login_at: Date | null;
+  must_change_password: boolean;
+}
+
+export async function listarUsuarios(client: TenantClient): Promise<LinhaUsuario[]> {
+  const { rows } = await client.query<LinhaUsuario>(
+    /* O ALUNO NÃO ENTRA NESTA LISTA. Ele tem login, mas não é equipe —
+       misturá-los faria a tela de RH mostrar trezentos alunos. */
+    `SELECT id, full_name, email, role::text AS role, phone, cor, is_active,
+            last_login_at, must_change_password
+       FROM users
+      WHERE role <> 'STUDENT'
+      ORDER BY is_active DESC, full_name`,
+  );
+  return rows;
+}
+
+export async function criarUsuario(
+  client: TenantClient,
+  tenantId: string,
+  dados: {
+    nome: string;
+    email: string;
+    papel: string;
+    telefone: string | null;
+    cor: string | null;
+    hash: string;
+  },
+): Promise<{ id: string }> {
+  const { rows } = await client.query<{ id: string }>(
+    /* `must_change_password` sempre verdadeiro: quem cria a conta digita
+       uma senha provisória e nunca fica sabendo a definitiva de
+       ninguém. */
+    `INSERT INTO users (tenant_id, email, password_hash, full_name, role, phone, cor,
+                        must_change_password)
+     VALUES ($1,$2,$3,$4,$5::user_role,$6,$7,true)
+     RETURNING id`,
+    [tenantId, dados.email, dados.hash, dados.nome, dados.papel, dados.telefone, dados.cor],
+  );
+  return rows[0]!;
+}
+
+export async function atualizarUsuario(
+  client: TenantClient,
+  id: string,
+  dados: { nome: string; papel: string; telefone: string | null; cor: string | null },
+): Promise<boolean> {
+  const { rowCount } = await client.query(
+    `UPDATE users
+        SET full_name = $2, role = $3::user_role, phone = $4, cor = $5
+      WHERE id = $1 AND role <> 'STUDENT'`,
+    [id, dados.nome, dados.papel, dados.telefone, dados.cor],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/**
+ * Liga e desliga uma conta.
+ *
+ * DESLIGAR DERRUBA AS SESSÕES ABERTAS. Sem isso, quem foi demitido às
+ * dez da manhã continua dentro do sistema com o token que já tinha —
+ * por horas, e justamente no dia em que mais interessa que não continue.
+ */
+export async function definirUsuarioAtivo(
+  client: TenantClient,
+  id: string,
+  ativo: boolean,
+): Promise<boolean> {
+  const { rowCount } = await client.query(
+    `UPDATE users SET is_active = $2 WHERE id = $1 AND role <> 'STUDENT'`,
+    [id, ativo],
+  );
+  if ((rowCount ?? 0) > 0 && !ativo) {
+    await client.query(
+      `UPDATE user_sessions SET revoked_at = now()
+        WHERE user_id = $1 AND revoked_at IS NULL`,
+      [id],
+    );
+  }
+  return (rowCount ?? 0) > 0;
+}
+
+export async function redefinirSenha(
+  client: TenantClient,
+  id: string,
+  hash: string,
+): Promise<boolean> {
+  const { rowCount } = await client.query(
+    `UPDATE users
+        SET password_hash = $2, password_changed_at = now(), must_change_password = true,
+            failed_login_count = 0, locked_until = NULL
+      WHERE id = $1 AND role <> 'STUDENT'`,
+    [id, hash],
+  );
+  if ((rowCount ?? 0) > 0) {
+    await client.query(
+      `UPDATE user_sessions SET revoked_at = now()
+        WHERE user_id = $1 AND revoked_at IS NULL`,
+      [id],
+    );
+  }
+  return (rowCount ?? 0) > 0;
+}
+
+/** O papel de alguém, para as checagens que decidem quem mexe em quem. */
+export async function papelDe(client: TenantClient, id: string): Promise<string | null> {
+  const { rows } = await client.query<{ role: string }>(
+    'SELECT role::text AS role FROM users WHERE id = $1',
+    [id],
+  );
+  return rows[0]?.role ?? null;
+}

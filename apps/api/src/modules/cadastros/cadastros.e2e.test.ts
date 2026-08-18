@@ -42,6 +42,7 @@ const ids = {
   profA: '',
   profB: '',
   alunoDoA: '',
+  criado: '',
   sufixo: '',
 };
 
@@ -318,6 +319,194 @@ suite('Cadastros da agenda e do financeiro', () => {
       payload: { faixas: [{ diaDaSemana: 1, inicio: '18:00', fim: '09:00' }] },
     });
     expect(res.statusCode).toBe(422);
+  });
+
+  /* ==================================================================
+   * Equipe — quem mexe em quem
+   * ================================================================ */
+
+  it('o dono cadastra um profissional e recebe a senha UMA vez', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/cadastros/usuarios',
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: {
+        nome: 'Personal Novo',
+        email: `personal-${ids.sufixo}@cadastros.test`,
+        papel: 'PROFESSIONAL',
+        cor: '#3f9e6b',
+      },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const { data } = res.json() as { data: { id: string; senhaProvisoria: string } };
+    expect(data.senhaProvisoria).toHaveLength(12);
+    ids.criado = data.id;
+
+    /* A conta nasce EXIGINDO troca. Quem cadastrou não pode terminar
+       sabendo a senha definitiva de ninguém. */
+    const linha = await comTenant(ids.tenant, (c) =>
+      c.query<{ must_change_password: boolean; password_hash: string }>(
+        'SELECT must_change_password, password_hash FROM users WHERE id = $1',
+        [data.id],
+      ),
+    );
+    expect(linha.rows[0]!.must_change_password).toBe(true);
+    /* E a senha não está em claro em lugar nenhum. */
+    expect(linha.rows[0]!.password_hash).not.toContain(data.senhaProvisoria);
+    expect(linha.rows[0]!.password_hash.startsWith('$argon2id$')).toBe(true);
+
+    /* E ela funciona: uma senha provisória que não entra é um cadastro
+       que não existe. */
+    const entrada = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: {
+        email: `personal-${ids.sufixo}@cadastros.test`,
+        password: data.senhaProvisoria,
+        tenantSlug: ids.slug,
+      },
+    });
+    expect(entrada.statusCode).toBe(200);
+  });
+
+  it('recusa e-mail repetido com 409, não com 500', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/cadastros/usuarios',
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: {
+        nome: 'Outro Qualquer',
+        email: `personal-${ids.sufixo}@cadastros.test`,
+        papel: 'RECEPTION',
+      },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('o profissional NÃO enxerga nem cadastra a equipe', async () => {
+    const leitura = await app.inject({
+      method: 'GET',
+      url: '/api/cadastros/usuarios',
+      headers: como(await tokenDe(ids.emailProfA)),
+    });
+    expect(leitura.statusCode).toBe(403);
+
+    const escrita = await app.inject({
+      method: 'POST',
+      url: '/api/cadastros/usuarios',
+      headers: como(await tokenDe(ids.emailProfA)),
+      payload: { nome: 'Eu Mesmo Promovido', email: `x-${ids.sufixo}@t.test`, papel: 'ADMIN' },
+    });
+    expect(escrita.statusCode).toBe(403);
+  });
+
+  it('um ADMIN não cria outro DONO — seria promoção em dois passos', async () => {
+    /* O caminho que isto fecha: o administrador cria um dono com um
+       e-mail que ele controla, entra por essa conta e passa a ter tudo.
+       A checagem tem de ser do servidor; a tela só esconde a opção. */
+    const admin = `adm-${ids.sufixo}@cadastros.test`;
+    const criado = await app.inject({
+      method: 'POST',
+      url: '/api/cadastros/usuarios',
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: { nome: 'Gerente', email: admin, papel: 'ADMIN' },
+    });
+    const senha = (criado.json() as { data: { senhaProvisoria: string } }).data.senhaProvisoria;
+
+    const entrada = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: admin, password: senha, tenantSlug: ids.slug },
+    });
+    const tokenAdmin = (entrada.json() as { accessToken: string }).accessToken;
+
+    const tentativa = await app.inject({
+      method: 'POST',
+      url: '/api/cadastros/usuarios',
+      headers: como(tokenAdmin),
+      payload: { nome: 'Dono Plantado', email: `dono2-${ids.sufixo}@t.test`, papel: 'OWNER' },
+    });
+    expect(tentativa.statusCode).toBe(403);
+
+    /* E também não promove ninguém a dono por edição, que é o mesmo
+       ataque por outra porta. */
+    const promocao = await app.inject({
+      method: 'PUT',
+      url: `/api/cadastros/usuarios/${ids.criado}`,
+      headers: como(tokenAdmin),
+      payload: { nome: 'Personal Novo', papel: 'OWNER' },
+    });
+    expect(promocao.statusCode).toBe(403);
+  });
+
+  it('ninguém desliga a própria conta', async () => {
+    const eu = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: como(await tokenDe(ids.emailDono)),
+    });
+    const meuId = (eu.json() as { id: string }).id;
+
+    /* Sem isto, o último administrador ativo pode se desligar e a
+       academia fica num estado do qual só se sai por fora do sistema. */
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/cadastros/usuarios/${meuId}/situacao`,
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: { ativo: false },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('desligar derruba a sessão aberta na hora', async () => {
+    const alvo = `demitido-${ids.sufixo}@cadastros.test`;
+    const criado = await app.inject({
+      method: 'POST',
+      url: '/api/cadastros/usuarios',
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: { nome: 'Vai Sair', email: alvo, papel: 'RECEPTION' },
+    });
+    const { id, senhaProvisoria } = (criado.json() as {
+      data: { id: string; senhaProvisoria: string };
+    }).data;
+
+    const entrada = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: alvo, password: senhaProvisoria, tenantSlug: ids.slug },
+    });
+    expect(entrada.statusCode).toBe(200);
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/cadastros/usuarios/${id}/situacao`,
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: { ativo: false },
+    });
+
+    /* A sessão precisa cair AGORA. Se sobrevivesse até o token expirar,
+       quem foi desligado às dez da manhã continuaria dentro do sistema
+       por horas — justamente no dia em que mais importa que não. */
+    const sessoes = await comTenant(ids.tenant, (c) =>
+      c.query<{ abertas: string }>(
+        `SELECT count(*)::text AS abertas FROM user_sessions
+          WHERE user_id = $1 AND revoked_at IS NULL`,
+        [id],
+      ),
+    );
+    expect(Number(sessoes.rows[0]!.abertas)).toBe(0);
+  });
+
+  it('o aluno não aparece na lista da equipe', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/cadastros/usuarios',
+      headers: como(await tokenDe(ids.emailDono)),
+    });
+    const { data } = res.json() as { data: { papel: string }[] };
+    /* Aluno tem login, mas não é equipe: misturá-los faria a tela de
+       quadro de pessoal listar trezentos alunos. */
+    expect(data.every((u) => u.papel !== 'STUDENT')).toBe(true);
   });
 
   /* ==================================================================

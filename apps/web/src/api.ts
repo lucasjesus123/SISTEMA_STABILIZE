@@ -1119,3 +1119,53 @@ export const salvarHorarios = (profissionalId: string, faixas: FaixaDeHorario[])
     `/api/cadastros/profissionais/${profissionalId}/horarios`,
     { method: 'PUT', body: JSON.stringify({ faixas }) },
   );
+
+/* ====================================================================
+ * EQUIPE — quem trabalha na academia
+ * ================================================================== */
+
+export type PapelDaEquipe = 'OWNER' | 'ADMIN' | 'PROFESSIONAL' | 'RECEPTION';
+
+export interface UsuarioDaEquipe {
+  id: string;
+  nome: string;
+  email: string;
+  papel: PapelDaEquipe;
+  telefone: string | null;
+  cor: string | null;
+  ativo: boolean;
+  ultimoAcesso: string | null;
+  precisaTrocarSenha: boolean;
+}
+
+export const buscarEquipe = () => api<{ data: UsuarioDaEquipe[] }>('/api/cadastros/usuarios');
+
+export interface DadosDeUsuario {
+  nome: string;
+  papel: PapelDaEquipe;
+  telefone?: string | null;
+  cor?: string | null;
+}
+
+export const criarUsuario = (dados: DadosDeUsuario & { email: string }) =>
+  api<{ data: { id: string; senhaProvisoria: string } }>('/api/cadastros/usuarios', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const salvarUsuario = (id: string, dados: DadosDeUsuario) =>
+  api<{ ok: boolean }>(`/api/cadastros/usuarios/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dados),
+  });
+
+export const definirUsuarioAtivo = (id: string, ativo: boolean) =>
+  api<{ ok: boolean }>(`/api/cadastros/usuarios/${id}/situacao`, {
+    method: 'POST',
+    body: JSON.stringify({ ativo }),
+  });
+
+export const redefinirSenhaDeUsuario = (id: string) =>
+  api<{ data: { senhaProvisoria: string } }>(`/api/cadastros/usuarios/${id}/senha`, {
+    method: 'POST',
+  });

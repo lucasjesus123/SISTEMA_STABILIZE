@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { formatCents, reaisToCents, MoneyError } from '@stabilize/shared';
 import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { writeAudit } from '../../audit/audit.js';
-import { conflict, notFound, unprocessable } from '../../http/errors.js';
+import { conflict, forbidden, notFound, unprocessable } from '../../http/errors.js';
+import { hashPassword } from '../../auth/password.js';
+import { randomBytes } from 'node:crypto';
 import { assertStudentInScope } from '../students/students.repository.js';
 import * as repo from './cadastros.repository.js';
 
@@ -25,6 +27,17 @@ import * as repo from './cadastros.repository.js';
  */
 
 const idSchema = z.string().uuid('Identificador inválido');
+
+/**
+ * Senha provisória, ditável por telefone.
+ *
+ * O alfabeto não tem 0/O nem 1/l/I: esta senha costuma ser lida em voz
+ * alta para o funcionário novo ou copiada de uma tela, e o par
+ * confundido custa uma ligação.
+ */
+const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+const senhaProvisoria = (): string =>
+  [...randomBytes(12)].map((b) => ALFABETO[b % ALFABETO.length]).join('');
 const idParam = z.object({ id: idSchema });
 
 const corSchema = z
@@ -143,6 +156,185 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  /* ==================================================================
+   * Equipe: cadastrar, editar, desligar
+   *
+   * QUEM MEXE EM QUEM. Duas regras, e as duas são impostas aqui, no
+   * servidor:
+   *
+   *   1. SÓ O DONO CRIA OU EDITA OUTRO DONO. Um administrador que
+   *      pudesse criar um OWNER se promoveria em dois passos — cria um
+   *      dono novo com um e-mail que ele controla e entra por ele.
+   *   2. NINGUÉM SE DESLIGA NEM SE REBAIXA. Não é gentileza: é o que
+   *      impede a academia de ficar sem nenhum administrador ativo, um
+   *      estado do qual só se sai por fora do sistema.
+   * ================================================================ */
+
+  const PAPEIS = ['OWNER', 'ADMIN', 'PROFESSIONAL', 'RECEPTION'] as const;
+
+  const usuarioSchema = z.object({
+    nome: z.string().trim().min(2, 'Informe o nome completo.').max(160),
+    papel: z.enum(PAPEIS),
+    telefone: z.string().trim().max(40).nullish().transform((v) => v || null),
+    cor: corSchema,
+  });
+
+  app.get('/usuarios', { preHandler: [app.authorize('user:read')] }, async (request) =>
+    inTenant(request, async (client) => {
+      const linhas = await repo.listarUsuarios(client);
+      return {
+        data: linhas.map((u) => ({
+          id: u.id,
+          nome: u.full_name,
+          email: u.email,
+          papel: u.role,
+          telefone: u.phone,
+          cor: u.cor,
+          ativo: u.is_active,
+          ultimoAcesso: u.last_login_at?.toISOString() ?? null,
+          precisaTrocarSenha: u.must_change_password,
+        })),
+      };
+    }),
+  );
+
+  app.post('/usuarios', { preHandler: [app.authorize('user:write')] }, async (request, reply) => {
+    const body = usuarioSchema
+      .extend({ email: z.string().trim().toLowerCase().email('E-mail inválido.').max(160) })
+      .parse(request.body);
+
+    return inTenant(request, async (client, principal) => {
+      if (body.papel === 'OWNER' && principal.role !== 'OWNER') {
+        throw forbidden('Só o dono da academia cria outro dono.');
+      }
+
+      const senha = senhaProvisoria();
+      const criado = await repo
+        .criarUsuario(client, principal.tenantId, {
+          nome: body.nome,
+          email: body.email,
+          papel: body.papel,
+          telefone: body.telefone,
+          cor: body.cor,
+          hash: await hashPassword(senha),
+        })
+        .catch((e: unknown) => {
+          if (typeof e === 'object' && e !== null && (e as { code?: string }).code === '23505') {
+            throw conflict('Já existe alguém com esse e-mail nesta academia.');
+          }
+          throw e;
+        });
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'user.create',
+        resourceType: 'user',
+        resourceId: criado.id,
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+        metadata: { papel: body.papel },
+      });
+
+      void reply.status(201);
+      /* A senha aparece UMA VEZ, na resposta desta chamada. Não é
+         guardada em claro em lugar nenhum e a troca é obrigatória no
+         primeiro acesso — quem cadastrou nunca sabe a senha definitiva
+         de ninguém. */
+      return { data: { id: criado.id, senhaProvisoria: senha } };
+    });
+  });
+
+  app.put('/usuarios/:id', { preHandler: [app.authorize('user:write')] }, async (request) => {
+    const { id } = idParam.parse(request.params);
+    const body = usuarioSchema.parse(request.body);
+
+    return inTenant(request, async (client, principal) => {
+      const papelAtual = await repo.papelDe(client, id);
+      if (papelAtual === null || papelAtual === 'STUDENT') throw notFound('Usuário');
+
+      if ((papelAtual === 'OWNER' || body.papel === 'OWNER') && principal.role !== 'OWNER') {
+        throw forbidden('Só o dono da academia mexe no cadastro de um dono.');
+      }
+      if (id === principal.userId && body.papel !== principal.role) {
+        throw forbidden('Você não pode trocar o próprio papel. Peça a outro administrador.');
+      }
+
+      if (!(await repo.atualizarUsuario(client, id, body))) throw notFound('Usuário');
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'user.update',
+        resourceType: 'user',
+        resourceId: id,
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+        metadata: { papel: body.papel },
+      });
+      return { ok: true };
+    });
+  });
+
+  app.post(
+    '/usuarios/:id/situacao',
+    { preHandler: [app.authorize('user:write')] },
+    async (request) => {
+      const { id } = idParam.parse(request.params);
+      const { ativo } = z.object({ ativo: z.boolean() }).parse(request.body);
+
+      return inTenant(request, async (client, principal) => {
+        if (id === principal.userId) {
+          throw forbidden('Você não pode desligar a própria conta.');
+        }
+        const papelAtual = await repo.papelDe(client, id);
+        if (papelAtual === null || papelAtual === 'STUDENT') throw notFound('Usuário');
+        if (papelAtual === 'OWNER' && principal.role !== 'OWNER') {
+          throw forbidden('Só o dono da academia desliga outro dono.');
+        }
+
+        if (!(await repo.definirUsuarioAtivo(client, id, ativo))) throw notFound('Usuário');
+
+        await writeAudit(client, principal.tenantId, {
+          action: ativo ? 'user.update' : 'user.delete',
+          resourceType: 'user',
+          resourceId: id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: { ativo },
+        });
+        return { ok: true };
+      });
+    },
+  );
+
+  app.post('/usuarios/:id/senha', { preHandler: [app.authorize('user:write')] }, async (request) => {
+    const { id } = idParam.parse(request.params);
+
+    return inTenant(request, async (client, principal) => {
+      const papelAtual = await repo.papelDe(client, id);
+      if (papelAtual === null || papelAtual === 'STUDENT') throw notFound('Usuário');
+      if (papelAtual === 'OWNER' && principal.role !== 'OWNER') {
+        throw forbidden('Só o dono da academia redefine a senha de outro dono.');
+      }
+
+      const senha = senhaProvisoria();
+      if (!(await repo.redefinirSenha(client, id, await hashPassword(senha)))) {
+        throw notFound('Usuário');
+      }
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'user.update',
+        resourceType: 'user',
+        resourceId: id,
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+        metadata: { senhaRedefinida: true },
+      });
+      return { data: { senhaProvisoria: senha } };
+    });
+  });
 
   /* ------------------------------------------------------------------
    * Horários de atendimento
