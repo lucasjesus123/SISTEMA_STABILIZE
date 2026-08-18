@@ -181,7 +181,6 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
       'evolution:write',
       'attachment:read',
       'attachment:write',
-      'schedule:read',
       'schedule:write',
       'schedule:cancel',
       'availability:write',
@@ -192,11 +191,21 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
       'workout:read',
       'workout:write',
     ),
-    // A agenda dos colegas é visível apenas como ocupação (o serviço devolve
-    // blocos anonimizados), o que é necessário para não marcar em cima.
-    // A biblioteca de exercícios é da academia, então é lida por inteiro —
-    // mas escrita só por quem administra.
-    ...grants('ALL', 'availability:read', 'room:read', 'exercise:read'),
+    /* A AGENDA DA ACADEMIA INTEIRA é lida por todo profissional, e a
+       escrita continua sendo só da própria. É a regra que a academia
+       pediu: o calendário é compartilhado, mas ninguém mexe no horário
+       do colega — para isso existe a administração.
+
+       A consequência precisa estar dita: o profissional passa a ver o
+       NOME do aluno atendido pelo colega, e não mais um bloco anônimo de
+       ocupação. Quem atende no mesmo espaço já cruza com essas pessoas
+       na sala; o que muda é que agora está na tela, e cada leitura passa
+       pelo audit_log.
+
+       `schedule:write` e `schedule:cancel` ficaram no escopo próprio,
+       logo acima — é ali que "não mexo no calendário do outro" é
+       imposto, e é o servidor que impõe, não a tela. */
+    ...grants('ALL', 'schedule:read', 'availability:read', 'room:read', 'exercise:read'),
   ],
 
   RECEPTION: [
