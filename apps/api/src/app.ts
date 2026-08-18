@@ -18,6 +18,7 @@ import { portalRoutes } from './modules/portal/portal.routes.js';
 import { perfilRoutes } from './modules/perfil/perfil.routes.js';
 import { cepRoutes } from './modules/cep/cep.routes.js';
 import { plataformaRoutes } from './modules/plataforma/plataforma.routes.js';
+import { cadastrosRoutes, contratoRoutes } from './modules/cadastros/cadastros.routes.js';
 import { registrarAgendador } from './modules/whatsapp/agendador.js';
 import multipart from '@fastify/multipart';
 import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
@@ -175,6 +176,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(attachmentsRoutes, { prefix: '/api/students' });
   await app.register(fotoAlunoRoutes, { prefix: '/api/students' });
   await app.register(medidasRoutes, { prefix: '/api/students' });
+  /* O contrato é do aluno como a anamnese é: quanto ele paga, de quem é
+     a comissão e desde quando. Fica sob /api/students pelo mesmo motivo
+     — quem passa pelo escopo é o aluno. */
+  await app.register(contratoRoutes, { prefix: '/api/students' });
   await app.register(workoutsRoutes, { prefix: '/api/students' });
   /* A biblioteca tem raiz própria porque é da EMPRESA, não de um aluno.
      A URL diz de quem é a coisa, e isso determina como ela é protegida. */
@@ -200,6 +205,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(scheduleRoutes, { prefix: '/api/schedule' });
   await app.register(financeRoutes, { prefix: '/api/finance' });
   await app.register(insightsRoutes, { prefix: '/api/insights' });
+  /* Equipe e espaços: a agenda não tem cor nem legenda sem a primeira,
+     e não divide o salão sem a segunda. */
+  await app.register(cadastrosRoutes, { prefix: '/api/cadastros' });
 
   return app;
 }

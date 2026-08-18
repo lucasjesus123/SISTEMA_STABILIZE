@@ -30,6 +30,8 @@ import { Whatsapp } from './Whatsapp.jsx';
 import { Aplicativo } from './Aplicativo.jsx';
 import { BotaoTema, useTema } from './tema.jsx';
 import { Perfil } from './Perfil.jsx';
+import { Financeiro } from './Financeiro.jsx';
+import { Agenda } from './Agenda.jsx';
 import {
   e164ParaMascara,
   mascararCep,
@@ -48,7 +50,7 @@ import { mesclarEndereco, useBuscaDeCep } from './endereco.js';
 const capitalizar = (texto: string): string =>
   texto.charAt(0).toUpperCase() + texto.slice(1);
 
-type Aba = 'painel' | 'alunos' | 'agenda' | 'whatsapp' | 'perfil';
+type Aba = 'painel' | 'alunos' | 'agenda' | 'financeiro' | 'whatsapp' | 'perfil';
 
 export default function App(): ReactNode {
   const [principal, setPrincipal] = useState<Principal | null>(null);
@@ -278,6 +280,18 @@ function Sistema({
     },
     { id: 'alunos', nome: 'Alunos', icone: <IconeAlunos />, visivel: pode('student:read') },
     { id: 'agenda', nome: 'Agenda', icone: <IconeAgenda />, visivel: pode('schedule:read') },
+    /* O PROFISSIONAL TAMBÉM VÊ ESTA ABA, e vê só a parte dele: o
+       fechamento da própria comissão. Quem tem `finance:report:read` —
+       dono e administrador — encontra o caixa inteiro; quem tem apenas
+       `commission:read` cai direto no próprio acerto. É a mesma aba
+       porque é a mesma pergunta ("quanto entrou e quanto é meu"), com
+       respostas de tamanhos diferentes. */
+    {
+      id: 'financeiro',
+      nome: 'Financeiro',
+      icone: <IconeFinanceiro />,
+      visivel: pode('finance:report:read') || pode('commission:read'),
+    },
     { id: 'whatsapp', nome: 'WhatsApp', icone: <IconeWhatsapp />, visivel: pode('user:write') },
     /* SEMPRE VISÍVEL, e é a única assim. As outras seções dependem de
        permissão porque são dados da empresa; o perfil é a própria
@@ -341,7 +355,8 @@ function Sistema({
       <main id="conteudo" className="conteudo">
         {aba === 'painel' && <Painel principal={principal} />}
         {aba === 'alunos' && <Alunos principal={principal} />}
-        {aba === 'agenda' && <Agenda />}
+        {aba === 'agenda' && <Agenda principal={principal} />}
+        {aba === 'financeiro' && <Financeiro principal={principal} />}
         {aba === 'whatsapp' && <Whatsapp />}
         {aba === 'perfil' && <Perfil principal={principal} />}
       </main>
@@ -385,6 +400,17 @@ function IconeAgenda(): ReactNode {
     <svg {...svg}>
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+/* Duas barras e uma seta subindo: é dinheiro que entra ao longo do
+   tempo, não um cifrão. O cifrão diz "moeda"; isto diz "movimento". */
+function IconeFinanceiro(): ReactNode {
+  return (
+    <svg {...svg}>
+      <path d="M4 20V10M10 20V4M16 20v-7" />
+      <path d="M20 20V8m0 0h-3m3 0-5 5" />
     </svg>
   );
 }
@@ -830,118 +856,6 @@ function Alunos({ principal }: { principal: Principal }): ReactNode {
   );
 }
 
-/* ====================================================================
- * Agenda
- * ================================================================== */
-
-function Agenda(): ReactNode {
-  const [dia, setDia] = useState(() => new Date());
-  const [itens, setItens] = useState<Compromisso[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      setCarregando(true);
-      setErro(null);
-      try {
-        const ini = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), 0, 0);
-        const fim = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate() + 1, 0, 0);
-        const r = await buscarAgenda(ini, fim);
-        setItens(r.data);
-      } catch (e) {
-        setErro(e instanceof ApiError ? e.message : 'Não foi possível carregar a agenda.');
-      } finally {
-        setCarregando(false);
-      }
-    })();
-  }, [dia]);
-
-  const mover = (dias: number): void => {
-    const novo = new Date(dia);
-    novo.setDate(novo.getDate() + dias);
-    setDia(novo);
-  };
-
-  const ehHoje = dia.toDateString() === new Date().toDateString();
-
-  return (
-    <>
-      <div className="secao-cabecalho">
-        <h1>Agenda</h1>
-        <p>
-          {capitalizar(
-            dia.toLocaleDateString('pt-BR', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-            }),
-          )}
-          {ehHoje && <span className="marca-hoje">hoje</span>}
-        </p>
-      </div>
-
-      <div className="agenda-controles">
-        <button type="button" className="botao-secundario" onClick={() => mover(-1)}>
-          Dia anterior
-        </button>
-        <button type="button" className="botao-secundario" onClick={() => setDia(new Date())}>
-          Hoje
-        </button>
-        <button type="button" className="botao-secundario" onClick={() => mover(1)}>
-          Próximo dia
-        </button>
-      </div>
-
-      {erro !== null && <Erro mensagem={erro} />}
-      {carregando && <Carregando rotulo="Carregando a agenda" />}
-
-      {!carregando && erro === null && itens.length === 0 && (
-        <Vazio
-          titulo="Nenhum atendimento neste dia"
-          descricao="Os horários marcados aparecerão aqui, em ordem cronológica."
-        />
-      )}
-
-      {!carregando && itens.length > 0 && (
-        <ol className="agenda-lista">
-          {itens.map((c) => {
-            const ini = new Date(c.inicio);
-            const fim = new Date(c.fim);
-            return (
-              <li key={c.id} className={`agenda-item status-${c.status.toLowerCase()}`}>
-                <div className="agenda-hora tabular">
-                  <strong>
-                    {ini.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </strong>
-                  <span>
-                    {fim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <div className="agenda-corpo">
-                  <span className="agenda-aluno">{c.aluno.nome}</span>
-                  <span className="agenda-detalhe">
-                    {c.profissional.nome}
-                    {c.sala !== null && ` · ${c.sala.nome}`}
-                  </span>
-                </div>
-                <span className={`selo selo-${c.status.toLowerCase()}`}>
-                  {c.status === 'ATTENDED'
-                    ? 'Compareceu'
-                    : c.status === 'NO_SHOW'
-                      ? 'Faltou'
-                      : c.status === 'CONFIRMED'
-                        ? 'Confirmado'
-                        : 'Agendado'}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-    </>
-  );
-}
 
 /* ====================================================================
  * Ficha do aluno

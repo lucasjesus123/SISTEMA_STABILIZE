@@ -873,3 +873,244 @@ export async function buscarCep(oitoDigitos: string): Promise<EnderecoDeCep | nu
     return null;
   }
 }
+
+/* ====================================================================
+ * FINANCEIRO — contas a receber e a pagar, baixas e comissão
+ * ================================================================== */
+
+export type DirecaoLancamento = 'RECEIVABLE' | 'PAYABLE';
+export type StatusLancamento = 'OPEN' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+
+export interface Lancamento {
+  id: string;
+  direcao: DirecaoLancamento;
+  descricao: string;
+  categoria: string | null;
+  valorCentavos: number;
+  valorFormatado: string;
+  pagoCentavos: number;
+  saldoCentavos: number;
+  status: StatusLancamento;
+  vencimento: string;
+  competencia: string | null;
+  aluno: { id: string; nome: string } | null;
+  fornecedor: string | null;
+  parcela: string | null;
+}
+
+export interface FiltroLancamentos {
+  direcao?: DirecaoLancamento;
+  de?: Date;
+  ate?: Date;
+  status?: StatusLancamento;
+  apenasEmAberto?: boolean;
+  pagina?: number;
+}
+
+export const buscarLancamentos = (f: FiltroLancamentos = {}) => {
+  const q = new URLSearchParams({ page: String(f.pagina ?? 1), pageSize: '50' });
+  if (f.direcao !== undefined) q.set('direcao', f.direcao);
+  if (f.de !== undefined) q.set('de', iso(f.de));
+  if (f.ate !== undefined) q.set('ate', iso(f.ate));
+  if (f.status !== undefined) q.set('status', f.status);
+  if (f.apenasEmAberto === true) q.set('apenasEmAberto', 'true');
+  return api<{
+    data: Lancamento[];
+    pagination: { page: number; total: number; totalPages: number };
+  }>(`/api/finance/lancamentos?${q.toString()}`);
+};
+
+export interface NovoLancamento {
+  direcao: DirecaoLancamento;
+  descricao: string;
+  categoria?: string;
+  valor: string;
+  vencimento: string;
+  studentId?: string;
+  professionalId?: string;
+  fornecedor?: string;
+  observacao?: string;
+}
+
+export const criarLancamento = (dados: NovoLancamento) =>
+  api<{ data: { id: string } }>('/api/finance/lancamentos', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export type MetodoPagamento =
+  | 'PIX'
+  | 'CASH'
+  | 'DEBIT_CARD'
+  | 'CREDIT_CARD'
+  | 'BANK_TRANSFER'
+  | 'BOLETO'
+  | 'OTHER';
+
+export const darBaixa = (
+  lancamentoId: string,
+  dados: { valor: string; metodo: MetodoPagamento; pagoEm?: string; referencia?: string },
+) =>
+  api<{ data: { id: string } }>(`/api/finance/lancamentos/${lancamentoId}/pagamentos`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+/* ====================================================================
+ * CADASTROS — equipe, espaços e contrato do aluno
+ * ================================================================== */
+
+export interface Profissional {
+  id: string;
+  nome: string;
+  papel: string;
+  cor: string | null;
+  ativo: boolean;
+}
+
+export const buscarProfissionais = () =>
+  api<{ data: Profissional[] }>('/api/cadastros/profissionais');
+
+export const definirCorDoProfissional = (id: string, cor: string) =>
+  api<{ ok: boolean }>(`/api/cadastros/profissionais/${id}/cor`, {
+    method: 'PUT',
+    body: JSON.stringify({ cor }),
+  });
+
+export interface Sala {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  capacidade: number;
+  cor: string | null;
+  ativa: boolean;
+}
+
+export const buscarSalas = () => api<{ data: Sala[] }>('/api/cadastros/salas');
+
+export const criarSala = (dados: {
+  nome: string;
+  descricao?: string | null;
+  capacidade: number;
+  cor?: string | null;
+}) => api<{ data: { id: string } }>('/api/cadastros/salas', {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const salvarSala = (
+  id: string,
+  dados: {
+    nome: string;
+    descricao?: string | null;
+    capacidade: number;
+    cor?: string | null;
+    ativa: boolean;
+  },
+) => api<{ ok: boolean }>(`/api/cadastros/salas/${id}`, {
+  method: 'PUT',
+  body: JSON.stringify(dados),
+});
+
+export type CicloCobranca =
+  | 'SESSION'
+  | 'WEEKLY'
+  | 'BIWEEKLY'
+  | 'MONTHLY'
+  | 'QUARTERLY'
+  | 'SEMIANNUAL'
+  | 'ANNUAL';
+
+export interface Contrato {
+  id: string;
+  ciclo: CicloCobranca;
+  valorCentavos: number;
+  valorFormatado: string;
+  comissaoBp: number;
+  comissaoPercentual: number;
+  sessoesIncluidas: number | null;
+  diaDeCobranca: number | null;
+  inicioEm: string;
+  fimEm: string | null;
+  profissional: { id: string; nome: string } | null;
+}
+
+export const buscarContrato = (alunoId: string) =>
+  api<{ data: Contrato | null }>(`/api/students/${alunoId}/contrato`);
+
+export const salvarContrato = (
+  alunoId: string,
+  dados: {
+    ciclo: CicloCobranca;
+    valor: string;
+    comissaoPercentual: string | number;
+    diaDeCobranca?: number | null;
+    sessoesIncluidas?: number | null;
+    profissionalId?: string | null;
+    inicioEm?: string;
+  },
+) => api<{ data: { id: string } }>(`/api/students/${alunoId}/contrato`, {
+  method: 'PUT',
+  body: JSON.stringify(dados),
+});
+
+/* ====================================================================
+ * AGENDA — marcar, cancelar, presença
+ * ================================================================== */
+
+export interface CompromissoDetalhado extends Compromisso {
+  observacao: string | null;
+  valorCentavos: number | null;
+  incluidoNoPlano: boolean;
+  presencaEm: string | null;
+}
+
+export const buscarAgendaDetalhada = (de: Date, ate: Date, filtro?: { profissionalId?: string; salaId?: string }) => {
+  const q = new URLSearchParams({ de: de.toISOString(), ate: ate.toISOString() });
+  if (filtro?.profissionalId !== undefined) q.set('professionalId', filtro.profissionalId);
+  if (filtro?.salaId !== undefined) q.set('roomId', filtro.salaId);
+  return api<{ data: CompromissoDetalhado[] }>(`/api/schedule?${q.toString()}`);
+};
+
+export const marcarCompromisso = (dados: {
+  studentId: string;
+  professionalId: string;
+  roomId?: string;
+  inicio: string;
+  fim: string;
+  observacao?: string;
+}) => api<{ data: { id: string } }>('/api/schedule', {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const cancelarCompromisso = (id: string, motivo?: string) =>
+  api<{ ok: boolean }>(`/api/schedule/${id}/cancelar`, {
+    method: 'POST',
+    body: JSON.stringify({ motivo }),
+  });
+
+export const marcarPresenca = (id: string, compareceu: boolean) =>
+  api<{ ok: boolean }>(`/api/schedule/${id}/presenca`, {
+    method: 'POST',
+    body: JSON.stringify({ compareceu }),
+  });
+
+export interface FaixaDeHorario {
+  diaDaSemana: number;
+  inicio: string;
+  fim: string;
+  duracaoMinutos: number;
+  salaId: string | null;
+}
+
+export const buscarHorarios = (profissionalId: string) =>
+  api<{ data: (FaixaDeHorario & { id: string })[] }>(
+    `/api/cadastros/profissionais/${profissionalId}/horarios`,
+  );
+
+export const salvarHorarios = (profissionalId: string, faixas: FaixaDeHorario[]) =>
+  api<{ ok: boolean; data: { faixas: number } }>(
+    `/api/cadastros/profissionais/${profissionalId}/horarios`,
+    { method: 'PUT', body: JSON.stringify({ faixas }) },
+  );

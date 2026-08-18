@@ -1862,3 +1862,547 @@
 .wa-testes { max-width: 34rem; margin-bottom: var(--e-6); }
 .wa-texto { max-width: 22rem; font-size: var(--t-sm); }
 .wa-erro { display: block; font-size: var(--t-xs); color: var(--erro); }
+
+/* =====================================================================
+   FINANCEIRO
+   ================================================================== */
+
+.fin-cabecalho {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+}
+.fin-mes {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+.fin-mes-nome {
+  min-width: 10rem;
+  text-align: center;
+  font-weight: 600;
+  color: var(--texto);
+  /* Largura mínima fixa: sem ela, "maio" e "setembro" empurram as setas
+     para lados diferentes e o botão foge do dedo a cada mês. */
+  /* Sem `text-transform`: quem capitaliza é o JavaScript, que sabe que
+     "de" fica minúsculo. Ver `capitalizar` em Financeiro.tsx. */
+}
+
+.fin-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1px;
+  background: var(--fio);
+  border: 1px solid var(--fio);
+  margin: var(--e-5) 0 var(--e-6);
+}
+.fin-cartao {
+  display: grid;
+  gap: 3px;
+  padding: var(--e-4) var(--e-5);
+  background: var(--superficie);
+}
+.fin-cartao-rotulo {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-apoio);
+}
+.fin-cartao-valor {
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+/* A cor entra só onde há decisão a tomar. Painel colorido inteiro ensina
+   o olho a ignorar a cor. */
+.fin-cartao.erro .fin-cartao-valor {
+  color: var(--erro);
+}
+.fin-cartao-nota {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+.fin-abas {
+  display: flex;
+  gap: var(--e-1);
+  border-bottom: 1px solid var(--fio);
+  margin-bottom: var(--e-5);
+}
+.fin-aba {
+  padding: var(--e-3) var(--e-4);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto-apoio);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  transition: color var(--rapido) var(--saida), border-color var(--rapido) var(--saida);
+}
+.fin-aba:hover {
+  color: var(--texto);
+}
+.fin-aba.ativa {
+  color: var(--teal);
+  border-bottom-color: var(--teal);
+}
+
+.fin-barra {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--e-4);
+  margin-bottom: var(--e-4);
+  flex-wrap: wrap;
+}
+.fin-chave {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+  cursor: pointer;
+}
+.fin-chave input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--teal);
+}
+
+.fin-data,
+.fin-numero {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fin-numero {
+  text-align: right;
+}
+.fin-acao {
+  text-align: right;
+  white-space: nowrap;
+}
+/* Uma barra vermelha à esquerda da linha vencida. Vale mais que a
+   pílula: ela marca a LINHA, e o olho encontra a linha antes da célula. */
+.fin-vencida td:first-child {
+  box-shadow: inset 3px 0 0 var(--erro);
+}
+
+.fin-baixa-celula {
+  padding: 0 !important;
+  background: var(--superficie-baixa);
+}
+.fin-baixa {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  flex-wrap: wrap;
+}
+.fin-baixa .campo {
+  margin-bottom: 0;
+  min-width: 9rem;
+}
+.fin-baixa select,
+.fin-baixa input {
+  width: 100%;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-alta);
+  color: var(--texto);
+  font-size: var(--t-sm);
+}
+.fin-baixa-erro {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* =====================================================================
+   AGENDA EM GRADE
+   ================================================================== */
+
+.ag-cabecalho {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+}
+.ag-navegacao {
+  display: flex;
+  gap: var(--e-2);
+}
+
+.ag-filtros {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--e-5);
+  margin: var(--e-5) 0 var(--e-4);
+  flex-wrap: wrap;
+}
+.ag-filtro {
+  margin-bottom: 0;
+  min-width: 11rem;
+}
+.ag-filtro select {
+  width: 100%;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-alta);
+  color: var(--texto);
+  font-size: var(--t-sm);
+}
+.ag-legenda {
+  display: flex;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+  margin-left: auto;
+  padding-bottom: var(--e-2);
+}
+.ag-legenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+}
+.ag-ponto {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.ag-grade {
+  --ag-linha: 28px;
+  --ag-coluna-hora: 3.5rem;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  overflow: hidden;
+  background: var(--superficie);
+}
+.ag-grade.ocupada {
+  opacity: 0.55;
+  /* Escurece em vez de sumir: a semana anterior continua legível
+     enquanto a nova carrega, e a tela não pisca a cada seta. */
+  transition: opacity var(--rapido) var(--saida);
+}
+
+.ag-cabecalho-dias {
+  display: grid;
+  grid-template-columns: var(--ag-coluna-hora) repeat(7, 1fr);
+  border-bottom: 1px solid var(--fio-forte);
+  background: var(--superficie-alta);
+}
+.ag-canto {
+  border-right: 1px solid var(--fio);
+}
+.ag-dia {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: var(--e-2) 0;
+  border-right: 1px solid var(--fio);
+}
+.ag-dia:last-child {
+  border-right: 0;
+}
+.ag-dia-nome {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-apoio);
+}
+.ag-dia-numero {
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--texto);
+}
+.ag-dia.hoje .ag-dia-numero {
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: var(--teal-fundo);
+  color: var(--superficie-baixa);
+}
+
+.ag-corpo {
+  display: grid;
+  grid-template-columns: var(--ag-coluna-hora) repeat(7, 1fr);
+  max-height: 62vh;
+  overflow-y: auto;
+}
+.ag-horas {
+  border-right: 1px solid var(--fio);
+}
+.ag-hora {
+  height: calc(2 * var(--ag-linha));
+  border-bottom: 1px solid var(--fio);
+  position: relative;
+}
+.ag-hora span {
+  position: absolute;
+  top: -0.55em;
+  right: var(--e-2);
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+  font-variant-numeric: tabular-nums;
+  background: var(--superficie);
+  padding: 0 2px;
+}
+
+.ag-coluna {
+  position: relative;
+  border-right: 1px solid var(--fio);
+}
+.ag-coluna:last-child {
+  border-right: 0;
+}
+
+.ag-vago {
+  display: block;
+  width: 100%;
+  height: var(--ag-linha);
+  border: 0;
+  border-bottom: 1px solid var(--fio);
+  background: none;
+  cursor: pointer;
+  transition: background var(--rapido) var(--saida);
+}
+/* A meia hora tem traço mais fraco que a hora cheia: o olho conta horas,
+   não blocos de trinta minutos. */
+.ag-vago.meia {
+  border-bottom-color: color-mix(in srgb, var(--fio) 45%, transparent);
+}
+.ag-vago:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--teal) 12%, transparent);
+}
+.ag-vago:disabled {
+  cursor: default;
+}
+.ag-vago.passado {
+  background: color-mix(in srgb, var(--texto-apoio) 5%, transparent);
+}
+
+.ag-bloco {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  display: grid;
+  align-content: start;
+  gap: 0;
+  padding: 3px 6px;
+  border: 0;
+  border-left: 3px solid var(--ag-cor);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ag-cor) 18%, var(--superficie));
+  color: var(--texto);
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+  transition: filter var(--rapido) var(--saida);
+}
+.ag-bloco:hover {
+  filter: brightness(1.12);
+}
+.ag-bloco.compareceu {
+  /* Presença confirmada fica sólida; o que ainda não aconteceu fica
+     translúcido. A diferença é lida sem legenda. */
+  background: color-mix(in srgb, var(--ag-cor) 34%, var(--superficie));
+}
+.ag-bloco-hora {
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-apoio);
+}
+.ag-bloco-aluno {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-bloco-sala {
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- gaveta do horário ---------------------------------------------
+   Painel lateral, não caixa no meio da tela: a grade continua visível
+   atrás, e quem está conferindo a semana não perde o lugar.
+   ------------------------------------------------------------------ */
+.ag-gaveta-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(4, 12, 12, 0.5);
+  display: flex;
+  justify-content: flex-end;
+}
+.ag-gaveta {
+  position: relative;
+  width: min(24rem, 100%);
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--e-6) var(--e-5);
+  background: var(--superficie);
+  border-left: 1px solid var(--fio);
+  box-shadow: var(--sombra-2, 0 0 40px rgba(0, 0, 0, 0.35));
+}
+.ag-gaveta-cor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+}
+.ag-fechar {
+  position: absolute;
+  top: var(--e-4);
+  right: var(--e-4);
+}
+.ag-gaveta h2 {
+  margin: var(--e-3) 0 2px;
+  font-size: var(--t-lg);
+  padding-right: 4rem;
+}
+.ag-gaveta-quando {
+  margin: 0 0 var(--e-5);
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.ag-gaveta-dados {
+  display: grid;
+  gap: var(--e-3);
+  margin: 0 0 var(--e-5);
+}
+.ag-gaveta-dados dt {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-apoio);
+}
+.ag-gaveta-dados dd {
+  margin: 1px 0 0;
+  color: var(--texto);
+}
+.ag-gaveta-acoes {
+  display: grid;
+  gap: var(--e-3);
+  justify-items: start;
+}
+.ag-gaveta-nota {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  border-left: 2px solid var(--fio-forte);
+  padding-left: var(--e-3);
+}
+
+@media (max-width: 60rem) {
+  /* Numa tela estreita a semana inteira vira ilegível. A grade rola de
+     lado com colunas de largura mínima, em vez de espremer sete dias em
+     360 pixels. */
+  .ag-corpo,
+  .ag-cabecalho-dias {
+    grid-template-columns: var(--ag-coluna-hora) repeat(7, minmax(7rem, 1fr));
+  }
+  .ag-grade {
+    overflow-x: auto;
+  }
+  .ag-legenda {
+    margin-left: 0;
+  }
+}
+
+/* ---- horários de atendimento ---------------------------------------
+   Um cartão por dia da semana, na ordem em que a academia pensa — de
+   segunda ao domingo, não do domingo à segunda como o `getDay()`.
+   ------------------------------------------------------------------ */
+.hr-semana {
+  display: grid;
+  gap: var(--e-3);
+  margin: var(--e-5) 0;
+  max-width: 60rem;
+}
+.hr-dia {
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  padding: var(--e-4);
+  background: var(--superficie-alta);
+}
+.hr-dia.fechado {
+  background: none;
+}
+.hr-dia header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-3);
+  margin-bottom: var(--e-3);
+}
+.hr-dia h2 {
+  margin: 0;
+  font-size: var(--t-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-apoio);
+}
+.hr-fechado {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.hr-faixa {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  flex-wrap: wrap;
+  padding: var(--e-2) 0;
+}
+.hr-faixa + .hr-faixa {
+  border-top: 1px solid var(--fio);
+}
+.hr-faixa input,
+.hr-faixa select {
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--texto);
+  font-size: var(--t-sm);
+}
+.hr-ate {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.hr-faixa .botao-texto-perigo {
+  margin-left: auto;
+}
+.hr-vazio {
+  display: grid;
+  gap: var(--e-3);
+  justify-items: start;
+  padding: var(--e-5);
+  margin: var(--e-5) 0;
+  border: 1px solid color-mix(in srgb, var(--atencao) 40%, transparent);
+  border-radius: var(--raio-lg);
+  background: var(--atencao-fundo);
+}
+.hr-vazio p {
+  margin: 0;
+  color: var(--atencao-texto);
+  max-width: 62ch;
+}

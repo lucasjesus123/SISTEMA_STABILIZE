@@ -60,9 +60,18 @@ export type AuditAction =
   // fala com a pessoa: uma troca silenciosa é como se desvia a conversa.
   | 'profile.update'
   | 'profile.photo'
+  // espaços e contrato — a agenda e o financeiro dependem dos dois, e
+  // mudar preço ou capacidade sem rastro é o tipo de alteração que
+  // ninguém lembra de ter feito quando a conta não fecha.
+  | 'room.create'
+  | 'room.update'
+  | 'availability.write'
+  | 'contract.write'
+  | 'contract.end'
   // administração
   | 'user.create'
   | 'user.update'
+  | 'user.color.update'
   | 'user.delete'
   | 'pricing.update'
   | 'tenant.settings'
