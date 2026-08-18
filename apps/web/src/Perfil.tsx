@@ -348,6 +348,16 @@ function RetratoDoPerfil({
   const [endereco, setEndereco] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  /* Sobe a cada envio para forçar a rebusca SEM passar por `temFoto`
+     false→true. A versão anterior fazia esse vai-e-volta, e ele dispara
+     o efeito DUAS vezes: a segunda revoga o endereço que a primeira
+     acabou de criar. O resultado é um `<img>` apontando para um blob que
+     não existe mais — um círculo vazio, sem erro nenhum no console. */
+  const [versao, setVersao] = useState(0);
+  /* Um `<img>` que falha ao decodificar não avisa ninguém: ele
+     simplesmente não desenha. Sem este estado, o retrato quebrado fica
+     como um círculo cinza que parece "sem foto" e não é. */
+  const [falhou, setFalhou] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
 
   /* Um blob vivo segura a imagem inteira na memória da aba. Guardamos o
@@ -372,6 +382,7 @@ function RetratoDoPerfil({
       return;
     }
     let valeu = true;
+    setFalhou(false);
     void (async () => {
       const url = await buscarFoto('/api/perfil/foto');
       // Trocou de foto enquanto esta buscava: descarta a mais antiga.
@@ -384,7 +395,7 @@ function RetratoDoPerfil({
     return () => {
       valeu = false;
     };
-  }, [temFoto, trocarEndereco]);
+  }, [temFoto, versao, trocarEndereco]);
 
   const escolher = async (arquivo: File | undefined): Promise<void> => {
     if (arquivo === undefined) return;
@@ -392,12 +403,16 @@ function RetratoDoPerfil({
     setOcupado(true);
     try {
       await enviarFotoPerfil(arquivo);
-      /* Força a rebusca mesmo quando já havia foto: sem isto, `temFoto`
-         continua `true`, o efeito não reexecuta e a tela segue mostrando
-         a imagem antiga depois de um envio bem-sucedido. */
-      aoMudar(false);
-      trocarEndereco(await buscarFoto('/api/perfil/foto'));
+      /* `versao` força a rebusca mesmo quando `temFoto` já era `true` —
+         sem ela o efeito não reexecuta e a tela segue mostrando a imagem
+         antiga depois de um envio bem-sucedido.
+
+         O que NÃO se faz aqui é passar por `aoMudar(false)` antes do
+         `aoMudar(true)`: era o que a versão anterior fazia, e as duas
+         mudanças disparam o efeito duas vezes, com a segunda revogando o
+         endereço que a primeira criou. */
       aoMudar(true);
+      setVersao((v) => v + 1);
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Não foi possível enviar a imagem.');
     } finally {
@@ -425,8 +440,18 @@ function RetratoDoPerfil({
   return (
     <div className="retrato">
       <div className="retrato-imagem">
-        {endereco !== null ? (
-          <img src={endereco} alt={`Foto de ${nome}`} />
+        {endereco !== null && !falhou ? (
+          <img
+            src={endereco}
+            alt={`Foto de ${nome}`}
+            /* Se o blob não decodificar — arquivo corrompido, endereço já
+               revogado, formato que o navegador não abre —, cai para as
+               iniciais em vez de deixar um círculo vazio que parece "sem
+               foto". Um retrato que falha em silêncio é indistinguível de
+               um retrato que não existe, e o usuário fica tentando
+               reenviar a mesma imagem. */
+            onError={() => setFalhou(true)}
+          />
         ) : (
           /* Iniciais, e não um ícone genérico de pessoa: numa lista de
              gente, a inicial já distingue, e uma silhueta cinza repetida
@@ -468,6 +493,12 @@ function RetratoDoPerfil({
             </button>
           )}
         </div>
+
+        {falhou && erro === null && (
+          <p className="retrato-erro" role="alert">
+            Não consegui abrir a imagem. Envie outra, de preferência JPG ou PNG.
+          </p>
+        )}
 
         {erro !== null && (
           <p className="retrato-erro" role="alert">
