@@ -2,15 +2,18 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { writeAudit } from '../../audit/audit.js';
-import { conflict, notFound, unprocessable } from '../../http/errors.js';
+import { badRequest, conflict, notFound, unprocessable } from '../../http/errors.js';
+import { apagar, gravar, ler, tipoDeImagem } from '../attachments/storage.js';
 import {
   GRUPOS_MUSCULARES,
   adicionarItem,
   alternarExercicio,
   ativarTreino,
   buscarTreino,
+  chaveDaFotoDoExercicio,
   criarExercicio,
   criarTreino,
+  definirFotoDoExercicio,
   listarExercicios,
   listarTreinos,
   removerItem,
@@ -84,6 +87,13 @@ function semVazios<T extends Record<string, unknown>>(o: T): T {
  * /api/exercises — o catálogo
  * ================================================================== */
 
+const TIPOS_DE_FOTO = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const FOTO_MAX_BYTES = 5 * 1024 * 1024;
+
+/** O id do parâmetro, validado. */
+const id0 = (request: { params: unknown }): string =>
+  z.object({ id: z.string().uuid('Identificador inválido') }).parse(request.params).id;
+
 export async function exercisesRoutes(app: FastifyInstance): Promise<void> {
   app.get('/', { preHandler: [app.authorize('exercise:read')] }, async (request) => {
     const query = z
@@ -106,6 +116,101 @@ export async function exercisesRoutes(app: FastifyInstance): Promise<void> {
       return { data: itens };
     });
   });
+
+  /* ------------------------------------------------------------------
+   * Foto do exercício
+   *
+   * POR QUE ISTO IMPORTA: sem imagem, o aluno abre o treino no
+   * aplicativo e lê "remada curvada com halteres" sem fazer ideia do
+   * movimento. Quem nunca fez, não faz — ou faz errado, que é pior.
+   *
+   * A LEITURA É LIBERADA POR `exercise:read`, que o aluno tem. É a única
+   * coisa do catálogo que ele alcança, e é o ponto: a figura existe para
+   * ele.
+   * ---------------------------------------------------------------- */
+  app.post(
+    '/:id/foto',
+    { preHandler: [app.authorize('exercise:write')] },
+    async (request, reply) => {
+      const { id } = z.object({ id: z.string().uuid('Identificador inválido') }).parse(
+        request.params,
+      );
+
+      const parte = await request.file();
+      if (parte === undefined) throw badRequest('Nenhuma imagem enviada.');
+      if (!TIPOS_DE_FOTO.has(parte.mimetype)) {
+        parte.file.resume();
+        throw unprocessable('Envie uma imagem JPG, PNG ou WebP.');
+      }
+
+      const tenantId = (request.principal?.tenantId ?? '') as string;
+      const gravado = await gravar(tenantId, parte.file, parte.mimetype, () => parte.file.truncated);
+
+      if (gravado.tamanhoBytes > FOTO_MAX_BYTES) {
+        await apagar(tenantId, gravado.chave).catch(() => undefined);
+        throw badRequest(
+          `Imagem maior que ${Math.floor(FOTO_MAX_BYTES / 1024 / 1024)} MB. Envie uma menor.`,
+        );
+      }
+
+      return inTenant(request, async (client, principal) => {
+        const anterior = await definirFotoDoExercicio(client, id, gravado.chave);
+        if (anterior === undefined) {
+          /* O exercício não existe (ou é de outra academia, que dá no
+             mesmo pela RLS). O arquivo já foi para o disco: apagar aqui
+             é o que impede o armazenamento de acumular órfãos a cada
+             tentativa contra um id inventado. */
+          await apagar(tenantId, gravado.chave).catch(() => undefined);
+          throw notFound('Exercício');
+        }
+        /* A foto trocada sai do disco. Sem isto, cada troca deixa a
+           anterior para sempre — e ninguém nunca vai limpar. */
+        if (anterior !== null) await apagar(tenantId, anterior).catch(() => undefined);
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'exercise.write',
+          resourceType: 'exercise',
+          resourceId: id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: { foto: true },
+        });
+
+        void reply.status(201);
+        return { ok: true };
+      });
+    },
+  );
+
+  app.get('/:id/foto', { preHandler: [app.authorize('exercise:read')] }, async (request, reply) => {
+    const { id } = z.object({ id: z.string().uuid('Identificador inválido') }).parse(request.params);
+
+    const { chave, tenantId } = await inTenant(request, async (client, principal) => ({
+      chave: await chaveDaFotoDoExercicio(client, id),
+      tenantId: principal.tenantId,
+    }));
+    if (chave === undefined || chave === null) throw notFound('Foto');
+
+    const tipo = await tipoDeImagem(tenantId, chave);
+    if (tipo === null) throw notFound('Foto');
+
+    /* `private`: a figura é da academia, e um cache compartilhado a
+       serviria para outra. `immutable` porque a chave muda a cada
+       troca — o endereço nunca aponta para conteúdo diferente. */
+    void reply.header('Content-Type', tipo);
+    void reply.header('Cache-Control', 'private, max-age=86400, immutable');
+    return reply.send(await ler(tenantId, chave));
+  });
+
+  app.delete('/:id/foto', { preHandler: [app.authorize('exercise:write')] }, async (request) =>
+    inTenant(request, async (client, principal) => {
+      const anterior = await definirFotoDoExercicio(client, id0(request), null);
+      if (anterior === undefined) throw notFound('Exercício');
+      if (anterior !== null) await apagar(principal.tenantId, anterior).catch(() => undefined);
+      return { ok: true };
+    }),
+  );
 
   app.post('/', { preHandler: [app.authorize('exercise:write')] }, async (request, reply) => {
     const dados = semVazios(exercicioSchema.parse(request.body));

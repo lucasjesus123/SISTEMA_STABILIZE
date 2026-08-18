@@ -31,6 +31,8 @@ export interface Exercicio {
   equipamento: string | null;
   instrucoes: string | null;
   video: string | null;
+  /** Tem foto? A imagem em si vem por rota própria, autenticada. */
+  temFoto: boolean;
   ativo: boolean;
 }
 
@@ -76,10 +78,11 @@ export async function listarExercicios(
     equipment: string | null;
     instructions: string | null;
     video_url: string | null;
+    image_key: string | null;
     is_active: boolean;
   }>(
     `SELECT e.id, e.name, e.muscle_group, e.equipment, e.instructions,
-            e.video_url, e.is_active
+            e.video_url, e.image_key, e.is_active
        FROM exercises e
       WHERE ${where}
       ORDER BY e.muscle_group, e.name
@@ -97,6 +100,7 @@ function paraExercicio(l: {
   equipment: string | null;
   instructions: string | null;
   video_url: string | null;
+  image_key?: string | null;
   is_active: boolean;
 }): Exercicio {
   return {
@@ -106,8 +110,49 @@ function paraExercicio(l: {
     equipamento: l.equipment,
     instrucoes: l.instructions,
     video: l.video_url,
+    temFoto: (l.image_key ?? null) !== null,
     ativo: l.is_active,
   };
+}
+
+/* --------------------------------------------------------------------
+ * Foto do exercício
+ * ------------------------------------------------------------------ */
+
+export async function chaveDaFotoDoExercicio(
+  client: TenantClient,
+  exercicioId: string,
+): Promise<string | null | undefined> {
+  const { rows } = await client.query<{ image_key: string | null }>(
+    'SELECT image_key FROM exercises WHERE id = $1',
+    [exercicioId],
+  );
+  /* `undefined` = exercício não existe; `null` = existe e não tem foto.
+     A diferença decide entre 404 e 404-com-outro-motivo na rota. */
+  return rows.length === 0 ? undefined : rows[0]!.image_key;
+}
+
+/**
+ * Troca a foto e devolve a chave ANTERIOR, para quem chamou apagar o
+ * arquivo velho do disco.
+ *
+ * Duas instruções, e não um `RETURNING` esperto com subconsulta: dentro
+ * de um mesmo comando a subconsulta enxerga o snapshot anterior ao
+ * UPDATE, então ela devolveria a chave velha — que é o que se quer, mas
+ * por um detalhe de visibilidade de transação que ninguém lembra ao ler
+ * o código seis meses depois. Ler antes e gravar depois faz a mesma
+ * coisa dizendo o que faz.
+ */
+export async function definirFotoDoExercicio(
+  client: TenantClient,
+  exercicioId: string,
+  chave: string | null,
+): Promise<string | null | undefined> {
+  const anterior = await chaveDaFotoDoExercicio(client, exercicioId);
+  if (anterior === undefined) return undefined;
+
+  await client.query('UPDATE exercises SET image_key = $2 WHERE id = $1', [exercicioId, chave]);
+  return anterior;
 }
 
 export interface DadosExercicio {

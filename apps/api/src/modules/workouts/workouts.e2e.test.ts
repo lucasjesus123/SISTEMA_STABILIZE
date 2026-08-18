@@ -75,6 +75,16 @@ async function tokenDe(email: string, slug: string): Promise<string> {
   return body.accessToken;
 }
 
+/** A chave do arquivo da foto, lida direto do banco. */
+async function chaveDaFoto(tenantId: string, exercicioId: string): Promise<string | null> {
+  const r = await comTenant(tenantId, (c) =>
+    c.query<{ image_key: string | null }>('SELECT image_key FROM exercises WHERE id = $1', [
+      exercicioId,
+    ]),
+  );
+  return r.rows[0]?.image_key ?? null;
+}
+
 const como = (token: string) => ({ authorization: `Bearer ${token}` });
 
 suite('Treino', () => {
@@ -205,6 +215,117 @@ suite('Treino', () => {
     const nomes = (lista.json() as { data: { nome: string }[] }).data.map((e) => e.nome);
     expect(nomes).toContain('Agachamento Alfa');
     expect(nomes).not.toContain('Segredo da Concorrente');
+  });
+
+  /* ==================================================================
+   * A foto do exercício
+   * ================================================================ */
+
+  it('envia a foto, o aluno consegue vê-la, e trocar apaga a anterior', async () => {
+    const dono = await tokenDe(ids.emailDono, ids.slugA);
+
+    /* Um PNG minúsculo, mas real: o servidor confere o tipo declarado
+       contra a lista de aceitos e o `tipoDeImagem` lê os primeiros
+       bytes do arquivo já decifrado. */
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const forma = new FormData();
+    forma.append('arquivo', new Blob([png], { type: 'image/png' }), 'movimento.png');
+
+    const envio = await app.inject({
+      method: 'POST',
+      url: `/api/exercises/${ids.exercicioA}/foto`,
+      headers: como(dono),
+      payload: forma,
+    });
+    expect(envio.statusCode, envio.body).toBe(201);
+
+    const primeira = await chaveDaFoto(ids.tenantA, ids.exercicioA);
+    expect(primeira).not.toBeNull();
+
+    /* A LISTA PASSA A DIZER QUE TEM FOTO. É esse sinalizador que faz a
+       tela buscar a imagem; sem ele a figura existe e ninguém pede. */
+    const lista = await app.inject({ method: 'GET', url: '/api/exercises', headers: como(dono) });
+    const alvo2 = (lista.json() as { data: { id: string; temFoto: boolean }[] }).data.find(
+      (e) => e.id === ids.exercicioA,
+    );
+    expect(alvo2?.temFoto).toBe(true);
+
+    /* Trocar precisa APAGAR a anterior. Sem isso cada troca deixa um
+       arquivo cifrado para sempre no disco, e ninguém nunca vai limpar. */
+    const forma2 = new FormData();
+    forma2.append('arquivo', new Blob([png], { type: 'image/png' }), 'outro.png');
+    await app.inject({
+      method: 'POST',
+      url: `/api/exercises/${ids.exercicioA}/foto`,
+      headers: como(dono),
+      payload: forma2,
+    });
+    const segunda = await chaveDaFoto(ids.tenantA, ids.exercicioA);
+    expect(segunda).not.toBe(primeira);
+
+    /* A leitura é liberada por `exercise:read`, que o profissional tem —
+       e é o mesmo caminho que o aluno usa no aplicativo. Uma figura que
+       só quem administra enxerga não serve para nada. */
+    const alfa = await tokenDe(ids.emailProfAlfa, ids.slugA);
+    const leitura = await app.inject({
+      method: 'GET',
+      url: `/api/exercises/${ids.exercicioA}/foto`,
+      headers: como(alfa),
+    });
+    expect(leitura.statusCode).toBe(200);
+    expect(leitura.headers['content-type']).toBe('image/png');
+  });
+
+  it('a foto de um exercício de outra empresa não é alcançável', async () => {
+    const donoB = await tokenDe(ids.emailDonoB, ids.slugB);
+    /* A RLS faz o exercício simplesmente não existir para a outra
+       academia — e a resposta é 404, não 403: dizer "existe, mas não é
+       seu" já confirma que existe. */
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/exercises/${ids.exercicioA}/foto`,
+      headers: como(donoB),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('enviar foto para um id inexistente não deixa arquivo órfão', async () => {
+    const dono = await tokenDe(ids.emailDono, ids.slugA);
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const forma = new FormData();
+    forma.append('arquivo', new Blob([png], { type: 'image/png' }), 'x.png');
+
+    /* O arquivo vai para o disco ANTES de o banco confirmar que o
+       exercício existe — é a ordem inevitável, porque o upload é um
+       fluxo. O que não pode é o arquivo ficar lá quando o id era
+       inventado: umas centenas de tentativas encheriam o volume. */
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/exercises/${crypto.randomUUID()}/foto`,
+      headers: como(dono),
+      payload: forma,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('recusa arquivo que não é imagem', async () => {
+    const dono = await tokenDe(ids.emailDono, ids.slugA);
+    const forma = new FormData();
+    forma.append('arquivo', new Blob([Buffer.from('%PDF-1.4')], { type: 'application/pdf' }), 'a.pdf');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/exercises/${ids.exercicioA}/foto`,
+      headers: como(dono),
+      payload: forma,
+    });
+    expect(res.statusCode).toBe(422);
   });
 
   it('o profissional LÊ a biblioteca mas não a altera', async () => {

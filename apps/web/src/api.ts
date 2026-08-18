@@ -518,7 +518,34 @@ export interface Exercicio {
   equipamento: string | null;
   instrucoes: string | null;
   video: string | null;
+  temFoto: boolean;
   ativo: boolean;
+}
+
+/**
+ * Baixa a foto de um exercício e devolve um endereço de blob.
+ *
+ * NÃO DÁ PARA PÔR A URL DIRETO NO `<img src>`: a rota exige o token no
+ * cabeçalho `Authorization`, e uma tag `<img>` não manda cabeçalho
+ * nenhum — o cookie que existe é o de refresh, restrito ao caminho de
+ * autenticação. Sem este desvio pelo `fetch`, toda figura viria 401.
+ *
+ * Quem chamar precisa revogar o endereço ao desmontar, senão o blob
+ * fica na memória da aba até ela ser fechada.
+ */
+export async function baixarFotoDoExercicio(id: string): Promise<string | null> {
+  const resposta = await fetch(`/api/exercises/${id}/foto`, {
+    headers: accessToken === null ? {} : { Authorization: `Bearer ${accessToken}` },
+    credentials: 'same-origin',
+  });
+  if (!resposta.ok) return null;
+  return URL.createObjectURL(await resposta.blob());
+}
+
+export async function enviarFotoDoExercicio(id: string, arquivo: File): Promise<void> {
+  const corpo = new FormData();
+  corpo.append('arquivo', arquivo);
+  await api<{ ok: boolean }>(`/api/exercises/${id}/foto`, { method: 'POST', body: corpo });
 }
 
 export interface ItemTreino {

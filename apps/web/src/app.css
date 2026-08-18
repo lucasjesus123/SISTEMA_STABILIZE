@@ -2893,3 +2893,166 @@
 .eq-opcao input:focus-visible + span {
   box-shadow: 0 0 0 3px var(--realce-teclado);
 }
+
+/* =====================================================================
+   TREINO — a semana em quadrados, e a foto do movimento
+   ================================================================== */
+
+.treino-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--e-3);
+  margin-top: var(--e-4);
+  align-items: start;
+}
+.treino-grade .treino-dia {
+  margin: 0;
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+}
+.treino-dia-titulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-2);
+  margin: 0 0 var(--e-3);
+  font-size: var(--t-base);
+}
+.treino-dia-conta {
+  font-size: var(--t-xs);
+  font-weight: 400;
+  color: var(--texto-apoio);
+  white-space: nowrap;
+}
+
+/* O quadrado de "novo dia" tem a mesma caixa dos outros, tracejada: ele
+   ocupa o lugar do dia que ainda não existe, em vez de ser um link solto
+   embaixo da grade. */
+.treino-novo-quadrado {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--e-1);
+  min-height: 7rem;
+  border: 1px dashed var(--fio-forte) !important;
+  background: none !important;
+  color: var(--texto-apoio);
+  font-size: var(--t-sm);
+  cursor: pointer;
+  transition: border-color var(--rapido) var(--saida), color var(--rapido) var(--saida);
+}
+.treino-novo-quadrado:hover {
+  border-color: var(--teal) !important;
+  color: var(--teal);
+}
+.treino-mais {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.treino-atalhos {
+  display: flex;
+  gap: var(--e-1);
+  flex-wrap: wrap;
+  margin-bottom: var(--e-3);
+}
+.treino-atalho {
+  padding: 4px var(--e-2);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--texto-corpo);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.treino-atalho:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+.treino-atalho.ativo {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: var(--superficie-baixa);
+}
+
+/* ---- foto do exercício ---------------------------------------------- */
+.ex-foto {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--raio);
+  object-fit: cover;
+  background: var(--superficie-realce);
+  color: var(--texto-apoio);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ex-mini {
+  width: 2.6rem;
+  height: 2.6rem;
+}
+.ex-grande {
+  width: 8rem;
+  height: 8rem;
+}
+
+.seletor-item {
+  display: flex !important;
+  align-items: center;
+  gap: var(--e-3);
+  text-align: left;
+  width: 100%;
+}
+.seletor-item-texto {
+  display: grid;
+  min-width: 0;
+}
+
+.seletor-escolhido {
+  display: flex;
+  gap: var(--e-4);
+  align-items: flex-start;
+  margin-bottom: var(--e-4);
+}
+.seletor-escolhido-texto {
+  flex: 1;
+  min-width: 0;
+}
+.seletor-escolhido-nome {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e-3);
+  margin: 0 0 var(--e-2);
+}
+
+/* O input de arquivo real fica escondido atrás do rótulo: o controle
+   nativo do navegador ("Escolher arquivo | Nenhum arquivo") é feio,
+   traduzido de forma inconsistente e não aceita estilo. */
+.ex-envio {
+  margin: var(--e-3) 0 0;
+  display: grid;
+  gap: var(--e-2);
+  justify-items: start;
+}
+.ex-envio label {
+  cursor: pointer;
+}
+.ex-envio input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+.ex-envio input[type='file']:focus-visible + * ,
+.ex-envio label:focus-within {
+  outline: 2px solid var(--teal-vivo);
+  outline-offset: 2px;
+  border-radius: var(--raio);
+}

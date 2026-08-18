@@ -3,10 +3,12 @@ import { Carregando, Vazio } from './ui.jsx';
 import {
   ApiError,
   adicionarItemTreino,
+  baixarFotoDoExercicio,
   buscarExercicios,
   buscarTreino,
   buscarTreinos,
   criarTreino,
+  enviarFotoDoExercicio,
   publicarTreino,
   removerItemTreino,
   type Exercicio,
@@ -279,9 +281,20 @@ function DetalheTreino({
         )}
       </header>
 
+      {/* OS DIAS EM QUADRADOS, e não empilhados um sob o outro.
+          Empilhados, montar a semana inteira exigia rolar — e ninguém
+          consegue olhar para "segunda" e "quinta" ao mesmo tempo para
+          decidir se o volume está distribuído. Lado a lado, a semana é
+          uma coisa só e o desequilíbrio salta aos olhos. */}
+      <div className="treino-grade">
       {dias.map((bloco) => (
         <div key={bloco.dia} className="treino-dia">
-          <h4 className="treino-dia-titulo">{bloco.dia}</h4>
+          <h4 className="treino-dia-titulo">
+            {bloco.dia}
+            <span className="treino-dia-conta">
+              {bloco.itens.length === 1 ? '1 exercício' : `${bloco.itens.length} exercícios`}
+            </span>
+          </h4>
 
           {bloco.itens.length === 0 ? (
             <p className="treino-dia-vazio">Nenhum exercício neste dia.</p>
@@ -343,13 +356,20 @@ function DetalheTreino({
             ))}
         </div>
       ))}
-
       {podeEscrever && <NovoDia alunoId={alunoId} treinoId={treino.id} aoAdicionar={aoMudar} />}
+      </div>
     </>
   );
 }
 
 /* ==================================================================== */
+
+/* Os dias da semana em um toque. A academia divide por dia da semana
+   ("segunda é perna") ou por letra ("treino A"); as duas convivem, e o
+   campo continua livre para quem escreve "A — Empurrar". Oferecer os
+   sete prontos é o que evita digitar "Segunda", "segunda" e "SEG" no
+   mesmo treino e acabar com três dias onde deveria haver um. */
+const DIAS_DA_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 
 function NovoDia({
   alunoId,
@@ -368,20 +388,35 @@ function NovoDia({
      adicionado é o que faz o dia aparecer. */
   if (!abrindo) {
     return (
-      <button type="button" className="botao-texto treino-novo-dia" onClick={() => setAbrindo(true)}>
-        + novo dia de treino
+      <button type="button" className="treino-dia treino-novo-quadrado" onClick={() => setAbrindo(true)}>
+        <span className="treino-mais" aria-hidden="true">
+          +
+        </span>
+        <span>novo dia</span>
       </button>
     );
   }
 
   return (
     <div className="treino-dia">
+      <div className="treino-atalhos">
+        {DIAS_DA_SEMANA.map((d) => (
+          <button
+            key={d}
+            type="button"
+            className={`treino-atalho ${nome === d ? 'ativo' : ''}`}
+            onClick={() => setNome(d)}
+          >
+            {d.slice(0, 3)}
+          </button>
+        ))}
+      </div>
       <div className="formulario">
-        <label className="campo campo-meia">
+        <label className="campo campo-cheia">
           <span className="campo-rotulo">Nome do dia</span>
           <input
             value={nome}
-            placeholder="B — Puxar"
+            placeholder="ou escreva: A — Empurrar"
             autoFocus
             onChange={(e) => setNome(e.target.value)}
           />
@@ -429,6 +464,15 @@ function SeletorExercicio({
   const [grupo, setGrupo] = useState('');
   const [opcoes, setOpcoes] = useState<Exercicio[]>([]);
   const [escolhido, setEscolhido] = useState<Exercicio | null>(null);
+  /* Um contador que sobe a cada envio. Sem ele a `<FotoDoExercicio>`
+     mantém o blob antigo em cache e a pessoa envia a imagem certa,
+     recebe 201 e continua vendo a errada — o que se lê como "não
+     salvou". */
+  const [versaoDaFoto, setVersaoDaFoto] = useState(0);
+  const aoTrocarFoto = (): void => {
+    setVersaoDaFoto((v) => v + 1);
+    setEscolhido((e) => (e === null ? null : { ...e, temFoto: true }));
+  };
   const [series, setSeries] = useState('3');
   const [repeticoes, setRepeticoes] = useState('10-12');
   const [carga, setCarga] = useState('');
@@ -515,10 +559,13 @@ function SeletorExercicio({
               {opcoes.slice(0, 40).map((e) => (
                 <li key={e.id}>
                   <button type="button" className="seletor-item" onClick={() => setEscolhido(e)}>
-                    <span>{e.nome}</span>
-                    <span className="seletor-item-meta">
-                      {rotuloGrupo(e.grupo)}
-                      {e.equipamento !== null && ` · ${e.equipamento}`}
+                    <FotoDoExercicio exercicio={e} tamanho="mini" />
+                    <span className="seletor-item-texto">
+                      <span>{e.nome}</span>
+                      <span className="seletor-item-meta">
+                        {rotuloGrupo(e.grupo)}
+                        {e.equipamento !== null && ` · ${e.equipamento}`}
+                      </span>
                     </span>
                   </button>
                 </li>
@@ -528,15 +575,27 @@ function SeletorExercicio({
         </>
       ) : (
         <>
-          <p className="seletor-escolhido">
-            <strong>{escolhido.nome}</strong>
-            <button type="button" className="botao-texto" onClick={() => setEscolhido(null)}>
-              trocar
-            </button>
-          </p>
-          {escolhido.instrucoes !== null && (
-            <p className="seletor-instrucao">{escolhido.instrucoes}</p>
-          )}
+          <div className="seletor-escolhido">
+            <FotoDoExercicio exercicio={escolhido} tamanho="grande" versao={versaoDaFoto} />
+            <div className="seletor-escolhido-texto">
+              <p className="seletor-escolhido-nome">
+                <strong>{escolhido.nome}</strong>
+                <button type="button" className="botao-texto" onClick={() => setEscolhido(null)}>
+                  trocar
+                </button>
+              </p>
+              {escolhido.instrucoes !== null && (
+                <p className="seletor-instrucao">{escolhido.instrucoes}</p>
+              )}
+              {/* O ENVIO DA FOTO FICA AQUI, e não numa tela de
+                  biblioteca à parte. É neste instante que alguém está
+                  olhando para o exercício e percebendo que falta a
+                  imagem; obrigar a sair, achar a biblioteca e procurar o
+                  mesmo exercício é o que faz a biblioteca ficar sem foto
+                  nenhuma para sempre. */}
+              <EnvioDeFoto exercicio={escolhido} aoEnviar={aoTrocarFoto} />
+            </div>
+          </div>
 
           <div className="formulario seletor-prescricao">
             <label className="campo campo-terco">
@@ -585,5 +644,122 @@ function SeletorExercicio({
         </>
       )}
     </div>
+  );
+}
+
+/* ====================================================================
+ * A foto do exercício
+ * ================================================================== */
+
+/**
+ * Mostra a foto de um exercício, ou as iniciais do grupo muscular
+ * quando não há foto.
+ *
+ * A IMAGEM PASSA POR `fetch`, e não vai direto no `src`. A rota exige o
+ * token no cabeçalho `Authorization`, e uma tag `<img>` não manda
+ * cabeçalho nenhum — sem este desvio, toda figura viria 401. O preço é
+ * ter de revogar o blob ao desmontar, feito na limpeza do efeito: sem
+ * isso, rolar uma lista de sessenta exercícios deixa sessenta blobs
+ * presos na memória da aba.
+ */
+function FotoDoExercicio({
+  exercicio,
+  tamanho,
+  versao = 0,
+}: {
+  exercicio: Exercicio;
+  tamanho: 'mini' | 'grande';
+  versao?: number;
+}): ReactNode {
+  const [endereco, setEndereco] = useState<string | null>(null);
+  const [falhou, setFalhou] = useState(false);
+
+  useEffect(() => {
+    if (!exercicio.temFoto) return;
+    let vivo = true;
+    let atual: string | null = null;
+
+    void baixarFotoDoExercicio(exercicio.id).then((url) => {
+      if (!vivo) {
+        if (url !== null) URL.revokeObjectURL(url);
+        return;
+      }
+      atual = url;
+      if (url === null) setFalhou(true);
+      else setEndereco(url);
+    });
+
+    return () => {
+      vivo = false;
+      if (atual !== null) URL.revokeObjectURL(atual);
+    };
+  }, [exercicio.id, exercicio.temFoto, versao]);
+
+  if (!exercicio.temFoto || falhou || endereco === null) {
+    return (
+      <span className={`ex-foto ex-${tamanho} ex-vazia`} aria-hidden="true">
+        {rotuloGrupo(exercicio.grupo).slice(0, 3)}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      className={`ex-foto ex-${tamanho}`}
+      src={endereco}
+      alt={`Demonstração de ${exercicio.nome}`}
+      loading="lazy"
+    />
+  );
+}
+
+/** Envia (ou troca) a foto de um exercício. */
+function EnvioDeFoto({
+  exercicio,
+  aoEnviar,
+}: {
+  exercicio: Exercicio;
+  aoEnviar: () => void;
+}): ReactNode {
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const escolher = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const arquivo = e.target.files?.[0];
+    /* O valor do input é limpo sempre: sem isto, escolher o MESMO
+       arquivo depois de um erro não dispara `change` de novo, e a tela
+       fica parecendo travada. */
+    e.target.value = '';
+    if (arquivo === undefined) return;
+
+    setErro(null);
+    setEnviando(true);
+    try {
+      await enviarFotoDoExercicio(exercicio.id, arquivo);
+      aoEnviar();
+    } catch (x) {
+      setErro(x instanceof ApiError ? x.message : 'Não foi possível enviar a imagem.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <p className="ex-envio">
+      <label className="botao-texto">
+        {enviando ? 'Enviando…' : exercicio.temFoto ? 'Trocar a foto' : 'Adicionar uma foto'}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={(e) => void escolher(e)}
+          disabled={enviando}
+        />
+      </label>
+      {erro !== null && (
+        <span className="mensagem-erro" role="alert">
+          {erro}
+        </span>
+      )}
+    </p>
   );
 }
