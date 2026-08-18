@@ -6,42 +6,29 @@
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 1. A CONFIGURAÇÃO SAI DA VARIÁVEL DE AMBIENTE E VEM PARA O BANCO
+-- 1. A CONFIGURAÇÃO DA UAZAPI MORA EM `platform_settings`
 --
--- Hoje o endereço e o token administrativo da uazapi vivem em
--- `UAZAPI_BASE_URL` e `UAZAPI_ADMIN_TOKEN`, no .env da VPS. O sintoma
--- disso apareceu na tela: "Falta o token administrativo da uazapi neste
--- servidor" — e a única forma de resolver era entrar por SSH, editar um
--- arquivo e reiniciar o contêiner. Quem opera o SaaS não deveria
--- precisar de terminal para ligar uma integração.
+-- A tabela NÃO é criada aqui, e sim em `014_plataforma_super.sql`. A
+-- primeira versão a criava neste arquivo e quebrou a atualização de uma
+-- VPS real:
 --
--- UMA LINHA SÓ, sempre. `id boolean PRIMARY KEY DEFAULT true` com CHECK
--- é o jeito de o banco garantir que não existe uma segunda configuração
--- — a alternativa (uma tabela livre e a aplicação lembrando de sempre
--- ler a primeira linha) produz o dia em que existem duas e ninguém sabe
--- qual vale.
+--     --> 014_plataforma_super.sql  (superusuário, sempre)
+--     ERROR:  relation "platform_settings" does not exist
 --
--- O TOKEN É GUARDADO CIFRADO, com a mesma AES-256-GCM dos tokens de
--- instância. Ele é o token ADMINISTRATIVO: quem o tem cria instância e
--- fala em nome de qualquer academia do sistema. Em claro no banco, um
--- dump o entrega inteiro.
+-- O 014 tem sufixo `_super` e por isso roda SEMPRE, a cada deploy. O 016
+-- é numerado e roda UMA vez. Numa instalação que ainda não tinha
+-- nenhum dos dois, o 014 executava primeiro e concedia permissão numa
+-- tabela que só nasceria dois arquivos depois.
 --
--- SEM RLS, porque não pertence a tenant nenhum — é configuração da
--- plataforma. A proteção é por GRANT: `stabilize_app` não alcança a
--- tabela, só as funções do painel e a função de leitura abaixo.
+-- A REGRA QUE FICA: um arquivo que roda sempre não pode depender de
+-- nada criado por um arquivo numerado posterior. Ele tem que ser
+-- autossuficiente — e é por isso que o 014 agora cria a própria tabela,
+-- com `IF NOT EXISTS`.
+--
+-- O meu teste de banco limpo passou porque foi feito ANTES de o 016
+-- existir; depois disso só reexecutei o caminho incremental, onde a
+-- tabela já estava lá. Testar do zero só no fim não pega isto.
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS platform_settings (
-  id                     boolean PRIMARY KEY DEFAULT true CHECK (id),
-  uazapi_base_url        text,
-  uazapi_admin_encrypted text,
-  atualizado_em          timestamptz NOT NULL DEFAULT now(),
-  atualizado_por         uuid REFERENCES platform_admins(id) ON DELETE SET NULL
-);
-
-INSERT INTO platform_settings (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
-
-REVOKE ALL ON platform_settings FROM PUBLIC;
-REVOKE ALL ON platform_settings FROM stabilize_app;
 
 -- ---------------------------------------------------------------------
 -- 2. A FILA DE ENVIO

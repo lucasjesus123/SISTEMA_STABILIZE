@@ -39,6 +39,54 @@ ALTER ROLE stabilize_plataforma NOLOGIN BYPASSRLS NOSUPERUSER NOCREATEDB NOCREAT
    uma tabela que existe. */
 GRANT USAGE ON SCHEMA public TO stabilize_plataforma;
 
+-- ---------------------------------------------------------------------
+-- A CONFIGURAÇÃO DA PLATAFORMA
+--
+-- Criada AQUI, e não numa migration numerada, por uma razão de ordem:
+-- este arquivo tem sufixo `_super` e roda SEMPRE, a cada deploy. Um
+-- arquivo que roda sempre não pode depender de tabela criada por um
+-- arquivo numerado POSTERIOR — numa instalação nova ele executa antes, e
+-- o deploy morre em `relation "platform_settings" does not exist`.
+-- Aconteceu numa VPS real, no meio de uma atualização.
+--
+-- Um arquivo que roda sempre precisa ser autossuficiente. Daí o
+-- `IF NOT EXISTS`: ele cria na primeira vez e não faz nada nas outras.
+--
+-- UMA LINHA SÓ, garantida pelo banco com `id boolean PRIMARY KEY CHECK
+-- (id)`. A alternativa — tabela livre e a aplicação lembrando de ler a
+-- primeira linha — produz o dia em que existem duas e ninguém sabe qual
+-- vale.
+--
+-- O token administrativo da uazapi é guardado CIFRADO pela API
+-- (AES-256-GCM). Quem o tem fala em nome de qualquer academia do
+-- sistema; em claro no banco, um dump o entrega inteiro.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS platform_settings (
+  id                     boolean PRIMARY KEY DEFAULT true CHECK (id),
+  uazapi_base_url        text,
+  uazapi_admin_encrypted text,
+  atualizado_em          timestamptz NOT NULL DEFAULT now(),
+  atualizado_por         uuid REFERENCES platform_admins(id) ON DELETE SET NULL
+);
+/* O DONO PRECISA SER O MIGRATOR, e não o superusuário que executa este
+   arquivo. O `002_roles.sql` roda sempre e faz `GRANT ... ON ALL TABLES
+   IN SCHEMA public TO stabilize_app` — e o PostgreSQL só deixa conceder
+   privilégio em tabela que se possui. Com a tabela pertencendo a
+   `postgres`, o 002 morre com `permission denied for table
+   platform_settings` no segundo deploy, quando a tabela já existe.
+
+   Foi o segundo erro em cadeia deste mesmo bloco, e só apareceu quando
+   testei a SEGUNDA passada num banco limpo — a primeira passava. As
+   outras tabelas de plataforma nascem no 013, aplicado pelo migrator, e
+   por isso nunca tiveram este problema; esta precisava alcançar o mesmo
+   estado por outro caminho.
+
+   O grant que o 002 dá ao `stabilize_app` é revogado logo abaixo, neste
+   mesmo arquivo, que roda depois dele. */
+INSERT INTO platform_settings (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
+ALTER TABLE platform_settings OWNER TO stabilize_migrator;
+REVOKE ALL ON platform_settings FROM PUBLIC;
+
 GRANT SELECT, INSERT, UPDATE, DELETE ON platform_admins   TO stabilize_plataforma;
 GRANT SELECT, INSERT, UPDATE, DELETE ON platform_sessions TO stabilize_plataforma;
 GRANT SELECT, INSERT                  ON platform_audit   TO stabilize_plataforma;
@@ -71,6 +119,7 @@ GRANT SELECT         ON exercise_catalog TO stabilize_plataforma;
 REVOKE ALL ON platform_admins   FROM stabilize_app;
 REVOKE ALL ON platform_sessions FROM stabilize_app;
 REVOKE ALL ON platform_audit    FROM stabilize_app;
+REVOKE ALL ON platform_settings FROM stabilize_app;
 
 -- ---------------------------------------------------------------------
 -- Apaga as versões anteriores antes de recriar.
