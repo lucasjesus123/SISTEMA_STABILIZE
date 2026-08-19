@@ -36,6 +36,7 @@ import { Perfil } from './Perfil.jsx';
 import { Financeiro } from './Financeiro.jsx';
 import { Agenda } from './Agenda.jsx';
 import { Equipe } from './Equipe.jsx';
+import { Recepcao } from './Recepcao.jsx';
 import {
   CadastroConcluido,
   SecaoDoPlano,
@@ -88,7 +89,15 @@ const TOM_DO_ALUNO: Record<string, string> = {
   INACTIVE: 'neutra',
 };
 
-type Aba = 'painel' | 'alunos' | 'agenda' | 'financeiro' | 'equipe' | 'whatsapp' | 'perfil';
+type Aba =
+  | 'painel'
+  | 'recepcao'
+  | 'alunos'
+  | 'agenda'
+  | 'financeiro'
+  | 'equipe'
+  | 'whatsapp'
+  | 'perfil';
 
 export default function App(): ReactNode {
   const [principal, setPrincipal] = useState<Principal | null>(null);
@@ -363,6 +372,17 @@ function Sistema({
       visivel: pode('finance:report:read') || pode('commission:read'),
       grupo: 'Operação',
     },
+    /* A RECEPÇÃO VEM ANTES DE ALUNOS porque é a tela que fica aberta o
+       dia inteiro. Quem opera o balcão não navega: chega de manhã, abre
+       aqui e não sai mais — as outras seções são visitadas, esta é
+       habitada. */
+    {
+      id: 'recepcao',
+      nome: 'Recepção',
+      icone: <IconeRecepcao />,
+      visivel: pode('attendance:write'),
+      grupo: 'Operação',
+    },
     {
       id: 'alunos',
       nome: 'Alunos',
@@ -523,6 +543,7 @@ function Sistema({
       <main id="conteudo" className="conteudo">
         <div className="folha">
         {aba === 'painel' && <Painel principal={principal} />}
+        {aba === 'recepcao' && <Recepcao />}
         {aba === 'alunos' && <Alunos principal={principal} />}
         {aba === 'agenda' && <Agenda principal={principal} />}
         {aba === 'financeiro' && <Financeiro principal={principal} />}
@@ -554,6 +575,18 @@ function IconePainel(): ReactNode {
   return (
     <svg {...svg}>
       <path d="M3 13h4v8H3zM10 3h4v18h-4zM17 9h4v12h-4z" />
+    </svg>
+  );
+}
+
+/* Uma porta com alguém passando: é entrada, não "pessoas". O ícone de
+   silhueta já é usado por Alunos e por Perfil — repeti-lo aqui faria o
+   menu ter três itens com o mesmo desenho. */
+function IconeRecepcao(): ReactNode {
+  return (
+    <svg {...svg}>
+      <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8" />
+      <path d="M10 12h9m0 0-3-3m3 3-3 3" />
     </svg>
   );
 }

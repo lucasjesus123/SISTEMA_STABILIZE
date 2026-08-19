@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Carregando, Vazio } from './ui.jsx';
+import * as api from './api.js';
 import {
   ApiError,
   buscarMensagens,
@@ -202,6 +203,8 @@ export function Whatsapp(): ReactNode {
         </section>
       )}
 
+      <Avisos />
+
       <div className="secao-cabecalho">
         <h2>Mensagens enviadas</h2>
       </div>
@@ -240,6 +243,103 @@ export function Whatsapp(): ReactNode {
           </tbody>
         </table>
       )}
+    </>
+  );
+}
+
+/* ==================================================================== */
+
+/**
+ * Avisos automáticos de agendamento.
+ *
+ * ESTA CONFIGURAÇÃO EXISTIA NO BANCO E NÃO TINHA TELA. Pior: a
+ * mecânica que ela controla também não existia — a academia teria
+ * ligado uma chave que não acendia nada. Agora liga.
+ *
+ * APARECE MESMO SEM WHATSAPP CONECTADO, de propósito. A decisão de
+ * mandar lembrete é anterior à conexão, e as mensagens ficam na fila
+ * esperando: conectar à tarde faz sair o lembrete de amanhã.
+ */
+function Avisos(): ReactNode {
+  const [dados, setDados] = useState<api.AvisosDeAgendamento | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .buscarAvisos()
+      .then((r) => setDados(r.data))
+      .catch(() => setDados(null));
+  }, []);
+
+  if (dados === null) return null;
+
+  const gravar = async (novo: api.AvisosDeAgendamento): Promise<void> => {
+    setDados(novo);
+    setErro(null);
+    setSalvando(true);
+    try {
+      await api.salvarAvisos(novo);
+      setSalvo(true);
+      setTimeout(() => setSalvo(false), 2500);
+    } catch (e) {
+      setErro(e instanceof api.ApiError ? e.message : 'Não foi possível salvar.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="secao-cabecalho">
+        <h2>Avisos automáticos</h2>
+        <p>
+          Saem sozinhos quando um horário é marcado. O aluno precisa ter WhatsApp no cadastro.
+        </p>
+      </div>
+
+      <section className="wa-testes formulario">
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Confirmar na hora de marcar</span>
+          <select
+            value={dados.confirmarAgendamento ? 'sim' : 'nao'}
+            onChange={(e) =>
+              void gravar({ ...dados, confirmarAgendamento: e.target.value === 'sim' })
+            }
+          >
+            <option value="sim">Sim, avisar assim que marcar</option>
+            <option value="nao">Não enviar confirmação</option>
+          </select>
+          <span className="campo-dica">
+            Chega em até dois minutos depois de o horário ser marcado.
+          </span>
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Lembrete antes da aula</span>
+          <select
+            value={String(dados.lembreteHoras)}
+            onChange={(e) => void gravar({ ...dados, lembreteHoras: Number(e.target.value) })}
+          >
+            <option value="0">Não enviar lembrete</option>
+            <option value="1">1 hora antes</option>
+            <option value="3">3 horas antes</option>
+            <option value="12">12 horas antes</option>
+            <option value="24">1 dia antes</option>
+            <option value="48">2 dias antes</option>
+          </select>
+          <span className="campo-dica">
+            Desmarcar a aula cancela o lembrete que ainda não saiu.
+          </span>
+        </label>
+
+        <div className="formulario-acoes campo-cheia">
+          {salvando && <span className="campo-dica">Salvando…</span>}
+          {salvo && <span className="campo-dica">Salvo.</span>}
+          {erro !== null && <span className="wa-erro">{erro}</span>}
+        </div>
+      </section>
     </>
   );
 }

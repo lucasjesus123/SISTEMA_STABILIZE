@@ -1,5 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import {
+  cancelarAvisosDoAgendamento,
+  enfileirarAvisosDoAgendamento,
+} from '../whatsapp/avisos.js';
 import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { auditDenied, writeAudit } from '../../audit/audit.js';
 import { badRequest, notFound, unprocessable } from '../../http/errors.js';
@@ -235,6 +239,16 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
         createdBy: principal.userId,
       });
 
+      /* A CONFIRMAÇÃO E O LEMBRETE NASCEM AQUI, dentro da mesma
+         transação que criou o agendamento. Se enfileirar numa segunda
+         transação, uma falha no meio deixa aula marcada sem aviso
+         nenhum — e ninguém descobre até o aluno não aparecer.
+
+         Enfileirar não é enviar: o worker é que fala com o provedor. É
+         de propósito, para que uma instabilidade da UAZAPI não derrube
+         o agendamento de quem está na tela. */
+      const avisos = await enfileirarAvisosDoAgendamento(client, principal.tenantId, criado.id);
+
       await writeAudit(client, principal.tenantId, {
         action: 'appointment.create',
         resourceType: 'appointment',
@@ -242,6 +256,7 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
         actorId: principal.userId,
         actorRole: principal.role,
         ip: request.ip,
+        metadata: { avisos },
       });
 
       void reply.status(201);
@@ -266,6 +281,11 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
         const ok = await cancelarCompromisso(client, scope, id, principal.userId, body.motivo);
         if (!ok) throw notFound('Agendamento');
 
+        /* O LEMBRETE QUE AINDA NÃO SAIU MORRE COM A AULA. Sem isto o
+           aluno desmarca na quarta e recebe "sua aula é hoje às 7h" na
+           quinta de manhã — e vai. */
+        const avisosCancelados = await cancelarAvisosDoAgendamento(client, id);
+
         await writeAudit(client, principal.tenantId, {
           action: 'appointment.cancel',
           resourceType: 'appointment',
@@ -273,6 +293,7 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
           actorId: principal.userId,
           actorRole: principal.role,
           ip: request.ip,
+          metadata: { avisosCancelados },
         });
 
         return { ok: true };

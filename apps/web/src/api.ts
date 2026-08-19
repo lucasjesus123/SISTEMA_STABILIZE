@@ -1452,3 +1452,91 @@ export const editarAnexo = (
     method: 'PATCH',
     body: JSON.stringify(dados),
   });
+
+/* ====================================================================
+ * CHECK-IN NA RECEPÇÃO
+ *
+ * BUSCAR E REGISTRAR SÃO DUAS CHAMADAS de propósito. A recepcionista
+ * digita, erra o nome, digita de novo — se a busca registrasse entrada,
+ * cada tentativa viraria um check-in.
+ * ================================================================== */
+
+export type SituacaoNaPorta = 'EM_DIA' | 'DEVENDO' | 'SEM_CONTRATO' | 'INATIVO';
+
+export interface AlunoNaPorta {
+  id: string;
+  nome: string;
+  codigo: string | null;
+  temFoto: boolean;
+  situacao: SituacaoNaPorta;
+  devendoCentavos: number;
+  devendoFormatado: string;
+  cobrancasVencidas: number;
+  diasDeAtraso: number;
+  dentro: boolean;
+  ultimaEntrada: string | null;
+  /** O sistema avisa; quem decide é quem está no balcão. */
+  precisaLiberar: boolean;
+}
+
+export const buscarNaPorta = (termo: string) =>
+  api<{ data: AlunoNaPorta[] }>(`/api/checkin/buscar?termo=${encodeURIComponent(termo)}`);
+
+export const registrarEntrada = (
+  studentId: string,
+  opcoes: { liberadoComAviso?: boolean; observacao?: string | null } = {},
+) =>
+  api<{ data: { id: string; situacao: SituacaoNaPorta; nome: string } }>('/api/checkin', {
+    method: 'POST',
+    body: JSON.stringify({
+      studentId,
+      liberadoComAviso: opcoes.liberadoComAviso ?? false,
+      observacao: opcoes.observacao ?? null,
+    }),
+  });
+
+export const registrarSaida = (checkinId: string) =>
+  api<{ ok: boolean }>(`/api/checkin/${checkinId}/saida`, { method: 'POST' });
+
+export interface PresenteNaAcademia {
+  id: string;
+  nome: string;
+  codigo: string | null;
+  entrouEm: string;
+  situacao: SituacaoNaPorta;
+}
+
+export const quemEstaNaAcademia = () =>
+  api<{ data: PresenteNaAcademia[] }>('/api/checkin/agora');
+
+export interface MovimentoDoDia {
+  total: number;
+  dentro: number;
+  devendo: number;
+  porHora: { hora: number; n: number }[];
+}
+
+export const movimentoDoDia = () => api<{ data: MovimentoDoDia }>('/api/checkin/hoje');
+
+export const definirToleranciaNaPorta = (bloquearApos: number) =>
+  api<{ ok: boolean }>('/api/checkin/config', {
+    method: 'PUT',
+    body: JSON.stringify({ bloquearApos }),
+  });
+
+/* --------------------------------------------------------------------
+ * Avisos automáticos de agendamento
+ *
+ * A confirmação sai quando o horário é marcado; o lembrete, N horas
+ * antes da aula. Zero horas desliga o lembrete.
+ * ------------------------------------------------------------------ */
+
+export interface AvisosDeAgendamento {
+  confirmarAgendamento: boolean;
+  lembreteHoras: number;
+}
+
+export const buscarAvisos = () => api<{ data: AvisosDeAgendamento }>('/api/whatsapp/avisos');
+
+export const salvarAvisos = (dados: AvisosDeAgendamento) =>
+  api<{ ok: boolean }>('/api/whatsapp/avisos', { method: 'PUT', body: JSON.stringify(dados) });

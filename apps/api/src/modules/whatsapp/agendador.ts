@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { enviarAniversariosDoDia } from './aniversarios.js';
+import { esvaziarFila } from './fila.js';
 import { envelhecerCobrancas } from '../finance/vencimento.js';
 import { gerarCobrancasDoMes } from '../finance/cobranca-recorrente.js';
 
@@ -28,6 +29,23 @@ import { gerarCobrancasDoMes } from '../finance/cobranca-recorrente.js';
  */
 
 const UMA_HORA_MS = 60 * 60 * 1000;
+
+/**
+ * A FILA DO WHATSAPP TEM RITMO PRÓPRIO, e é muito mais rápido que o
+ * resto deste arquivo.
+ *
+ * Cobrança que vence e aniversário são coisas do dia: errar por uma hora
+ * não muda nada para ninguém. A confirmação de um horário é o oposto —
+ * o aluno acabou de tocar em "marcar" no aplicativo e está olhando para
+ * o celular. Uma confirmação que chega quarenta minutos depois não
+ * confirma coisa nenhuma: nesse tempo ele já ligou para a academia
+ * perguntando se deu certo.
+ *
+ * Dois minutos é o compromisso: rápido o bastante para parecer imediato,
+ * lento o bastante para que a consulta de sondagem — que na maioria dos
+ * giros não encontra nada — não custe nada.
+ */
+const GIRO_DA_FILA_MS = 2 * 60 * 1000;
 
 /** Hora local do envio. 9h: cedo o bastante para ser no dia, tarde o
  *  bastante para não acordar ninguém. */
@@ -92,21 +110,39 @@ export function registrarAgendador(app: FastifyInstance): void {
     }
   };
 
+  /* A FILA NÃO ESPERA O TIQUE DE HORA EM HORA. */
+  const giroDaFila = async (): Promise<void> => {
+    try {
+      const r = await esvaziarFila(app.log);
+      if (r.enviadas > 0 || r.falhas > 0 || r.descartadas > 0) {
+        app.log.info({ fila: r }, 'fila de WhatsApp processada');
+      }
+    } catch (erro) {
+      /* NUNCA deixar a exceção escapar de um temporizador: uma rejeição
+         não tratada derruba o processo inteiro. */
+      app.log.error({ err: erro }, 'giro da fila de WhatsApp falhou');
+    }
+  };
+
   const relogio = setInterval(() => void tique(), UMA_HORA_MS);
+  const relogioDaFila = setInterval(() => void giroDaFila(), GIRO_DA_FILA_MS);
+  relogioDaFila.unref();
   /* `unref` para o temporizador não segurar o processo vivo no
      encerramento — sem isto, `docker compose down` espera o timeout. */
   relogio.unref();
 
   app.addHook('onClose', async () => {
     clearInterval(relogio);
+    clearInterval(relogioDaFila);
   });
 
   /* Uma passada agora, sem esperar a primeira hora: reiniciar a API
      depois da meia-noite não pode deixar o financeiro um dia atrasado. */
   void tique();
+  void giroDaFila();
 
   app.log.info(
-    { hora: HORA_DO_ENVIO },
-    'agendador ativo (mensalidades, vencimentos e aniversários)',
+    { hora: HORA_DO_ENVIO, giroDaFilaMs: GIRO_DA_FILA_MS },
+    'agendador ativo (mensalidades, vencimentos, aniversários e fila de WhatsApp)',
   );
 }

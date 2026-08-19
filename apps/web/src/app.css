@@ -3926,3 +3926,355 @@
   flex-basis: 100%;
   margin: 0;
 }
+
+/* ====================================================================
+   RECEPÇÃO — o balcão
+
+   ESTA TELA É LIDA EM PÉ, DE LONGE E COM PRESSA. É o único lugar do
+   sistema onde a pessoa tem alguém esperando na frente dela enquanto
+   olha. Por isso tudo aqui é maior do que no resto: o campo de busca, a
+   foto, o nome, o botão. Densidade é virtude numa tabela de cobranças e
+   é defeito num balcão.
+   ================================================================== */
+
+.rec-contadores {
+  display: flex;
+  gap: var(--e-5);
+  align-items: flex-end;
+}
+
+.rec-contador {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+}
+.rec-contador strong {
+  font-size: var(--t-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-apoio);
+}
+.rec-contador span {
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+/* Quantos estão dentro AGORA é o número que se olha; os outros dois são
+   contexto. Um só destaque por bloco, senão nenhum destaca. */
+.rec-contador.destaque strong { color: var(--teal); }
+.rec-contador.alerta strong { color: var(--erro); }
+
+.rec-mesa {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+  gap: var(--e-6);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .rec-mesa { grid-template-columns: 1fr; }
+}
+
+/* -------------------------------------------------------------------
+   A busca
+   ----------------------------------------------------------------- */
+
+.rec-busca {
+  display: block;
+  margin-bottom: var(--e-5);
+}
+.rec-busca-rotulo {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+  margin-bottom: var(--e-2);
+}
+.rec-busca input {
+  width: 100%;
+  /* DUAS VEZES A ALTURA DE UM CAMPO NORMAL. É onde a mão fica o dia
+     inteiro; um campo de 36px obriga a mirar. */
+  padding: var(--e-4) var(--e-5);
+  font-size: var(--t-lg);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+  color: var(--texto);
+}
+.rec-busca input::placeholder { color: var(--texto-apoio); }
+.rec-busca input:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--realce-teclado);
+}
+
+.rec-dica {
+  color: var(--texto-apoio);
+  font-size: var(--t-sm);
+  max-width: 52ch;
+}
+.rec-dica-vazia { color: var(--texto-corpo); font-size: var(--t-md); }
+
+.rec-lista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+.rec-lista button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--e-4);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+  text-align: left;
+}
+.rec-lista button:hover { border-color: var(--teal); background: var(--superficie-realce); }
+.rec-lista-nome {
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--texto);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rec-lista-meta {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------------------------
+   O cartão do aluno — a conferência
+   ----------------------------------------------------------------- */
+
+.rec-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+  padding: var(--e-5);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+  box-shadow: var(--sombra-2);
+  /* A FAIXA À ESQUERDA carrega a situação. Quem passa o olho de longe lê
+     a cor antes de ler a palavra — e no balcão o olho passa de longe. */
+  border-left: 4px solid var(--fio-forte);
+}
+.rec-cartao.ok { border-left-color: var(--ok); }
+.rec-cartao.atencao { border-left-color: var(--atencao); }
+.rec-cartao.erro { border-left-color: var(--erro); }
+
+.rec-cartao-topo {
+  display: flex;
+  gap: var(--e-5);
+  align-items: center;
+}
+
+.rec-retrato {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  border-radius: var(--raio-md);
+  object-fit: cover;
+  background: var(--superficie-realce);
+  border: 1px solid var(--fio);
+}
+.rec-retrato.vazio {
+  display: grid;
+  place-items: center;
+  font-size: var(--t-xl);
+  font-weight: 700;
+  color: var(--texto-apoio);
+}
+
+.rec-identidade {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  align-items: flex-start;
+  min-width: 0;
+}
+.rec-identidade h2 {
+  font-size: var(--t-lg);
+  font-weight: 700;
+  color: var(--texto);
+  margin: 0;
+  text-wrap: balance;
+}
+.rec-codigo {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-pendencia {
+  padding: var(--e-3) var(--e-4);
+  border-radius: var(--raio);
+  background: var(--erro-fundo);
+  color: var(--erro-texto);
+  font-size: var(--t-sm);
+}
+.rec-cartao.atencao .rec-pendencia {
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+}
+
+.rec-ja-dentro {
+  padding: var(--e-3) var(--e-4);
+  border-radius: var(--raio);
+  background: var(--superficie-realce);
+  color: var(--texto-corpo);
+  font-size: var(--t-sm);
+}
+
+.rec-liberacao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px dashed color-mix(in srgb, var(--erro) 40%, transparent);
+  border-radius: var(--raio-md);
+  background: var(--erro-fundo);
+}
+.rec-liberacao p {
+  font-size: var(--t-sm);
+  color: var(--erro-texto);
+  margin: 0;
+}
+
+.botao-acao.grande {
+  padding: var(--e-4) var(--e-6);
+  font-size: var(--t-md);
+}
+/* O botão de liberar não pode parecer o botão de rotina: é a exceção
+   que fica registrada com o nome de quem clicou. */
+.botao-acao.perigo {
+  background: var(--erro);
+  color: #fff;
+  align-self: flex-start;
+}
+.botao-acao.perigo:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--erro) 85%, #000);
+  box-shadow: none;
+}
+
+.rec-confirmado {
+  padding: var(--e-4) var(--e-5);
+  border-radius: var(--raio-md);
+  font-size: var(--t-md);
+  margin-bottom: var(--e-5);
+  background: var(--ok-fundo);
+  color: var(--ok-texto);
+  border: 1px solid color-mix(in srgb, var(--ok) 26%, transparent);
+}
+.rec-confirmado.atencao {
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+  border-color: color-mix(in srgb, var(--atencao) 30%, transparent);
+}
+.rec-confirmado.erro {
+  background: var(--erro-fundo);
+  color: var(--erro-texto);
+  border-color: color-mix(in srgb, var(--erro) 30%, transparent);
+}
+
+/* -------------------------------------------------------------------
+   Quem está dentro
+   ----------------------------------------------------------------- */
+
+.rec-dentro {
+  padding: var(--e-5);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.rec-dentro h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  font-size: var(--t-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+  margin: 0 0 var(--e-4);
+}
+.rec-dentro-n {
+  font-size: var(--t-lg);
+  font-weight: 700;
+  color: var(--teal);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.rec-dentro ul { list-style: none; display: flex; flex-direction: column; }
+.rec-dentro li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--e-3);
+  padding: var(--e-3) 0;
+  border-bottom: 1px solid var(--fio);
+}
+.rec-dentro li:last-child { border-bottom: none; }
+.rec-dentro-nome {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  min-width: 0;
+  font-size: var(--t-sm);
+  color: var(--texto);
+}
+.rec-dentro-hora {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  font-variant-numeric: tabular-nums;
+}
+.rec-nota {
+  margin-top: var(--e-4);
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+  line-height: 1.5;
+}
+
+/* Tons de situação para a pílula compartilhada. */
+.pilula.ok {
+  background: var(--ok-fundo);
+  color: var(--ok-texto);
+  border-color: color-mix(in srgb, var(--ok) 24%, transparent);
+}
+.pilula.atencao {
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+  border-color: color-mix(in srgb, var(--atencao) 28%, transparent);
+}
+.pilula.erro {
+  background: var(--erro-fundo);
+  color: var(--erro-texto);
+  border-color: color-mix(in srgb, var(--erro) 28%, transparent);
+}
+.pilula.pequena { padding: 1px 7px; font-size: 0.6875rem; }
+
+/* "Não é este" é escape, não ação: fica leve e à esquerda. Do mesmo
+   tamanho do botão de entrada, competiria com ele — e a recepção
+   clicaria errado com pressa. */
+.rec-cartao .botao-secundario {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rec-cartao .botao-secundario:hover { color: var(--teal); }

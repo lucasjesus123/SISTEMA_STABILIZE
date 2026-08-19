@@ -22,6 +22,7 @@ import { perfilRoutes } from './modules/perfil/perfil.routes.js';
 import { cepRoutes } from './modules/cep/cep.routes.js';
 import { plataformaRoutes } from './modules/plataforma/plataforma.routes.js';
 import { cadastrosRoutes, contratoRoutes } from './modules/cadastros/cadastros.routes.js';
+import { checkinRoutes } from './modules/checkin/checkin.routes.js';
 import { registrarAgendador } from './modules/whatsapp/agendador.js';
 import multipart from '@fastify/multipart';
 import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
@@ -221,6 +222,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   /* Equipe e espaços: a agenda não tem cor nem legenda sem a primeira,
      e não divide o salão sem a segunda. */
   await app.register(cadastrosRoutes, { prefix: '/api/cadastros' });
+  /* A operação mais frequente da academia: o aluno chega e entra. */
+  await app.register(checkinRoutes, { prefix: '/api/checkin' });
 
   return app;
 }

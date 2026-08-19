@@ -200,4 +200,60 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
     const resultado = await enviarAniversariosDoDia(request.log);
     return { data: resultado };
   });
+
+  /* ------------------------------------------------------------------
+   * Avisos automáticos de agendamento
+   *
+   * ESTAS DUAS CONFIGURAÇÕES EXISTIAM NO BANCO DESDE A MIGRAÇÃO 016 E
+   * NÃO TINHAM ROTA NEM TELA. Eram lidas por ninguém e editáveis por
+   * ninguém — a academia ficava com o padrão para sempre e sem saber
+   * que havia padrão.
+   * ---------------------------------------------------------------- */
+  app.get('/avisos', { preHandler: [app.authorize('user:write')] }, async (request) =>
+    inTenant(request, async (client) => {
+      const { rows } = await client.query<{ confirmar: boolean; horas: number }>(
+        `SELECT wa_confirmar_agendamento AS confirmar, wa_lembrete_horas AS horas
+           FROM tenants WHERE id = current_tenant_id()`,
+      );
+      const l = rows[0];
+      return {
+        data: {
+          confirmarAgendamento: l?.confirmar ?? true,
+          lembreteHoras: l?.horas ?? 3,
+        },
+      };
+    }),
+  );
+
+  app.put('/avisos', { preHandler: [app.authorize('user:write')] }, async (request) => {
+    const body = z
+      .object({
+        confirmarAgendamento: z.boolean(),
+        /* O teto de 168 h é uma semana, e é o mesmo CHECK do banco:
+           repetido aqui só para a mensagem de erro sair em português em
+           vez de vir como violação de constraint. */
+        lembreteHoras: z.coerce.number().int().min(0).max(168),
+      })
+      .parse(request.body);
+
+    return inTenant(request, async (client, principal) => {
+      await client.query(
+        `UPDATE tenants
+            SET wa_confirmar_agendamento = $1, wa_lembrete_horas = $2
+          WHERE id = current_tenant_id()`,
+        [body.confirmarAgendamento, body.lembreteHoras],
+      );
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'tenant.settings',
+        resourceType: 'tenant',
+        resourceId: principal.tenantId,
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+        metadata: { avisos: body },
+      });
+      return { ok: true };
+    });
+  });
 }
