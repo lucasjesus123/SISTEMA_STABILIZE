@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Carregando, Vazio } from './ui.jsx';
+import * as api from './api.js';
 import {
   ApiError,
   adicionarItemTreino,
@@ -216,6 +217,12 @@ export function AbaTreino({
           )
         ))}
 
+      {/* O QUE O ALUNO MARCOU vem ANTES da prescrição, e é de propósito.
+          Quem abre esta aba na segunda visita não vem escrever treino —
+          vem ver se o anterior está sendo seguido. Deixar isso embaixo
+          de três blocos de exercícios é garantir que ninguém veja. */}
+      <Aderencia alunoId={alunoId} />
+
       {aberto === null ? (
         <Vazio
           titulo="Nenhum treino prescrito."
@@ -233,6 +240,88 @@ export function AbaTreino({
       )}
     </section>
   );
+}
+
+/* ==================================================================== */
+
+/**
+ * O retorno que o professor nunca teve.
+ *
+ * ELE PRESCREVE DOZE SEMANAS e descobre no dia da reavaliação que foram
+ * seis. Com o registro do aluno, o desequilíbrio aparece na terceira
+ * semana — que é quando ainda dá para conversar em vez de recomeçar.
+ *
+ * O ESFORÇO MÉDIO É O DADO MENOS ÓBVIO E O MAIS ÚTIL. Três semanas
+ * seguidas em 4,5 num programa de adaptação significam que a carga
+ * passou do ponto, e isso não aparece em nenhum outro lugar do sistema.
+ *
+ * A SEÇÃO SOME QUANDO NÃO HÁ NADA. Um bloco vazio dizendo "0 treinos"
+ * ocuparia espaço permanente para quem tem aluno que não usa o
+ * aplicativo — que é boa parte deles.
+ */
+function Aderencia({ alunoId }: { alunoId: string }): ReactNode {
+  const [dados, setDados] = useState<api.TreinoFeitoDoAluno | null>(null);
+
+  useEffect(() => {
+    api
+      .buscarTreinoFeitoDoAluno(alunoId)
+      .then((r) => setDados(r.data))
+      .catch(() => setDados(null));
+  }, [alunoId]);
+
+  if (dados === null || dados.registros.length === 0) return null;
+
+  return (
+    <section className="ader">
+      <div className="ader-numeros">
+        <span className="ader-item">
+          <strong>{dados.ultimos7}</strong>
+          <span>nos últimos 7 dias</span>
+        </span>
+        <span className="ader-item">
+          <strong>{dados.ultimos30}</strong>
+          <span>nos últimos 30</span>
+        </span>
+        {dados.esforcoMedio !== null && (
+          <span className={`ader-item ${dados.esforcoMedio >= 4.5 ? 'alerta' : ''}`}>
+            <strong>{dados.esforcoMedio.toFixed(1).replace('.', ',')}</strong>
+            <span>esforço médio (1 a 5)</span>
+          </span>
+        )}
+      </div>
+
+      {/* O aviso só aparece quando há o que avisar, e diz o que fazer —
+          não só que algo está alto. */}
+      {dados.esforcoMedio !== null && dados.esforcoMedio >= 4.5 && dados.ultimos30 >= 3 && (
+        <p className="ader-aviso">
+          O aluno vem marcando esforço no limite. Vale conferir a carga antes da próxima
+          progressão.
+        </p>
+      )}
+
+      <ul className="ader-lista">
+        {dados.registros.slice(0, 12).map((r) => (
+          <li key={r.id}>
+            <span className="ader-dia">{r.dia}</span>
+            <span className="ader-data">{dataBr(r.quando)}</span>
+            {r.esforco !== null && <span className="ader-esforco">{'●'.repeat(r.esforco)}</span>}
+            {r.notas !== null && <span className="ader-notas">{r.notas}</span>}
+          </li>
+        ))}
+      </ul>
+      {dados.registros.length > 12 && (
+        <p className="ader-mais">
+          e mais {dados.registros.length - 12} nos últimos quatro meses.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** "2026-08-19" → "19/08", sem passar por Date e sem deslocar fuso. */
+function dataBr(iso: string): string {
+  const [, m, d] = iso.slice(0, 10).split('-');
+  return `${d}/${m}`;
 }
 
 /* ==================================================================== */

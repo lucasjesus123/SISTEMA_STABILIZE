@@ -4,6 +4,7 @@ import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { writeAudit } from '../../audit/audit.js';
 import { badRequest, conflict, notFound, unprocessable } from '../../http/errors.js';
 import { apagar, gravar, ler, tipoDeImagem } from '../attachments/storage.js';
+import { assertStudentInScope } from '../students/students.repository.js';
 import {
   GRUPOS_MUSCULARES,
   adicionarItem,
@@ -270,6 +271,78 @@ export async function exercisesRoutes(app: FastifyInstance): Promise<void> {
  * ================================================================== */
 
 export async function workoutsRoutes(app: FastifyInstance): Promise<void> {
+  /* ------------------------------------------------------------------
+   * GET /api/students/:id/treino-feito — o que o aluno marcou no app
+   *
+   * É O RETORNO QUE O PROFESSOR NUNCA TEVE. Ele prescreve doze semanas e
+   * descobre no dia da reavaliação que foram seis. Aqui o desequilíbrio
+   * aparece na terceira semana, que é quando ainda dá para conversar.
+   *
+   * O ESFORÇO PERCEBIDO É O DADO MAIS ÚTIL DA LISTA, e o menos óbvio:
+   * três treinos seguidos com esforço 9 num programa de adaptação
+   * significam que a carga passou do ponto, e isso não aparece em
+   * nenhum outro lugar do sistema.
+   * ---------------------------------------------------------------- */
+  app.get(
+    '/:id/treino-feito',
+    { preHandler: [app.authorize('workout:read')] },
+    async (request) => {
+      const { id } = idParam.parse(request.params);
+      const scope = requireScope(request);
+
+      return inTenant(request, async (client) => {
+        if (!(await assertStudentInScope(client, scope, id))) throw notFound('Aluno');
+
+        const { rows } = await client.query<{
+          id: string;
+          dia: string;
+          quando: string;
+          esforco: number | null;
+          notas: string | null;
+        }>(
+          `SELECT w.id, w.day_label AS dia, w.done_on::text AS quando,
+                  w.effort AS esforco, w.notes AS notas
+             FROM workout_logs w
+            WHERE w.student_id = $1
+              AND w.done_on > CURRENT_DATE - 120
+            ORDER BY w.done_on DESC, w.created_at DESC
+            LIMIT 90`,
+          [id],
+        );
+
+        /* Semanas em vez de dias: ninguém treina sete dias por semana, e
+           "4 treinos nos últimos 7 dias" responde a pergunta que o
+           professor faz de verdade — está seguindo ou não. */
+        const { rows: resumo } = await client.query<{
+          ultimos7: string;
+          ultimos30: string;
+          esforco_medio: string | null;
+        }>(
+          `SELECT count(*) FILTER (WHERE done_on > CURRENT_DATE - 7)::text  AS ultimos7,
+                  count(*) FILTER (WHERE done_on > CURRENT_DATE - 30)::text AS ultimos30,
+                  round(avg(effort) FILTER (WHERE done_on > CURRENT_DATE - 30), 1)::text
+                    AS esforco_medio
+             FROM workout_logs WHERE student_id = $1`,
+          [id],
+        );
+        const r = resumo[0];
+
+        return {
+          data: {
+            registros: rows,
+            ultimos7: Number(r?.ultimos7 ?? 0),
+            ultimos30: Number(r?.ultimos30 ?? 0),
+            /* NULL quando ninguém respondeu esforço nenhum. Mostrar
+               "esforço médio 0" seria dizer que o aluno achou fácil. */
+            esforcoMedio: r?.esforco_medio === null || r?.esforco_medio === undefined
+              ? null
+              : Number(r.esforco_medio),
+          },
+        };
+      });
+    },
+  );
+
   app.get('/:id/treinos', { preHandler: [app.authorize('workout:read')] }, async (request) => {
     const { id } = idParam.parse(request.params);
     const scope = requireScope(request);

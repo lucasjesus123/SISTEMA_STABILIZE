@@ -717,7 +717,19 @@ export interface MeuPerfil {
   foto: string | null;
   mensalista: boolean;
   plano: { ciclo: string; valorCentavos: number; sessoesIncluidas: number | null } | null;
-  frequencia: { presencas: number; faltas: number; proximos: number };
+  frequencia: {
+    presencas: number;
+    faltas: number;
+    proximos: number;
+    /* ENTRADAS NA RECEPÇÃO. Para quem faz musculação são a frequência
+       inteira — essa pessoa não tem agendamento nenhum, e até aqui o app
+       dizia "0 presenças" para quem treinava toda semana. */
+    entradas: number;
+    treinosFeitos: number;
+  };
+  /** Só o que já venceu: a mensalidade do dia 10 não é dívida no dia 3. */
+  devendoCentavos: number;
+  devendoFormatado: string;
 }
 
 export interface MeuItemTreino {
@@ -1654,3 +1666,51 @@ export const assinarMinhaTriagem = (dados: Assinatura) =>
     method: 'POST',
     body: JSON.stringify(dados),
   });
+
+/* ====================================================================
+ * O DIÁRIO DE TREINO
+ *
+ * A tabela existia desde o começo e ninguém escrevia nela — o app
+ * mostrava o treino e não deixava dizer que fez.
+ * ================================================================== */
+
+export interface TreinoFeito {
+  id: string;
+  dia: string;
+  quando: string;
+  esforco: number | null;
+  notas: string | null;
+  hoje: boolean;
+}
+
+export interface MeuDiario {
+  registros: TreinoFeito[];
+  /** As letras já marcadas hoje — para o botão virar "feito". */
+  feitosHoje: string[];
+  total: number;
+  noMes: number;
+  sequenciaDeSemanas: number;
+}
+
+export const buscarMeuDiario = () => api<{ data: MeuDiario }>('/api/eu/treino/diario');
+
+/** Esforço de 1 a 5 — a escala que o banco declara desde o começo. */
+export const marcarTreinoFeito = (dia: string, esforco?: number | null, notas?: string | null) =>
+  api<{ data: { id: string; quando: string } }>('/api/eu/treino/feito', {
+    method: 'POST',
+    body: JSON.stringify({ dia, esforco: esforco ?? null, notas: notas ?? null }),
+  });
+
+export const desmarcarTreinoFeito = (id: string) =>
+  api<{ ok: boolean }>(`/api/eu/treino/feito/${id}`, { method: 'DELETE' });
+
+/** O que o aluno marcou, visto pelo professor. */
+export interface TreinoFeitoDoAluno {
+  registros: { id: string; dia: string; quando: string; esforco: number | null; notas: string | null }[];
+  ultimos7: number;
+  ultimos30: number;
+  esforcoMedio: number | null;
+}
+
+export const buscarTreinoFeitoDoAluno = (alunoId: string) =>
+  api<{ data: TreinoFeitoDoAluno }>(`/api/students/${alunoId}/treino-feito`);

@@ -4711,3 +4711,74 @@
   color: var(--texto-apoio);
   box-shadow: none;
 }
+
+/* ====================================================================
+   ADERÊNCIA — o que o aluno marcou no aplicativo
+
+   Fica acima da prescrição de propósito: quem abre a aba na segunda
+   visita não vem escrever treino, vem ver se o anterior está sendo
+   seguido.
+   ================================================================== */
+
+.ader {
+  padding: var(--e-4) var(--e-5);
+  margin-bottom: var(--e-5);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+}
+
+.ader-numeros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-6);
+  margin-bottom: var(--e-3);
+}
+.ader-item { display: flex; flex-direction: column; gap: 2px; line-height: 1.1; }
+.ader-item strong {
+  font-size: var(--t-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+.ader-item span {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+}
+/* Esforço no limite é o único número aqui que pede ação. */
+.ader-item.alerta strong { color: var(--atencao); }
+
+.ader-aviso {
+  padding: var(--e-3) var(--e-4);
+  margin-bottom: var(--e-3);
+  border-radius: var(--raio);
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+  font-size: var(--t-sm);
+}
+
+.ader-lista {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2) var(--e-4);
+}
+.ader-lista li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: 3px 10px;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-pilula);
+  background: var(--superficie-baixa);
+  font-size: var(--t-sm);
+}
+.ader-dia { font-weight: 700; color: var(--teal); }
+.ader-data { color: var(--texto-apoio); font-variant-numeric: tabular-nums; }
+/* Bolinhas em vez do número: lê-se de relance como intensidade, e o
+   número exigiria lembrar qual era a escala. */
+.ader-esforco { color: var(--menta); letter-spacing: 1px; font-size: 10px; }
+.ader-notas { color: var(--texto-corpo); font-style: italic; }
+.ader-mais { margin-top: var(--e-3); font-size: var(--t-xs); color: var(--texto-apoio); }

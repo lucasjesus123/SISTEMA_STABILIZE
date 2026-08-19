@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { formatCents } from '@stabilize/shared';
 import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { writeAudit } from '../../audit/audit.js';
 import { badRequest, conflict, forbidden, notFound } from '../../http/errors.js';
@@ -66,6 +67,9 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
         presencas: string;
         faltas: string;
         proximos: string;
+        entradas: string;
+        treinos_feitos: string;
+        devendo: string;
       }>(
         `SELECT s.full_name AS nome, s.photo_path AS foto,
                 c.cycle::text AS ciclo,
@@ -77,7 +81,25 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
                   WHERE a.student_id = s.id AND a.status = 'NO_SHOW') AS faltas,
                 (SELECT count(*) FROM appointments a
                   WHERE a.student_id = s.id AND a.status IN ('SCHEDULED','CONFIRMED')
-                    AND lower(a.period) > now()) AS proximos
+                    AND lower(a.period) > now()) AS proximos,
+                /* AS ENTRADAS NA RECEPÇÃO CONTAM COMO FREQUÊNCIA, e para
+                   quem faz musculação são a frequência inteira: essa
+                   pessoa não tem agendamento nenhum, e até aqui o app
+                   dizia "0 presenças" para quem treinava toda semana. */
+                (SELECT count(*) FROM checkins k WHERE k.student_id = s.id) AS entradas,
+                (SELECT count(*) FROM workout_logs w WHERE w.student_id = s.id) AS treinos_feitos,
+                /* O QUE ELE DEVE. Descobrir a pendência no balcão, na
+                   frente de outras pessoas, é constrangimento evitável —
+                   e quem vê no celular de casa costuma pagar antes de
+                   sair. O valor é só o VENCIDO: a mensalidade que vence
+                   dia 10 não é dívida no dia 3. */
+                COALESCE((SELECT SUM(e.amount_cents - e.paid_cents)
+                            FROM finance_entries e
+                           WHERE e.student_id = s.id AND e.direction = 'RECEIVABLE'
+                             AND e.cancelled_at IS NULL AND e.status <> 'PAID'
+                             AND e.due_date < (now() AT TIME ZONE
+                                   (SELECT timezone FROM tenants WHERE id = s.tenant_id))::date
+                         ), 0)::text AS devendo
            FROM students s
            LEFT JOIN student_contracts c
                   ON c.student_id = s.id AND c.is_active
@@ -109,7 +131,11 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
             presencas: Number(l.presencas),
             faltas: Number(l.faltas),
             proximos: Number(l.proximos),
+            entradas: Number(l.entradas),
+            treinosFeitos: Number(l.treinos_feitos),
           },
+          devendoCentavos: Number(l.devendo),
+          devendoFormatado: formatCents(Number(l.devendo)),
         },
       };
     });

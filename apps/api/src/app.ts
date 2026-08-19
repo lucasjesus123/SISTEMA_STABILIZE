@@ -18,6 +18,7 @@ import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { progressoRoutes } from './modules/reports/progresso.routes.js';
 import { portalRoutes } from './modules/portal/portal.routes.js';
 import { prontuarioDoAlunoRoutes } from './modules/portal/prontuario.routes.js';
+import { diarioDoAlunoRoutes } from './modules/portal/diario.routes.js';
 import { perfilRoutes } from './modules/perfil/perfil.routes.js';
 import { cepRoutes } from './modules/cep/cep.routes.js';
 import { plataformaRoutes } from './modules/plataforma/plataforma.routes.js';
@@ -204,6 +205,9 @@ export async function buildApp(): Promise<FastifyInstance> {
      anamneses em leitura e os exames que ele mesmo envia. Nenhuma URL
      leva o id dele — ele sai do token. */
   await app.register(prontuarioDoAlunoRoutes, { prefix: '/api/eu' });
+  /* O diário: o aluno marcando que treinou. Sem isto o aplicativo é um
+     PDF com login. */
+  await app.register(diarioDoAlunoRoutes, { prefix: '/api/eu' });
   /* O perfil da própria pessoa, seja ela dona, recepcionista ou aluno.
      Como o portal, não carrega id na URL: o id vem do token. */
   await app.register(perfilRoutes, { prefix: '/api/perfil' });

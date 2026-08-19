@@ -860,3 +860,181 @@
   font-weight: 700;
 }
 .app-triagem .botao-acao:disabled { background: #22383a; color: #6f8688; }
+
+/* ====================================================================
+   O DIÁRIO DE TREINO NO APLICATIVO
+   ================================================================== */
+
+/* A pendência financeira, no alto da tela inicial. Âmbar e não vermelho:
+   deve ser notada, não deve assustar — e quem está devendo já sabe. */
+.app-pendencia {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: #2a1f0c;
+  border: 1px solid #4a3a12;
+}
+.app-pendencia-rotulo {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #ffd98a;
+}
+.app-pendencia strong {
+  font-size: 26px;
+  font-weight: 700;
+  color: #ffd98a;
+  font-variant-numeric: tabular-nums;
+}
+.app-pendencia-nota { font-size: 13px; color: #c9b076; }
+
+/* A sequência de semanas. Um número grande e uma palavra — é a única
+   coisa desta tela que existe para dar vontade de voltar. */
+.app-sequencia {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: linear-gradient(155deg, rgba(76, 194, 200, 0.16), rgba(8, 15, 17, 0.2));
+  border: 1px solid rgba(110, 231, 239, 0.22);
+}
+.app-sequencia strong {
+  font-size: 34px;
+  font-weight: 700;
+  color: #6ee7ef;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.app-sequencia span { font-size: 14px; color: #b8cacb; }
+.app-sequencia-mes {
+  width: 100%;
+  font-size: 13px;
+  color: #8fa5a7;
+}
+
+/* O dia já feito hoje: a cor diz antes da palavra. */
+.app-dia.feito {
+  border-color: rgba(110, 231, 239, 0.45);
+  background: rgba(110, 231, 239, 0.09);
+}
+.app-dia.feito .app-dia-qtd { color: #6ee7ef; }
+
+.app-feito-hoje {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(110, 231, 239, 0.08);
+  border: 1px solid rgba(110, 231, 239, 0.22);
+  color: #6ee7ef;
+  font-size: 14px;
+  text-align: center;
+}
+
+.app-marcar { margin-top: 12px; width: 100%; }
+
+/* -------------------------------------------------------------------
+   Histórico
+   ----------------------------------------------------------------- */
+
+.app-diario { margin-top: 20px; }
+.app-diario-topo {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  background: none;
+  color: #d6e4e5;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+}
+.app-diario-lista { list-style: none; display: flex; flex-direction: column; }
+.app-diario-lista li {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #1d2729;
+  font-size: 14px;
+}
+.app-diario-dia {
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #1d2b2d;
+  color: #6ee7ef;
+  font-weight: 700;
+  text-align: center;
+}
+.app-diario-data { color: #b8cacb; font-variant-numeric: tabular-nums; }
+/* Bolinhas em vez do número: "●●●●" lê-se de relance como intensidade,
+   e "4" precisa que a pessoa lembre qual era a escala. */
+.app-diario-esforco { color: #6ee7ef; letter-spacing: 2px; font-size: 11px; }
+.app-diario-desfazer {
+  background: none;
+  color: #6f8688;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.app-diario-desfazer:hover { color: #ff7a70; }
+
+/* -------------------------------------------------------------------
+   O fim da sessão
+   ----------------------------------------------------------------- */
+
+.sessao-esforco {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 420px;
+  margin: 8px 0 4px;
+}
+.sessao-esforco-titulo {
+  font-size: 15px;
+  color: #b8cacb;
+}
+.sessao-esforco-botoes {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+.sessao-esforco-botoes button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  /* 56px de altura: o alvo precisa aguentar mão suada e tremendo depois
+     da última série. */
+  min-height: 56px;
+  padding: 8px 2px;
+  border-radius: 12px;
+  border: 1px solid #2b3a3c;
+  background: #0d1415;
+  color: #b8cacb;
+}
+.sessao-esforco-botoes button:hover:not(:disabled) { border-color: #6ee7ef; }
+.sessao-esforco-botoes button:disabled { opacity: 0.5; }
+.sessao-esforco-botoes strong { font-size: 18px; color: #e6f2f3; }
+.sessao-esforco-botoes span { font-size: 10px; text-align: center; line-height: 1.2; }
+
+.sessao-marcado {
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(110, 231, 239, 0.1);
+  border: 1px solid rgba(110, 231, 239, 0.24);
+  color: #6ee7ef;
+  font-size: 15px;
+}

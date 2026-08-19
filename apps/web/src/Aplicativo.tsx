@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MeuProntuario } from './MeuProntuario.jsx';
+import * as api from './api.js';
 import {
   ApiError,
   agendar,
@@ -59,6 +60,7 @@ export function Aplicativo({ nome, aoSair }: { nome: string; aoSair: () => void 
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [emSessao, setEmSessao] = useState<{ dia: string } | null>(null);
+  const [diario, setDiario] = useState<api.MeuDiario | null>(null);
 
   const carregar = useCallback(async (comEsqueleto = true): Promise<void> => {
     if (comEsqueleto) setCarregando(true);
@@ -69,6 +71,9 @@ export function Aplicativo({ nome, aoSair }: { nome: string; aoSair: () => void 
       setPerfil(p.data);
       setTreino(t.data);
       setHorarios(a.data);
+      /* O DIÁRIO NÃO PODE DERRUBAR A TELA. É informação de apoio: se a
+         chamada falhar, o aluno ainda precisa ver o treino de hoje. */
+      setDiario(await api.buscarMeuDiario().then((r) => r.data).catch(() => null));
       setErro(null);
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Não foi possível carregar seus dados.');
@@ -86,7 +91,11 @@ export function Aplicativo({ nome, aoSair }: { nome: string; aoSair: () => void 
       <ModoSessao
         treino={treino}
         dia={emSessao.dia}
-        aoSair={() => setEmSessao(null)}
+        jaFeitoHoje={diario?.feitosHoje.includes(emSessao.dia) ?? false}
+        aoSair={() => {
+          setEmSessao(null);
+          void carregar(false);
+        }}
       />
     );
   }
@@ -115,13 +124,19 @@ export function Aplicativo({ nome, aoSair }: { nome: string; aoSair: () => void 
             perfil={perfil}
             treino={treino}
             horarios={horarios}
+            diario={diario}
             aoTreinar={(dia) => setEmSessao({ dia })}
             aoIrParaAgenda={() => setAba('agenda')}
           />
         ) : aba === 'eu' ? (
           <MeuProntuario />
         ) : aba === 'treino' ? (
-          <TelaTreino treino={treino} aoTreinar={(dia) => setEmSessao({ dia })} />
+          <TelaTreino
+            treino={treino}
+            diario={diario}
+            aoTreinar={(dia) => setEmSessao({ dia })}
+            aoMudar={() => void carregar(false)}
+          />
         ) : (
           <TelaAgenda
             horarios={horarios}
@@ -176,6 +191,7 @@ function Hoje({
   perfil,
   treino,
   horarios,
+  diario,
   aoTreinar,
   aoIrParaAgenda,
 }: {
@@ -183,6 +199,7 @@ function Hoje({
   perfil: MeuPerfil | null;
   treino: MeuTreino | null;
   horarios: MeuHorario[];
+  diario: api.MeuDiario | null;
   aoTreinar: (dia: string) => void;
   aoIrParaAgenda: () => void;
 }): ReactNode {
@@ -200,6 +217,10 @@ function Hoje({
   const faltas = perfil?.frequencia.faltas ?? 0;
   const total = presencas + faltas;
   const taxa = total === 0 ? 0 : presencas / total;
+  /* ENTRADAS NA RECEPÇÃO CONTAM. Quem faz musculação não tem agendamento
+     nenhum, e o anel dizia 0% para quem treinava toda semana. */
+  const entradas = perfil?.frequencia.entradas ?? 0;
+  const feitos = diario?.total ?? 0;
 
   return (
     <>
@@ -207,6 +228,18 @@ function Hoje({
         {saudacao()},<br />
         <strong>{nome.split(' ')[0]}</strong>
       </h1>
+
+      {/* A PENDÊNCIA VEM ANTES DE TUDO, e é a primeira coisa da tela
+          quando existe. Descobrir a dívida no balcão, na frente de
+          outras pessoas, é constrangimento evitável — e quem vê no
+          celular de casa costuma resolver antes de sair. */}
+      {perfil !== null && perfil.devendoCentavos > 0 && (
+        <div className="app-pendencia" role="status">
+          <span className="app-pendencia-rotulo">Em aberto</span>
+          <strong>{perfil.devendoFormatado}</strong>
+          <span className="app-pendencia-nota">Fale com a recepção para acertar.</span>
+        </div>
+      )}
 
       {proximo !== null && <CartaoProximo horario={proximo} />}
 
@@ -217,18 +250,38 @@ function Hoje({
         </button>
       )}
 
+      {/* A SEQUÊNCIA É O NÚMERO QUE FAZ VOLTAR AMANHÃ, e por isso fica
+          acima da constância — que é retrospectiva. Contada em SEMANAS e
+          não em dias: ninguém treina sete dias por semana, e uma
+          sequência de dias corridos quebraria todo domingo. */}
+      {diario !== null && diario.sequenciaDeSemanas > 0 && (
+        <div className="app-sequencia">
+          <strong className="tabular">{diario.sequenciaDeSemanas}</strong>
+          <span>
+            {diario.sequenciaDeSemanas === 1
+              ? 'semana treinando'
+              : 'semanas seguidas treinando'}
+          </span>
+          {diario.noMes > 0 && (
+            <span className="app-sequencia-mes">
+              {diario.noMes === 1 ? '1 treino este mês' : `${diario.noMes} treinos este mês`}
+            </span>
+          )}
+        </div>
+      )}
+
       <section className="app-secao">
         <h2>Sua constância</h2>
         <div className="app-constancia">
           <Anel valor={taxa} />
           <div className="app-constancia-numeros">
             <div>
-              <strong className="tabular">{presencas}</strong>
+              <strong className="tabular">{presencas + entradas}</strong>
               <span>presenças</span>
             </div>
             <div>
-              <strong className="tabular">{faltas}</strong>
-              <span>faltas</span>
+              <strong className="tabular">{feitos}</strong>
+              <span>treinos marcados</span>
             </div>
           </div>
         </div>
@@ -238,22 +291,30 @@ function Hoje({
         <section className="app-secao">
           <h2>Treinar agora</h2>
           <div className="app-dias">
-            {dias.map((d) => (
-              <button
-                key={d}
-                type="button"
-                className="app-dia"
-                onClick={() => {
-                  tocar();
-                  aoTreinar(d);
-                }}
-              >
-                <span className="app-dia-nome">{d}</span>
-                <span className="app-dia-qtd">
-                  {treino.itens.filter((i) => i.dia === d).length} exercícios
-                </span>
-              </button>
-            ))}
+            {dias.map((d) => {
+              const feitoHoje = diario?.feitosHoje.includes(d) ?? false;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  className={`app-dia ${feitoHoje ? 'feito' : ''}`}
+                  onClick={() => {
+                    tocar();
+                    aoTreinar(d);
+                  }}
+                >
+                  <span className="app-dia-nome">{d}</span>
+                  <span className="app-dia-qtd">
+                    {/* O QUE JÁ FOI FEITO HOJE DIZ ISSO, e não a
+                        contagem de exercícios: quem já treinou o A não
+                        precisa saber quantos exercícios ele tem. */}
+                    {feitoHoje
+                      ? '✓ feito hoje'
+                      : `${treino.itens.filter((i) => i.dia === d).length} exercícios`}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </section>
       )}
@@ -344,14 +405,19 @@ function Anel({ valor }: { valor: number }): ReactNode {
 
 function TelaTreino({
   treino,
+  diario,
   aoTreinar,
+  aoMudar,
 }: {
   treino: MeuTreino | null;
+  diario: api.MeuDiario | null;
   aoTreinar: (dia: string) => void;
+  aoMudar: () => void;
 }): ReactNode {
   const dias = treino === null ? [] : [...new Set(treino.itens.map((i) => i.dia))];
   const [dia, setDia] = useState<string | null>(null);
   const atual = dia ?? dias[0] ?? null;
+  const feitoHoje = atual !== null && (diario?.feitosHoje.includes(atual) ?? false);
 
   if (treino === null) {
     return (
@@ -412,10 +478,242 @@ function TelaTreino({
         </button>
       )}
 
+      {/* QUEM TREINOU SEM ABRIR O MODO SESSÃO TAMBÉM PRECISA MARCAR.
+          O caminho principal registra sozinho no fim da sessão guiada,
+          mas metade das pessoas treina com o papel na mão e o celular no
+          bolso — negar a elas o registro seria dizer que só conta o
+          treino feito do jeito do aplicativo. */}
+      {atual !== null && !feitoHoje && <MarcarSemSessao dia={atual} aoMarcar={aoMudar} />}
+
+      {atual !== null && feitoHoje && (
+        <p className="app-feito-hoje">✓ Você já marcou o {atual} hoje.</p>
+      )}
+
+      {diario !== null && diario.registros.length > 0 && (
+        <Historico registros={diario.registros} aoMudar={aoMudar} />
+      )}
+
       {treino.observacoes !== null && <p className="app-nota">{treino.observacoes}</p>}
     </>
   );
 }
+
+/* ==================================================================== */
+
+/**
+ * Marcar sem passar pelo modo sessão.
+ *
+ * FICA DISCRETO DE PROPÓSITO. O caminho que o aplicativo quer é o modo
+ * sessão, que já registra no fim; este é a saída para quem treinou de
+ * outro jeito. Se os dois tivessem o mesmo peso visual, ninguém usaria o
+ * primeiro — e o modo sessão é o que traz o esforço percebido, que é o
+ * dado mais útil para o professor.
+ */
+function MarcarSemSessao({ dia, aoMarcar }: { dia: string; aoMarcar: () => void }): ReactNode {
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const marcar = async (): Promise<void> => {
+    setErro(null);
+    setEnviando(true);
+    try {
+      await api.marcarTreinoFeito(dia);
+      aoMarcar();
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Não foi possível marcar.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className="app-botao-fraco app-marcar"
+        disabled={enviando}
+        onClick={() => void marcar()}
+      >
+        {enviando ? 'Marcando…' : `Já fiz o ${dia} hoje, marcar sem abrir`}
+      </button>
+      {erro !== null && <p className="app-erro-linha">{erro}</p>}
+    </>
+  );
+}
+
+/**
+ * O histórico do diário.
+ *
+ * DESFAZER EXISTE PORQUE O TOQUE ERRADO EXISTE. Sem ele, quem marcou o B
+ * quando fez o A fica com o histórico errado para sempre — e a reação
+ * seguinte é parar de marcar.
+ */
+function Historico({
+  registros,
+  aoMudar,
+}: {
+  registros: api.TreinoFeito[];
+  aoMudar: () => void;
+}): ReactNode {
+  const [aberto, setAberto] = useState(false);
+
+  return (
+    <section className="app-bloco app-diario">
+      <button
+        type="button"
+        className="app-diario-topo"
+        aria-expanded={aberto}
+        onClick={() => setAberto(!aberto)}
+      >
+        <span>Meus treinos ({registros.length})</span>
+        <span aria-hidden="true">{aberto ? '−' : '+'}</span>
+      </button>
+
+      {aberto && (
+        <ul className="app-diario-lista">
+          {registros.slice(0, 30).map((r) => (
+            <li key={r.id}>
+              <span className="app-diario-dia">{r.dia}</span>
+              <span className="app-diario-data">{dataCurtaBr(r.quando)}</span>
+              {r.esforco !== null && (
+                <span className="app-diario-esforco">{'●'.repeat(r.esforco)}</span>
+              )}
+              <button
+                type="button"
+                className="app-diario-desfazer"
+                aria-label={`Desmarcar ${r.dia} de ${dataCurtaBr(r.quando)}`}
+                onClick={() => void api.desmarcarTreinoFeito(r.id).then(aoMudar).catch(() => undefined)}
+              >
+                desfazer
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** "2026-08-19" → "19/08", sem passar por Date e sem deslocar fuso. */
+function dataCurtaBr(iso: string): string {
+  const [, m, d] = iso.slice(0, 10).split('-');
+  return `${d}/${m}`;
+}
+
+/* ==================================================================== */
+
+/**
+ * O fim do treino — e o único lugar onde vale a pena perguntar o esforço.
+ *
+ * AQUI É O MOMENTO CERTO E É O ÚNICO. A pessoa acabou de terminar, ainda
+ * está com a sensação na cabeça, e o celular já está na mão. Perguntar
+ * "como foi?" numa tela separada depois, ou num formulário no dia
+ * seguinte, é perguntar para quem já esqueceu.
+ *
+ * CADA BOTÃO REGISTRA. Não existe "escolher e depois confirmar": são dois
+ * toques onde um basta, e o segundo é onde as pessoas desistem. Quem não
+ * quiser responder tem "pular", que registra o treino sem o esforço — o
+ * que importa mais é o registro.
+ *
+ * O ESFORÇO VAI DE 1 A 5 porque é a escala que o banco declara desde o
+ * começo, e porque cinco botões grandes cabem lado a lado num celular.
+ * Dez não cabem, e alvo pequeno com a mão suada é resposta errada.
+ */
+function FimDaSessao({
+  dia,
+  quantos,
+  jaFeitoHoje,
+  aoSair,
+}: {
+  dia: string;
+  quantos: number;
+  jaFeitoHoje: boolean;
+  aoSair: () => void;
+}): ReactNode {
+  const [estado, setEstado] = useState<'perguntando' | 'salvando' | 'salvo'>(
+    /* Quem já tinha marcado este treino hoje não é perguntado de novo:
+       o servidor recusaria com 409 e a pessoa veria um erro depois de
+       ter feito tudo certo. */
+    jaFeitoHoje ? 'salvo' : 'perguntando',
+  );
+  const [erro, setErro] = useState<string | null>(null);
+
+  const registrar = async (esforco: number | null): Promise<void> => {
+    setErro(null);
+    setEstado('salvando');
+    try {
+      await api.marcarTreinoFeito(dia, esforco);
+      setEstado('salvo');
+      navigator.vibrate?.(60);
+    } catch (e) {
+      /* 409 aqui significa "já estava marcado" — que do ponto de vista
+         de quem acabou de treinar é sucesso, e não erro. */
+      if (e instanceof ApiError && e.status === 409) {
+        setEstado('salvo');
+        return;
+      }
+      setErro(e instanceof ApiError ? e.message : 'Não foi possível marcar.');
+      setEstado('perguntando');
+    }
+  };
+
+  return (
+    <div className="sessao sessao-fim">
+      <h1>Treino concluído</h1>
+      <p>
+        {quantos} {quantos === 1 ? 'exercício' : 'exercícios'} de {dia}.
+      </p>
+
+      {estado === 'salvo' ? (
+        <p className="sessao-marcado">✓ Marcado no seu histórico.</p>
+      ) : (
+        <div className="sessao-esforco">
+          <span className="sessao-esforco-titulo">Como foi?</span>
+          <div className="sessao-esforco-botoes">
+            {([1, 2, 3, 4, 5] as const).map((n) => (
+              <button
+                key={n}
+                type="button"
+                disabled={estado === 'salvando'}
+                onClick={() => {
+                  tocar();
+                  void registrar(n);
+                }}
+              >
+                <strong>{n}</strong>
+                <span>{ROTULO_DO_ESFORCO[n]}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="app-botao-fraco"
+            disabled={estado === 'salvando'}
+            onClick={() => void registrar(null)}
+          >
+            Pular e só marcar
+          </button>
+        </div>
+      )}
+
+      {erro !== null && <p className="app-erro-linha">{erro}</p>}
+
+      <button type="button" className="app-botao-grande" onClick={aoSair}>
+        Voltar
+      </button>
+    </div>
+  );
+}
+
+/* Palavras, e não só números: "4" sozinho não diz nada, e a pessoa
+   escolhe o do meio por não saber o que os outros significam. */
+const ROTULO_DO_ESFORCO: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: 'leve',
+  2: 'tranquilo',
+  3: 'certo',
+  4: 'puxado',
+  5: 'no limite',
+};
 
 /**
  * Carga em gramas → o número que se lê na anilha.
@@ -440,10 +738,12 @@ const prescricao = (i: MeuItemTreino): string =>
 function ModoSessao({
   treino,
   dia,
+  jaFeitoHoje,
   aoSair,
 }: {
   treino: MeuTreino;
   dia: string;
+  jaFeitoHoje: boolean;
   aoSair: () => void;
 }): ReactNode {
   const itens = useMemo(() => treino.itens.filter((i) => i.dia === dia), [treino, dia]);
@@ -504,15 +804,7 @@ function ModoSessao({
   }, [descanso]);
 
   if (item === undefined) {
-    return (
-      <div className="sessao sessao-fim">
-        <h1>Treino concluído</h1>
-        <p>{itens.length} exercícios de {dia}.</p>
-        <button type="button" className="app-botao-grande" onClick={aoSair}>
-          Voltar
-        </button>
-      </div>
-    );
+    return <FimDaSessao dia={dia} quantos={itens.length} jaFeitoHoje={jaFeitoHoje} aoSair={aoSair} />;
   }
 
   const avancarSerie = (): void => {
