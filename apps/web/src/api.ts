@@ -23,6 +23,8 @@ export interface Principal {
   permissions: string[];
   /** O fuso da ACADEMIA — é nele que o servidor valida a agenda. */
   timezone?: string;
+  /** Entrou com senha provisória e precisa trocar antes de usar. */
+  mustChangePassword?: boolean;
   studentId?: string;
 }
 
@@ -1256,3 +1258,59 @@ export const gravarMedida = (alunoId: string, dados: DadosDeMedida) =>
 
 export const excluirMedida = (alunoId: string, medidaId: string) =>
   api<{ ok: boolean }>(`/api/students/${alunoId}/medidas/${medidaId}`, { method: 'DELETE' });
+
+/* ====================================================================
+ * FOTO E ACESSO DO ALUNO
+ * ================================================================== */
+
+export async function baixarFotoDoAluno(alunoId: string): Promise<string | null> {
+  const resposta = await fetch(`/api/students/${alunoId}/foto`, {
+    headers: accessToken === null ? {} : { Authorization: `Bearer ${accessToken}` },
+    credentials: 'same-origin',
+  });
+  if (!resposta.ok) return null;
+  return URL.createObjectURL(await resposta.blob());
+}
+
+export async function enviarFotoDoAluno(alunoId: string, arquivo: File): Promise<void> {
+  const corpo = new FormData();
+  corpo.append('arquivo', arquivo);
+  await api<{ ok: boolean }>(`/api/students/${alunoId}/foto`, { method: 'POST', body: corpo });
+}
+
+export const removerFotoDoAluno = (alunoId: string) =>
+  api<{ ok: boolean }>(`/api/students/${alunoId}/foto`, { method: 'DELETE' });
+
+export interface AcessoDoAluno {
+  liberado: boolean;
+  login: string | null;
+  usouSenhaInicial: boolean;
+  jaEntrou: boolean;
+  temCpf: boolean;
+}
+
+export const buscarAcessoDoAluno = (alunoId: string) =>
+  api<{ data: AcessoDoAluno }>(`/api/students/${alunoId}/acesso`);
+
+export const liberarAcessoDoAluno = (alunoId: string) =>
+  api<{ data: { login: string; senhaInicial: string; criado: boolean } }>(
+    `/api/students/${alunoId}/acesso`,
+    { method: 'POST' },
+  );
+
+export const bloquearAcessoDoAluno = (alunoId: string) =>
+  api<{ ok: boolean }>(`/api/students/${alunoId}/acesso`, { method: 'DELETE' });
+
+/**
+ * Troca a própria senha.
+ *
+ * O servidor derruba TODAS as sessões ao trocar, inclusive esta — é o
+ * comportamento certo (uma senha trocada porque vazou não pode deixar a
+ * sessão do invasor viva), e significa que a tela precisa mandar a
+ * pessoa entrar de novo em seguida.
+ */
+export const trocarMinhaSenha = (atual: string, nova: string) =>
+  api<{ ok: boolean }>('/api/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword: atual, newPassword: nova }),
+  });

@@ -240,14 +240,19 @@
   --fonte-display: 'Outfit', 'Segoe UI', system-ui, sans-serif;
   --fonte-corpo: 'Source Sans 3', system-ui, -apple-system, sans-serif;
 
+  /* ESCALA COM MAIS SALTO ENTRE OS DEGRAUS.
+     A anterior ia de 0,8125 a 0,9375 entre "apoio" e "corpo" — uma
+     diferença de dois pixels, que o olho não lê como hierarquia, lê
+     como inconsistência. Uma tela onde tudo tem quase o mesmo tamanho
+     não tem por onde começar a ser lida. */
   --t-xs: 0.75rem;
-  --t-sm: 0.8125rem;
+  --t-sm: 0.8438rem;
   --t-base: 0.9375rem;
-  --t-md: 1.125rem;
-  --t-lg: 1.5rem;
-  --t-xl: 2rem;
-  --t-2xl: 2.75rem;
-  --t-3xl: 3.5rem;
+  --t-md: 1.0625rem;
+  --t-lg: 1.375rem;
+  --t-xl: 1.875rem;
+  --t-2xl: 2.5rem;
+  --t-3xl: 3.25rem;
 
   --e-1: 0.25rem;
   --e-2: 0.5rem;
@@ -259,8 +264,14 @@
   --e-8: 4rem;
   --e-9: 6rem;
 
-  --raio: 3px;
-  --raio-md: 6px;
+  /* RAIOS MAIORES. 3px é o raio que não se vê: de longe parece canto
+     reto, de perto parece descuido. A família nova é 6/10/14, com o
+     maior reservado a superfícies grandes — botão e caixa pequena com
+     raio de superfície grande é o visual de template. */
+  --raio: 6px;
+  --raio-md: 10px;
+  --raio-lg: 14px;
+  --raio-pilula: 999px;
 
   --saida: cubic-bezier(0.16, 1, 0.3, 1);
   --saida-suave: cubic-bezier(0.22, 1, 0.36, 1);

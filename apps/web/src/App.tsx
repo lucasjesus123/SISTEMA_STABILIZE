@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   ApiError,
+  trocarMinhaSenha,
   buscarAgenda,
   buscarAlunos,
   atualizarAluno,
@@ -27,6 +28,7 @@ import { Marca } from './Marca.jsx';
 import { AbaAnamnese, AbaAnexos, AbaEvolucao } from './Prontuario.jsx';
 import { AbaTreino } from './Treino.jsx';
 import { AbaMedidas } from './Medidas.jsx';
+import { AbaCarteirinha } from './Carteirinha.jsx';
 import { Whatsapp } from './Whatsapp.jsx';
 import { Aplicativo } from './Aplicativo.jsx';
 import { BotaoTema, useTema } from './tema.jsx';
@@ -141,6 +143,15 @@ export default function App(): ReactNode {
 
   if (principal === null) {
     return <Login aoEntrar={setPrincipal} />;
+  }
+
+  /* SENHA PROVISÓRIA BARRA TUDO O MAIS.
+     A senha inicial de um aluno é o CPF dele, e CPF não é segredo: se a
+     troca fosse um lembrete que dá para adiar, meia academia poderia
+     abrir o prontuário de qualquer aluno. A tela de troca vem ANTES da
+     escolha entre sistema e aplicativo porque vale para os dois. */
+  if (principal.mustChangePassword === true) {
+    return <TrocaObrigatoria nome={principal.name} aoTrocar={() => setPrincipal(null)} />;
   }
 
   /* O ALUNO NÃO ENTRA NO SISTEMA — entra no aplicativo. São dois
@@ -313,15 +324,37 @@ function Sistema({
      quem chamar a rota direto recebe 403 de qualquer forma. */
   const pode = (p: string): boolean => principal.permissions.includes(p);
 
-  const abas: { id: Aba; nome: string; icone: ReactNode; visivel: boolean }[] = [
+  const abas: {
+    id: Aba;
+    nome: string;
+    icone: ReactNode;
+    visivel: boolean;
+    /* O grupo em que o item aparece no menu. Sete itens numa lista
+       corrida é uma lista; separados em operação e administração é um
+       mapa — e quem procura "Equipe" sabe, sem ler, que está embaixo. */
+    grupo: 'Operação' | 'Administração';
+  }[] = [
     {
       id: 'painel',
       nome: 'Painel',
       icone: <IconePainel />,
       visivel: pode('finance:report:read') || pode('commission:read'),
+      grupo: 'Operação',
     },
-    { id: 'alunos', nome: 'Alunos', icone: <IconeAlunos />, visivel: pode('student:read') },
-    { id: 'agenda', nome: 'Agenda', icone: <IconeAgenda />, visivel: pode('schedule:read') },
+    {
+      id: 'alunos',
+      nome: 'Alunos',
+      icone: <IconeAlunos />,
+      visivel: pode('student:read'),
+      grupo: 'Operação',
+    },
+    {
+      id: 'agenda',
+      nome: 'Agenda',
+      icone: <IconeAgenda />,
+      visivel: pode('schedule:read'),
+      grupo: 'Operação',
+    },
     /* O PROFISSIONAL TAMBÉM VÊ ESTA ABA, e vê só a parte dele: o
        fechamento da própria comissão. Quem tem `finance:report:read` —
        dono e administrador — encontra o caixa inteiro; quem tem apenas
@@ -333,17 +366,30 @@ function Sistema({
       nome: 'Financeiro',
       icone: <IconeFinanceiro />,
       visivel: pode('finance:report:read') || pode('commission:read'),
+      grupo: 'Operação',
     },
     /* A EQUIPE fica depois do financeiro e antes do WhatsApp: é
        administração da academia, não operação do dia. Quem não tem
        `user:read` não vê — recepção e profissional não administram
        quadro de pessoal. */
-    { id: 'equipe', nome: 'Equipe', icone: <IconeEquipe />, visivel: pode('user:read') },
-    { id: 'whatsapp', nome: 'WhatsApp', icone: <IconeWhatsapp />, visivel: pode('user:write') },
+    {
+      id: 'equipe',
+      nome: 'Equipe',
+      icone: <IconeEquipe />,
+      visivel: pode('user:read'),
+      grupo: 'Administração',
+    },
+    {
+      id: 'whatsapp',
+      nome: 'WhatsApp',
+      icone: <IconeWhatsapp />,
+      visivel: pode('user:write'),
+      grupo: 'Administração',
+    },
     /* SEMPRE VISÍVEL, e é a única assim. As outras seções dependem de
        permissão porque são dados da empresa; o perfil é a própria
        pessoa, e não existe papel que não possa editar o próprio nome. */
-    { id: 'perfil', nome: 'Perfil', icone: <IconePerfil />, visivel: true },
+    { id: 'perfil', nome: 'Perfil', icone: <IconePerfil />, visivel: true, grupo: 'Administração' },
   ];
   const visiveis = abas.filter((a) => a.visivel);
 
@@ -364,20 +410,29 @@ function Sistema({
         </div>
 
         <nav className="lateral-nav" aria-label="Seções do sistema">
-          {visiveis.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              className={`lateral-item ${aba === a.id ? 'ativa' : ''}`}
-              aria-current={aba === a.id ? 'page' : undefined}
-              onClick={() => setAba(a.id)}
-            >
-              <span className="lateral-icone" aria-hidden="true">
-                {a.icone}
-              </span>
-              <span className="lateral-nome">{a.nome}</span>
-            </button>
-          ))}
+          {(['Operação', 'Administração'] as const).map((grupo) => {
+            const doGrupo = visiveis.filter((a) => a.grupo === grupo);
+            if (doGrupo.length === 0) return null;
+            return (
+              <Fragment key={grupo}>
+                <h2 className="lateral-grupo">{grupo}</h2>
+                {doGrupo.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className={`lateral-item ${aba === a.id ? 'ativa' : ''}`}
+                    aria-current={aba === a.id ? 'page' : undefined}
+                    onClick={() => setAba(a.id)}
+                  >
+                    <span className="lateral-icone" aria-hidden="true">
+                      {a.icone}
+                    </span>
+                    <span className="lateral-nome">{a.nome}</span>
+                  </button>
+                ))}
+              </Fragment>
+            );
+          })}
         </nav>
 
         <div className="lateral-rodape">
@@ -400,6 +455,7 @@ function Sistema({
       <BotaoTema efetivo={efetivo} definir={definir} />
 
       <main id="conteudo" className="conteudo">
+        <div className="folha">
         {aba === 'painel' && <Painel principal={principal} />}
         {aba === 'alunos' && <Alunos principal={principal} />}
         {aba === 'agenda' && <Agenda principal={principal} />}
@@ -407,6 +463,7 @@ function Sistema({
         {aba === 'equipe' && <Equipe principal={principal} />}
         {aba === 'whatsapp' && <Whatsapp />}
         {aba === 'perfil' && <Perfil principal={principal} />}
+        </div>
       </main>
     </div>
   );
@@ -1002,7 +1059,7 @@ function Ficha({
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [secao, setSecao] = useState<
-    'cadastro' | 'anamnese' | 'evolucao' | 'medidas' | 'treino' | 'anexos'
+    'cadastro' | 'carteirinha' | 'anamnese' | 'evolucao' | 'medidas' | 'treino' | 'anexos'
   >('cadastro');
 
   const pode = (p: string): boolean => principal.permissions.includes(p);
@@ -1180,6 +1237,13 @@ function Ficha({
       {secao === 'evolucao' && (
         <AbaEvolucao alunoId={f.id} podeEscrever={pode('evolution:write')} />
       )}
+      {secao === 'carteirinha' && (
+        <AbaCarteirinha
+          ficha={f}
+          podeEscrever={pode('student:write')}
+          aoMudar={() => void recarregar(false)}
+        />
+      )}
       {secao === 'medidas' && (
         <AbaMedidas alunoId={f.id} podeEscrever={pode('evolution:write')} />
       )}
@@ -1252,11 +1316,14 @@ function Ficha({
    interface, não segurança: as rotas exigem a permissão de qualquer
    forma, e quem chamar direto recebe 403. */
 const SECOES_FICHA: {
-  id: 'cadastro' | 'anamnese' | 'evolucao' | 'medidas' | 'treino' | 'anexos';
+  id: 'cadastro' | 'carteirinha' | 'anamnese' | 'evolucao' | 'medidas' | 'treino' | 'anexos';
   nome: string;
   permissao: string | null;
 }[] = [
   { id: 'cadastro', nome: 'Cadastro', permissao: null },
+  /* CARTEIRINHA logo depois do cadastro: foto, cartão e acesso ao
+     aplicativo são a mesma conversa de quem acabou de cadastrar. */
+  { id: 'carteirinha', nome: 'Carteirinha', permissao: null },
   { id: 'anamnese', nome: 'Anamnese', permissao: 'anamnesis:read' },
   { id: 'evolucao', nome: 'Evolução', permissao: 'evolution:read' },
   /* MEDIDAS separada de EVOLUÇÃO, apesar de usarem a mesma permissão.
@@ -1647,5 +1714,139 @@ function FormularioAluno({
         </div>
       </form>
     </>
+  );
+}
+
+/* ====================================================================
+ * Troca obrigatória de senha
+ * ================================================================== */
+
+/**
+ * A tela que aparece quando a senha ainda é a provisória.
+ *
+ * NÃO TEM COMO SAIR DELA a não ser trocando ou saindo do sistema. É de
+ * propósito: a senha inicial de um aluno é o próprio CPF, e a de um
+ * funcionário novo foi ditada por telefone — as duas são conhecidas por
+ * gente demais para valerem uma segunda sessão.
+ *
+ * Ao trocar, o servidor derruba todas as sessões, inclusive esta. Então
+ * a tela avisa e devolve ao login em vez de fingir que continua
+ * autenticada e falhar na próxima requisição.
+ */
+function TrocaObrigatoria({
+  nome,
+  aoTrocar,
+}: {
+  nome: string;
+  aoTrocar: () => void;
+}): ReactNode {
+  const [atual, setAtual] = useState('');
+  const [nova, setNova] = useState('');
+  const [confirma, setConfirma] = useState('');
+  const [erro, setErro] = useState<string | null>(null);
+  const [pronto, setPronto] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    const raiz = document.documentElement;
+    const anterior = raiz.getAttribute('data-tema');
+    raiz.setAttribute('data-tema', 'escuro');
+    return () => {
+      if (anterior === null) raiz.removeAttribute('data-tema');
+      else raiz.setAttribute('data-tema', anterior);
+    };
+  }, []);
+
+  const enviar = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    if (nova !== confirma) {
+      setErro('As duas senhas novas precisam ser iguais.');
+      return;
+    }
+    setErro(null);
+    setEnviando(true);
+    try {
+      await trocarMinhaSenha(atual, nova);
+      setPronto(true);
+      /* Um respiro antes de voltar ao login: sem ele a tela pisca e a
+         pessoa não entende se deu certo. */
+      setTimeout(aoTrocar, 1800);
+    } catch (x) {
+      setErro(x instanceof ApiError ? x.message : 'Não foi possível trocar a senha.');
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <main className="entrada">
+      <div className="aurora" aria-hidden="true">
+        <span className="aurora-faixa aurora-a" />
+        <span className="aurora-faixa aurora-b" />
+        <span className="aurora-faixa aurora-c" />
+      </div>
+
+      <div className="entrada-cartao">
+        <Marca altura={88} />
+
+        {pronto ? (
+          <p className="troca-pronto" role="status">
+            <strong>Senha trocada.</strong> Entre de novo com a senha nova.
+          </p>
+        ) : (
+          <form className="entrada-form" onSubmit={(e) => void enviar(e)} noValidate>
+            <h1>Crie sua senha, {nome.split(' ')[0]}</h1>
+            <p className="entrada-apoio">
+              Você entrou com uma senha provisória. Escolha uma senha só sua antes de continuar.
+            </p>
+
+            <label className="campo">
+              <span className="campo-rotulo">Senha provisória</span>
+              <input
+                type="password"
+                value={atual}
+                onChange={(e) => setAtual(e.target.value)}
+                required
+                autoFocus
+                autoComplete="current-password"
+              />
+            </label>
+            <label className="campo">
+              <span className="campo-rotulo">Senha nova</span>
+              <input
+                type="password"
+                value={nova}
+                onChange={(e) => setNova(e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+              {/* A regra do servidor é COMPRIMENTO, não "um maiúsculo e
+                  um símbolo" — e dizer a regra certa evita a pessoa
+                  inventar uma senha que vai ser recusada. */}
+              <span className="campo-dica">Pelo menos 10 caracteres. Uma frase curta serve.</span>
+            </label>
+            <label className="campo">
+              <span className="campo-rotulo">Repita a senha nova</span>
+              <input
+                type="password"
+                value={confirma}
+                onChange={(e) => setConfirma(e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+            </label>
+
+            {erro !== null && (
+              <p className="mensagem-erro" role="alert">
+                {erro}
+              </p>
+            )}
+
+            <button type="submit" className="botao-acao" disabled={enviando}>
+              {enviando ? 'Trocando…' : 'Trocar e entrar'}
+            </button>
+          </form>
+        )}
+      </div>
+    </main>
   );
 }

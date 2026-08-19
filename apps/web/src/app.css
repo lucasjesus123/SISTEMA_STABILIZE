@@ -248,6 +248,17 @@
   margin-bottom: var(--e-2);
 }
 
+/* A LUPA como fundo do próprio campo, e não um ícone posicionado por
+   cima: um `<span>` absoluto sobre o input intercepta o clique justo na
+   borda esquerda, que é onde as pessoas clicam para começar a digitar. */
+.campo-busca input {
+  padding-left: 2.4rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23677273' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 0.75rem center;
+  background-size: 1.05rem;
+}
+
 .campo input,
 .campo-busca input {
   width: 100%;
@@ -363,7 +374,8 @@
      qualquer tela larga — menu que muda de largura obriga o olho a
      reencontrar os itens a cada página. */
   display: grid;
-  grid-template-columns: 16rem 1fr;
+  grid-template-columns: 16.5rem 1fr;
+  background: var(--superficie-baixa);
 }
 
 /* ---------------------------------------------------------------------
@@ -407,11 +419,28 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--e-3) var(--e-2);
+  padding: var(--e-4) var(--e-3);
   /* Com muitas seções a lista rola sozinha, sem empurrar o rodapé para
      fora da tela. */
   flex: 1;
   overflow-y: auto;
+}
+
+/* O MENU É AGRUPADO. Sete itens numa lista corrida é uma lista; três
+   de operação e três de administração é um mapa. A diferença aparece
+   quando alguém procura "Equipe" e sabe, sem ler, que está na metade de
+   baixo. */
+.lateral-grupo {
+  margin: var(--e-4) 0 var(--e-1);
+  padding: 0 var(--e-3);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: #6d8385;
+}
+.lateral-grupo:first-child {
+  margin-top: 0;
 }
 
 .lateral-item {
@@ -438,6 +467,9 @@
   color: #08171a;
   background: var(--teal-vivo);
   font-weight: 600;
+  /* Um leve halo: o item ativo passa a ter presença física em vez de
+     ser só um retângulo colorido. */
+  box-shadow: 0 2px 12px -4px color-mix(in srgb, var(--teal-vivo) 70%, transparent);
 }
 /* O ícone do item ativo não recebe brilho: o fundo aceso já é o
    destaque, e dois realces no mesmo elemento viram ruído. */
@@ -552,25 +584,46 @@
   }
 }
 
+/* O CONTEÚDO É UMA FOLHA SOBRE O FUNDO, e não o fundo em si.
+   Antes o conteúdo flutuava direto sobre a cor da página: sem borda,
+   sem limite, sem lugar onde a tela começa. Uma folha com borda e raio
+   dá ao trabalho um perímetro — e é o que faz a mesma informação
+   parecer um sistema em vez de um documento solto. */
 .conteudo {
   flex: 1;
-  padding: var(--e-7) clamp(var(--e-4), 4vw, var(--e-7)) var(--e-9);
-  max-width: 78rem;
+  min-width: 0;
+  padding: var(--e-6) clamp(var(--e-4), 3vw, var(--e-6)) var(--e-8);
   width: 100%;
+}
+
+.folha {
+  background: var(--superficie);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  padding: clamp(var(--e-4), 2.5vw, var(--e-6));
+  max-width: 82rem;
   margin-inline: auto;
+  min-height: calc(100dvh - var(--e-6) - var(--e-8));
 }
 
 .secao-cabecalho {
   margin-bottom: var(--e-6);
+  padding-bottom: var(--e-4);
+  border-bottom: 1px solid var(--fio);
 }
 .secao-cabecalho h1 {
   font-size: var(--t-xl);
-  margin-bottom: var(--e-1);
+  font-weight: 500;
+  /* Tracking negativo em título grande: a Outfit é geométrica e larga,
+     e sem isso o título parece esparramado. */
+  letter-spacing: -0.02em;
+  margin-bottom: 2px;
 }
 .secao-cabecalho p {
   color: var(--texto-apoio);
-  font-size: var(--t-base);
-
+  font-size: var(--t-sm);
+  margin: 0;
+  max-width: 68ch;
 }
 
 .marca-hoje {
@@ -795,8 +848,9 @@
 
 .campo-busca {
   display: block;
-  max-width: 24rem;
-  margin-bottom: var(--e-5);
+  position: relative;
+  max-width: 26rem;
+  margin-bottom: var(--e-4);
 }
 
 .tabela {
@@ -807,17 +861,25 @@
 
 .tabela th {
   text-align: left;
-  font-size: var(--t-xs);
+  font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.1em;
   color: var(--texto-apoio);
-  padding: 0 var(--e-4) var(--e-3);
+  padding: var(--e-2) var(--e-4);
   border-bottom: 1px solid var(--fio-forte);
+  /* O cabeçalho gruda no topo do container que rola. Numa lista de
+     trezentos alunos, rolar até o fim deixava as colunas sem nome e a
+     pessoa precisava voltar ao topo só para lembrar o que era cada
+     uma. */
+  position: sticky;
+  top: 0;
+  background: var(--superficie);
+  z-index: 1;
 }
 
 .tabela td {
-  padding: var(--e-4);
+  padding: var(--e-3) var(--e-4);
   border-bottom: 1px solid var(--fio);
   vertical-align: middle;
 }
@@ -827,6 +889,11 @@
 }
 .tabela tbody tr:hover {
   background: var(--superficie-baixa);
+}
+/* A última linha sem fio: o fio embaixo da última é uma linha sem nada
+   para separar, e é o detalhe que faz uma tabela parecer inacabada. */
+.tabela tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .celula-forte {
@@ -3169,4 +3236,285 @@
   margin-top: var(--e-3);
   font-size: var(--t-sm);
   color: var(--texto-apoio);
+}
+
+/* O cabeçalho com ação à direita mantém o fio de baixo — sem ele a
+   página perde a linha que separa "onde estou" de "o que tem aqui". */
+.linha-cabecalho {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+}
+
+/* Botões com o raio da família nova e um pouco mais de presença. */
+.botao-acao {
+  border-radius: var(--raio);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.botao-secundario {
+  border-radius: var(--raio);
+}
+
+/* =====================================================================
+   CARTEIRINHA, FOTO E ACESSO AO APLICATIVO
+
+   As três na mesma tela porque são a mesma conversa: quem tira a foto
+   está fazendo a carteirinha, e quem faz a carteirinha está entregando
+   o acesso. Em três lugares diferentes, o aluno sai da academia com
+   cadastro e sem nenhuma das três.
+   ================================================================== */
+
+.cart-tela {
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  gap: var(--e-6);
+  align-items: start;
+}
+.cart-coluna {
+  display: grid;
+  gap: var(--e-4);
+}
+
+/* ---- o cartão -------------------------------------------------------
+   Proporção de cartão de crédito (85,6 × 54 mm). Não é capricho: é o
+   tamanho que cabe na carteira, e carteirinha que não cabe na carteira
+   fica na gaveta.
+   ------------------------------------------------------------------ */
+.cart-cartao {
+  width: 100%;
+  max-width: 21.4rem;
+  aspect-ratio: 85.6 / 54;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: var(--e-4);
+  border-radius: var(--raio-md);
+  /* Escuro nos DOIS temas, como a marca pede: o traço do símbolo é
+     claro, e sobre fundo branco a carteirinha perderia a identidade que
+     é justamente o motivo de ela existir em papel. */
+  background: linear-gradient(150deg, #10282b 0%, #0a1a1c 60%, #123033 100%);
+  color: #eaf7f8;
+  box-shadow: var(--sombra-2, 0 8px 24px rgba(0, 0, 0, 0.25));
+  overflow: hidden;
+  position: relative;
+}
+/* Um brilho diagonal discreto: dá materialidade ao cartão sem virar
+   aquele reflexo plástico de template. */
+.cart-cartao::after {
+  content: '';
+  position: absolute;
+  inset: -40% -10% auto auto;
+  width: 70%;
+  height: 140%;
+  background: radial-gradient(
+    ellipse at top right,
+    color-mix(in srgb, var(--teal-vivo) 16%, transparent),
+    transparent 62%
+  );
+  pointer-events: none;
+}
+
+.cart-cartao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+.cart-cartao-topo .marca {
+  color: #eaf7f8;
+}
+.cart-cartao-tipo {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--teal-vivo);
+}
+
+.cart-cartao-corpo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  min-width: 0;
+}
+.cart-retrato {
+  width: 3.6rem;
+  height: 3.6rem;
+  flex-shrink: 0;
+  border-radius: var(--raio);
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #9fc4c6;
+  font-family: var(--fonte-display);
+  font-size: var(--t-md);
+  font-weight: 500;
+}
+.cart-cartao-dados {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.cart-cartao-nome {
+  font-family: var(--fonte-display);
+  font-size: var(--t-md);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cart-cartao-codigo {
+  font-family: var(--fonte-display);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: var(--teal-vivo);
+}
+.cart-cartao-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7fa3a5;
+}
+.cart-cartao-selo {
+  padding: 2px 7px;
+  border-radius: var(--raio-pilula);
+  background: rgba(255, 255, 255, 0.08);
+}
+.cart-cartao.compacto {
+  max-width: 100%;
+}
+
+.cart-acoes {
+  display: flex;
+  gap: var(--e-2);
+  flex-wrap: wrap;
+}
+.cart-envio {
+  cursor: pointer;
+}
+.cart-envio input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.cart-acoes-linha {
+  display: flex;
+  gap: var(--e-4);
+  margin-top: var(--e-3);
+  flex-wrap: wrap;
+}
+
+.cart-bloco {
+  padding: var(--e-5);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+  display: grid;
+  gap: var(--e-3);
+  justify-items: start;
+}
+.cart-bloco h3 {
+  margin: 0;
+  font-size: var(--t-md);
+}
+.cart-nota,
+.cart-aviso {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+  max-width: 64ch;
+}
+.cart-aviso {
+  padding: var(--e-3) var(--e-4);
+  border-left: 2px solid var(--fio-forte);
+  color: var(--texto-apoio);
+}
+.cart-estado {
+  margin: 0;
+  font-size: var(--t-sm);
+  padding: var(--e-3) var(--e-4);
+  border-radius: var(--raio);
+  max-width: 64ch;
+}
+.cart-estado.ok {
+  background: var(--ok-fundo);
+  color: var(--ok-texto);
+}
+.cart-estado.atencao {
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+}
+.cart-estado code {
+  font-size: 0.95em;
+}
+.cart-credencial {
+  display: grid;
+  gap: var(--e-3);
+  margin: 0;
+}
+.cart-credencial dt {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-apoio);
+}
+.cart-credencial dd {
+  margin: 1px 0 0;
+  color: var(--texto);
+  font-size: var(--t-base);
+}
+.cart-secundario {
+  color: var(--texto-apoio);
+}
+
+@media (max-width: 62rem) {
+  .cart-tela {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* IMPRESSÃO: só o cartão vai para o papel.
+   Sem isto, "imprimir" produz oito páginas com o menu, a tabela e o
+   rodapé — e a carteirinha em algum lugar da segunda. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .cart-cartao,
+  .cart-cartao * {
+    visibility: visible;
+  }
+  .cart-cartao {
+    position: absolute;
+    top: 1cm;
+    left: 1cm;
+    width: 85.6mm;
+    box-shadow: none;
+    /* `print-color-adjust` porque o navegador remove fundos escuros por
+       padrão para economizar tinta — e sem o fundo a carteirinha sai
+       com texto claro sobre branco, ilegível. */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
+.troca-pronto {
+  margin: var(--e-5) 0 0;
+  padding: var(--e-4);
+  border-radius: var(--raio);
+  background: var(--ok-fundo);
+  color: var(--ok-texto);
+  text-align: center;
 }

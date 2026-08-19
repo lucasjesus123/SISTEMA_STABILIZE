@@ -9,8 +9,31 @@ import { withTenant } from '../../db/pool.js';
 import { AppError, unauthorized } from '../../http/errors.js';
 import { LoginGuard } from '../../http/login-guard.js';
 
+/**
+ * O identificador de quem entra: e-mail OU CPF.
+ *
+ * O ALUNO ENTRA PELO CPF. Foi o pedido da academia, e é a decisão certa:
+ * um aluno de musculação não tem e-mail cadastrado com frequência, mas
+ * todo mundo sabe o próprio CPF de cor. Os dois convivem na mesma coluna
+ * porque o que ela guarda é o LOGIN, não um endereço — e nunca houve
+ * restrição de formato ali.
+ *
+ * A pontuação é descartada: quem digita 123.456.789-09 e quem digita
+ * 12345678909 são a mesma pessoa, e obrigá-la a lembrar como digitou no
+ * cadastro seria uma senha a mais.
+ */
+const identificadorSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(160)
+  .transform((v) => (/^[\d.\-\s]+$/.test(v) ? v.replace(/\D/g, '') : v))
+  .refine((v) => /^\d{11}$/.test(v) || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), {
+    message: 'Informe um e-mail válido ou o CPF.',
+  });
+
 const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email('E-mail inválido').max(160),
+  email: identificadorSchema,
   password: z.string().min(1, 'Informe a senha').max(PASSWORD_MAX_LENGTH),
   tenantSlug: z
     .string()
@@ -192,8 +215,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const { rows } = await withTenant(
       { tenantId: principal.tenantId, userId: principal.userId },
       (client) =>
-        client.query<{ full_name: string; timezone: string }>(
-          `SELECT u.full_name, t.timezone
+        client.query<{ full_name: string; timezone: string; must_change_password: boolean }>(
+          `SELECT u.full_name, u.must_change_password, t.timezone
              FROM users u JOIN tenants t ON t.id = u.tenant_id
             WHERE u.id = $1`,
           [principal.userId],
@@ -213,6 +236,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
          pessoa que abra o sistema de fora do país — e a tela promete um
          horário que o servidor recusa. */
       timezone: rows[0]?.timezone ?? 'America/Sao_Paulo',
+      /* A TROCA OBRIGATÓRIA VEM DO `/me`, e não só da resposta do login.
+         A senha inicial de um aluno é o CPF dele, que não é segredo — se
+         a exigência só existisse no instante do login, bastaria
+         recarregar a página para contorná-la e entrar no prontuário com
+         uma senha que meia academia conhece. */
+      mustChangePassword: rows[0]?.must_change_password === true,
       ...(principal.studentId !== undefined ? { studentId: principal.studentId } : {}),
     };
   });
