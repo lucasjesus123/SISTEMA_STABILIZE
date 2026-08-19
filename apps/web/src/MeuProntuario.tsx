@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import * as api from './api.js';
+import { FormularioDaTriagem } from './Triagem.jsx';
 
 /**
  * A aba "Eu" do aplicativo do aluno: carteirinha, anamneses e exames.
@@ -69,6 +70,12 @@ export function MeuProntuario(): ReactNode {
 
   return (
     <div className="app-eu">
+      {/* A TRIAGEM VEM ANTES DA FOTO. As duas são pendências de
+          cadastro, mas só uma delas envolve a possibilidade de alguém
+          passar mal treinando. Quando as duas faltam, é a de saúde que
+          tem que estar no alto. */}
+      <MinhaTriagem />
+
       {!carteirinha.temFoto && <PedidoDeFoto aoEnviar={aoTrocarFoto} />}
 
       <MinhaCarteirinha dados={carteirinha} foto={foto} />
@@ -349,4 +356,109 @@ function MeusExames(): ReactNode {
       )}
     </section>
   );
+}
+
+/* ==================================================================== */
+
+/**
+ * O PAR-Q e o termo, no aplicativo.
+ *
+ * QUEM JÁ ASSINOU NÃO VÊ QUASE NADA — uma linha dizendo até quando vale.
+ * Manter o formulário à vista para quem já respondeu faria a pessoa
+ * responder de novo por engano, e cada assinatura nova é um documento
+ * novo no prontuário dela.
+ *
+ * QUEM NÃO ASSINOU VÊ UM PEDIDO QUE NÃO DÁ PARA IGNORAR, e ainda assim
+ * NÃO É UMA PAREDE. Bloquear o aplicativo inteiro até a pessoa responder
+ * sete perguntas às seis da manhã é como se perde o aluno na porta. O
+ * que se ganha barrando é uma assinatura apressada; o que se perde é a
+ * pessoa.
+ */
+function MinhaTriagem(): ReactNode {
+  const [dados, setDados] = useState<{
+    perguntas: api.PerguntaDoParq[];
+    termo: api.TermoVigente;
+    atual: api.TriagemResumo;
+  } | null>(null);
+  const [abrindo, setAbrindo] = useState(false);
+  const [versao, setVersao] = useState(0);
+
+  useEffect(() => {
+    api
+      .buscarMinhaTriagem()
+      .then((r) => setDados(r.data))
+      .catch(() => setDados(null));
+  }, [versao]);
+
+  if (dados === null) return null;
+
+  const { situacao } = dados.atual;
+
+  if (situacao === 'VALIDA' && !abrindo) {
+    return (
+      <section className="app-bloco app-triagem-ok">
+        <h2>Ficha de saúde</h2>
+        <p className="app-nota">
+          Em dia
+          {dados.atual.validoAte !== null && ` até ${dataBr(dados.atual.validoAte)}`}. Se alguma
+          coisa mudar na sua saúde, avise a academia.
+        </p>
+      </section>
+    );
+  }
+
+  if (situacao === 'AGUARDANDO_ATESTADO' && !abrindo) {
+    return (
+      <section className="app-pedido">
+        <h2>Falta o seu atestado</h2>
+        <p>
+          Você respondeu <strong>Sim</strong> a pelo menos uma pergunta da ficha de saúde. Traga
+          uma liberação médica por escrito antes de começar a treinar — você pode enviá-la aqui
+          mesmo, em <strong>Meus exames</strong>.
+        </p>
+      </section>
+    );
+  }
+
+  if (!abrindo) {
+    return (
+      <section className="app-pedido">
+        <h2>{situacao === 'VENCIDA' ? 'Sua ficha de saúde venceu' : 'Falta a sua ficha de saúde'}</h2>
+        <p>
+          {situacao === 'VENCIDA'
+            ? 'Faz mais de um ano que você respondeu. Um minuto para atualizar.'
+            : 'São sete perguntas de sim ou não, e um termo para ler. Leva um minuto e é o que permite treinar com segurança.'}
+        </p>
+        <button type="button" className="app-botao" onClick={() => setAbrindo(true)}>
+          Preencher agora
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="app-bloco app-triagem">
+      <h2>Ficha de saúde</h2>
+      <FormularioDaTriagem
+        perguntas={dados.perguntas}
+        termo={dados.termo}
+        nomeSugerido="Seu nome completo"
+        prefixo="app-tri"
+        aoAssinar={async (d) => {
+          await api.assinarMinhaTriagem(d);
+          setAbrindo(false);
+          setVersao((v) => v + 1);
+        }}
+      />
+      <button type="button" className="app-botao-fraco" onClick={() => setAbrindo(false)}>
+        Deixar para depois
+      </button>
+    </section>
+  );
+}
+
+/** "2026-08-19" → "19/08/2026", sem passar por Date e sem deslocar fuso. */
+function dataBr(iso: string): string {
+  const [a, m, d] = iso.slice(0, 10).split('-');
+  return `${d}/${m}/${a}`;
 }

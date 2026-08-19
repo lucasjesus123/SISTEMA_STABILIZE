@@ -721,3 +721,142 @@
   text-align: center;
   color: var(--app-texto-apoio, #8fa5a7);
 }
+
+/* ====================================================================
+   FICHA DE SAÚDE NO APLICATIVO
+
+   O MESMO FORMULÁRIO DO SISTEMA, com a casca do aplicativo: fundo
+   escuro, alvos de toque maiores, uma pergunta por bloco em vez de
+   pergunta e botões na mesma linha. Numa tela de 390px a linha única
+   espreme o texto em quatro linhas e os botões em 40px — que é errar.
+   ================================================================== */
+
+.app-triagem-ok .app-nota { color: #6fd6b4; }
+
+.app-tri-formulario { display: flex; flex-direction: column; gap: 18px; }
+
+.app-tri-perguntas {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.app-tri-perguntas li {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #12191b;
+  border: 1px solid #1d2729;
+}
+.app-tri-pergunta-texto {
+  display: flex;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #d6e4e5;
+}
+.app-tri-numero {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #1d2b2d;
+  color: #8fa5a7;
+  font-size: 12px;
+  font-weight: 700;
+}
+.app-tri-sim-nao { display: flex; gap: 10px; }
+.app-tri-sim-nao button {
+  flex: 1;
+  /* 48px é o mínimo confortável para o polegar. Abaixo disso a pessoa
+     erra a resposta — e num questionário de saúde a resposta errada é
+     uma declaração falsa. */
+  min-height: 48px;
+  border-radius: 10px;
+  border: 1px solid #2b3a3c;
+  background: #0d1415;
+  color: #b8cacb;
+  font-size: 15px;
+  font-weight: 600;
+}
+.app-tri-sim-nao button.escolhido {
+  background: #2e9aa1;
+  border-color: #2e9aa1;
+  color: #06181a;
+}
+
+.app-tri-alerta {
+  padding: 14px;
+  border-radius: 12px;
+  background: #2a1f0c;
+  border: 1px solid #4a3a12;
+  color: #ffd98a;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.app-tri-termo summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4bc1c8;
+}
+.app-tri-termo pre {
+  margin-top: 10px;
+  padding: 14px;
+  max-height: 300px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #0a1011;
+  border: 1px solid #1d2729;
+  color: #b8cacb;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.app-tri-li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+  color: #d6e4e5;
+  line-height: 1.5;
+}
+.app-tri-li input { margin-top: 2px; width: 20px; height: 20px; flex: none; }
+
+.app-tri-falta { font-size: 13px; color: #8fa5a7; }
+
+.app-triagem .campo input,
+.app-triagem .campo textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #2b3a3c;
+  background: #0d1415;
+  color: #e6f2f3;
+  font-size: 15px;
+  font-family: inherit;
+}
+.app-triagem .campo-rotulo {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #8fa5a7;
+}
+.app-triagem .campo-dica { font-size: 12px; color: #6f8688; }
+.app-triagem .botao-acao {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 12px;
+  background: #2e9aa1;
+  color: #06181a;
+  font-size: 16px;
+  font-weight: 700;
+}
+.app-triagem .botao-acao:disabled { background: #22383a; color: #6f8688; }

@@ -23,6 +23,7 @@ import { cepRoutes } from './modules/cep/cep.routes.js';
 import { plataformaRoutes } from './modules/plataforma/plataforma.routes.js';
 import { cadastrosRoutes, contratoRoutes } from './modules/cadastros/cadastros.routes.js';
 import { checkinRoutes } from './modules/checkin/checkin.routes.js';
+import { triagemDoAlunoRoutes, triagemRoutes } from './modules/saude/saude.routes.js';
 import { registrarAgendador } from './modules/whatsapp/agendador.js';
 import multipart from '@fastify/multipart';
 import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
@@ -224,6 +225,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(cadastrosRoutes, { prefix: '/api/cadastros' });
   /* A operação mais frequente da academia: o aluno chega e entra. */
   await app.register(checkinRoutes, { prefix: '/api/checkin' });
+  /* PAR-Q e termo de responsabilidade: o que a academia precisa ter
+     assinado antes de deixar alguém treinar. */
+  await app.register(triagemRoutes, { prefix: '/api/students' });
+  await app.register(triagemDoAlunoRoutes, { prefix: '/api/eu' });
 
   return app;
 }

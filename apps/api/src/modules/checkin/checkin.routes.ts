@@ -41,7 +41,10 @@ interface LinhaDaBusca {
   tem_contrato: boolean;
   dentro: boolean;
   ultima_entrada: Date | null;
+  triagem: SituacaoDaTriagem;
 }
+
+type SituacaoDaTriagem = 'NUNCA_ASSINOU' | 'VALIDA' | 'VENCIDA' | 'AGUARDANDO_ATESTADO';
 
 function situacaoDe(l: LinhaDaBusca): Situacao {
   if (l.status !== 'ACTIVE') return 'INATIVO';
@@ -91,7 +94,24 @@ export async function checkinRoutes(app: FastifyInstance): Promise<void> {
                          WHERE c.student_id = s.id AND c.is_active) AS tem_contrato,
                 EXISTS (SELECT 1 FROM checkins k
                          WHERE k.student_id = s.id AND k.saiu_em IS NULL) AS dentro,
-                (SELECT MAX(k.entrou_em) FROM checkins k WHERE k.student_id = s.id) AS ultima_entrada
+                (SELECT MAX(k.entrou_em) FROM checkins k WHERE k.student_id = s.id) AS ultima_entrada,
+                /* A TRIAGEM DE SAÚDE, resumida a uma palavra.
+                   A recepção precisa saber que falta; NÃO precisa — e
+                   não pode — ver as respostas do PAR-Q, que são dado de
+                   saúde. Por isso aqui sai só a situação. */
+                (SELECT CASE
+                          WHEN h.student_id IS NULL THEN 'NUNCA_ASSINOU'
+                          WHEN h.valido_ate < (SELECT d FROM hoje) THEN 'VENCIDA'
+                          WHEN h.precisa_liberacao_medica AND h.liberado_em IS NULL
+                            THEN 'AGUARDANDO_ATESTADO'
+                          ELSE 'VALIDA'
+                        END
+                   FROM (SELECT 1) AS _
+                   LEFT JOIN LATERAL (
+                     SELECT student_id, valido_ate, precisa_liberacao_medica, liberado_em
+                       FROM health_screenings
+                      WHERE student_id = s.id
+                      ORDER BY assinado_em DESC LIMIT 1) h ON true) AS triagem
            FROM students s
           WHERE
             /* CÓDIGO EXATO PRIMEIRO. Quem digita "42" quer o aluno 42, e
@@ -115,10 +135,12 @@ export async function checkinRoutes(app: FastifyInstance): Promise<void> {
         [digitos.length > 0 && digitos.length < 11 ? digitos : '', digitos.length === 11 ? digitos : '', termo],
       );
 
-      const { rows: config } = await client.query<{ bloquear: number }>(
-        'SELECT bloquear_entrada_apos_dias AS bloquear FROM tenants WHERE id = current_tenant_id()',
+      const { rows: config } = await client.query<{ bloquear: number; exigir_triagem: boolean }>(
+        `SELECT bloquear_entrada_apos_dias AS bloquear, exigir_triagem_na_porta AS exigir_triagem
+           FROM tenants WHERE id = current_tenant_id()`,
       );
       const bloquearApos = config[0]?.bloquear ?? 0;
+      const exigirTriagem = config[0]?.exigir_triagem ?? false;
 
       return {
         data: rows.map((l) => {
@@ -137,13 +159,21 @@ export async function checkinRoutes(app: FastifyInstance): Promise<void> {
             diasDeAtraso: atraso,
             dentro: l.dentro,
             ultimaEntrada: l.ultima_entrada?.toISOString() ?? null,
+            triagem: l.triagem,
             /* PRECISA DE LIBERAÇÃO, e não "está bloqueado": barrar aluno
                na porta é decisão de negócio. O sistema avisa e pede uma
                confirmação consciente; quem decide é quem está no balcão
                olhando na cara da pessoa. */
             precisaLiberar:
               situacao === 'INATIVO' ||
-              (bloquearApos > 0 && situacao === 'DEVENDO' && atraso >= bloquearApos),
+              (bloquearApos > 0 && situacao === 'DEVENDO' && atraso >= bloquearApos) ||
+              /* A PENDÊNCIA DE TRIAGEM PESA DIFERENTE DA FINANCEIRA. A
+                 dívida é problema de caixa; treinar sem ter declarado a
+                 saúde é problema de corpo, e é a academia que responde.
+                 Ainda assim a decisão continua sendo da empresa — o
+                 padrão de `exigir_triagem_na_porta` é false, e quem
+                 liga assume o atrito no balcão. */
+              (exigirTriagem && l.triagem !== 'VALIDA'),
           };
         }),
       };

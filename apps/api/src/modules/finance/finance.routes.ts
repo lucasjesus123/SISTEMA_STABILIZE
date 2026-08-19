@@ -238,6 +238,68 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  /* ------------------------------------------------------------------
+   * Baixa com MAIS DE UMA FORMA DE PAGAMENTO
+   *
+   * Metade no PIX e metade no cartão é rotina de balcão, e até aqui não
+   * tinha como registrar: a tela mandava um pagamento por vez, então a
+   * pessoa dava duas baixas seguidas. Funcionava e era errado por dois
+   * motivos — se a segunda falhasse, a conta ficava meio paga sem que
+   * ninguém soubesse; e o relatório por forma de pagamento contava dois
+   * recebimentos onde houve um.
+   *
+   * O LOTE INTEIRO CABE NUMA TRANSAÇÃO. `inTenant` já abre BEGIN e
+   * COMMIT, então ou entram todos os pagamentos ou não entra nenhum —
+   * que é a única semântica aceitável para dinheiro.
+   * ---------------------------------------------------------------- */
+  app.post(
+    '/lancamentos/:id/pagamentos/lote',
+    { preHandler: [app.authorize('finance:payment:write')] },
+    async (request, reply) => {
+      const { id } = z.object({ id: idSchema }).parse(request.params);
+      const body = z
+        .object({
+          /* O teto de seis não é técnico: é o número acima do qual uma
+             baixa deixou de ser "dividiu a conta" e virou outra coisa,
+             que merece lançamentos separados. */
+          pagamentos: z.array(pagamentoSchema).min(1, 'Informe ao menos um pagamento.').max(6),
+        })
+        .parse(request.body);
+
+      return inTenant(request, async (client, principal) => {
+        const criados: string[] = [];
+        for (const p of body.pagamentos) {
+          const pago = await registrarPagamento(client, principal.tenantId, {
+            entryId: id,
+            valorCentavos: p.valor,
+            metodo: p.metodo,
+            pagoEm: p.pagoEm,
+            referencia: p.referencia,
+            registradoPor: principal.userId,
+          });
+          criados.push(pago.id);
+        }
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'finance.payment.create',
+          resourceType: 'finance_entry',
+          resourceId: id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: {
+            formas: body.pagamentos.length,
+            totalCentavos: body.pagamentos.reduce((s, p) => s + p.valor, 0),
+            metodos: body.pagamentos.map((p) => p.metodo),
+          },
+        });
+
+        void reply.status(201);
+        return { data: { ids: criados } };
+      });
+    },
+  );
+
   app.delete(
     '/pagamentos/:id',
     { preHandler: [app.authorize('finance:payment:write')] },

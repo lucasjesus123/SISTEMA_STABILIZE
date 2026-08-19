@@ -31,6 +31,10 @@ export type AuditAction =
   | 'student.delete'
   | 'anamnesis.read'
   | 'anamnesis.write'
+  /* A triagem assinada é prova. Quem gravou, quando e de onde precisa
+     estar no log tanto quanto na própria linha. */
+  | 'screening.sign'
+  | 'screening.clear'
   | 'evolution.read'
   | 'evolution.write'
   | 'attachment.read'

@@ -996,6 +996,26 @@ export const darBaixa = (
     body: JSON.stringify(dados),
   });
 
+export interface FormaDePagamento {
+  valor: string;
+  metodo: MetodoPagamento;
+  pagoEm?: string;
+  referencia?: string;
+}
+
+/**
+ * Baixa dividida em várias formas.
+ *
+ * O LOTE INTEIRO É UMA TRANSAÇÃO no servidor: ou entram todas as formas
+ * ou não entra nenhuma. Mandar uma chamada por forma deixaria a conta
+ * meio paga quando a segunda falhasse.
+ */
+export const darBaixaEmLote = (lancamentoId: string, pagamentos: FormaDePagamento[]) =>
+  api<{ data: { ids: string[] } }>(
+    `/api/finance/lancamentos/${lancamentoId}/pagamentos/lote`,
+    { method: 'POST', body: JSON.stringify({ pagamentos }) },
+  );
+
 /* ====================================================================
  * CADASTROS — equipe, espaços e contrato do aluno
  * ================================================================== */
@@ -1475,6 +1495,8 @@ export interface AlunoNaPorta {
   diasDeAtraso: number;
   dentro: boolean;
   ultimaEntrada: string | null;
+  /** Só a situação, nunca as respostas: PAR-Q é dado de saúde. */
+  triagem: SituacaoDaTriagem;
   /** O sistema avisa; quem decide é quem está no balcão. */
   precisaLiberar: boolean;
 }
@@ -1540,3 +1562,95 @@ export const buscarAvisos = () => api<{ data: AvisosDeAgendamento }>('/api/whats
 
 export const salvarAvisos = (dados: AvisosDeAgendamento) =>
   api<{ ok: boolean }>('/api/whatsapp/avisos', { method: 'PUT', body: JSON.stringify(dados) });
+
+/* ====================================================================
+ * TRIAGEM DE SAÚDE — PAR-Q e termo de responsabilidade
+ *
+ * O termo chega PRONTO do servidor, com o nome da academia já dentro.
+ * Montar o texto na tela faria o documento assinado depender da versão
+ * do JavaScript que o navegador tinha em cache.
+ * ================================================================== */
+
+export type SituacaoDaTriagem = 'NUNCA_ASSINOU' | 'VALIDA' | 'VENCIDA' | 'AGUARDANDO_ATESTADO';
+
+export interface PerguntaDoParq {
+  chave: string;
+  texto: string;
+}
+
+export interface TermoVigente {
+  versao: string;
+  texto: string;
+  academia: string;
+  validadeDias: number;
+}
+
+export interface TriagemResumo {
+  situacao: SituacaoDaTriagem;
+  assinadaEm: string | null;
+  validoAte: string | null;
+  precisaLiberacaoMedica: boolean;
+  temAtestado: boolean;
+  liberadoEm: string | null;
+}
+
+export interface TriagemCompleta extends TriagemResumo {
+  id: string;
+  respostas: Record<string, boolean>;
+  observacoes: string | null;
+  termoVersao: string;
+  termoTexto: string;
+  assinadoNome: string;
+  assinadoPeloAluno: boolean;
+}
+
+export interface Assinatura {
+  respostas: Record<string, boolean>;
+  observacoes?: string | null;
+  assinadoNome: string;
+}
+
+export const buscarPerguntasDaTriagem = () =>
+  api<{ data: { perguntas: PerguntaDoParq[]; termo: TermoVigente } }>(
+    '/api/students/triagem/perguntas',
+  );
+
+export const buscarTriagemDoAluno = (alunoId: string) =>
+  api<{ data: { atual: TriagemResumo; historico: TriagemCompleta[] } }>(
+    `/api/students/${alunoId}/triagem`,
+  );
+
+export const assinarTriagemPelaAcademia = (alunoId: string, dados: Assinatura) =>
+  api<{ data: { id: string; precisaLiberacaoMedica: boolean } }>(
+    `/api/students/${alunoId}/triagem`,
+    { method: 'POST', body: JSON.stringify(dados) },
+  );
+
+export const liberarTriagem = (triagemId: string, atestadoId?: string | null) =>
+  api<{ ok: boolean }>(`/api/students/triagem/${triagemId}/liberar`, {
+    method: 'POST',
+    body: JSON.stringify({ atestadoId: atestadoId ?? null }),
+  });
+
+export interface TriagemPendente {
+  id: string;
+  nome: string;
+  codigo: string | null;
+  situacao: SituacaoDaTriagem;
+}
+
+export const buscarTriagensPendentes = () =>
+  api<{ data: TriagemPendente[] }>('/api/students/triagem/pendentes');
+
+/* --- o lado do aluno, sem id nenhuma na URL --- */
+
+export const buscarMinhaTriagem = () =>
+  api<{ data: { perguntas: PerguntaDoParq[]; termo: TermoVigente; atual: TriagemResumo } }>(
+    '/api/eu/triagem',
+  );
+
+export const assinarMinhaTriagem = (dados: Assinatura) =>
+  api<{ data: { id: string; precisaLiberacaoMedica: boolean } }>('/api/eu/triagem', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });

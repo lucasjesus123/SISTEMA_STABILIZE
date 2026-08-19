@@ -547,8 +547,18 @@ function diasDeAtraso(vencimento: string): number {
  * A baixa.
  *
  * O VALOR JÁ VEM PREENCHIDO COM O SALDO e o método com PIX, porque é o
- * que acontece em nove de cada dez vezes. Quem recebeu metade em
- * dinheiro corrige dois campos; quem recebeu tudo aperta um botão.
+ * que acontece em nove de cada dez vezes. Quem recebeu tudo em PIX
+ * aperta um botão e acabou.
+ *
+ * A DIVISÃO EM VÁRIAS FORMAS FICA ESCONDIDA ATRÁS DE UM LINK. Metade no
+ * PIX e metade no cartão acontece, mas é a exceção — mostrar duas linhas
+ * de pagamento de saída faria a operação mais comum do financeiro ficar
+ * mais difícil para atender a mais rara. O link aparece; as linhas só
+ * quando alguém pede.
+ *
+ * A SEGUNDA LINHA NASCE COM O QUE FALTA. Quem clica em "dividir" acabou
+ * de digitar quanto entrou na primeira forma; o resto é aritmética que o
+ * sistema faz melhor do que a pessoa com fila no balcão.
  */
 function FormularioDeBaixa({
   lancamento: l,
@@ -557,8 +567,9 @@ function FormularioDeBaixa({
   lancamento: api.Lancamento;
   aoBaixar: () => void;
 }): ReactNode {
-  const [valor, setValor] = useState(() => (l.saldoCentavos / 100).toFixed(2).replace('.', ','));
-  const [metodo, setMetodo] = useState<api.MetodoPagamento>('PIX');
+  const [linhas, setLinhas] = useState<{ valor: string; metodo: api.MetodoPagamento }[]>(() => [
+    { valor: (l.saldoCentavos / 100).toFixed(2).replace('.', ','), metodo: 'PIX' },
+  ]);
   const [quando, setQuando] = useState(() => {
     const h = new Date();
     return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
@@ -566,25 +577,49 @@ function FormularioDeBaixa({
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
+  const emCentavos = (v: string): number =>
+    Math.round(Number(v.replace(/\./g, '').replace(',', '.')) * 100);
+
+  const total = linhas.reduce((s, x) => s + (Number.isFinite(emCentavos(x.valor)) ? emCentavos(x.valor) : 0), 0);
+  const todasValidas = linhas.every((x) => Number.isFinite(emCentavos(x.valor)) && emCentavos(x.valor) > 0);
+  const valido = todasValidas && total > 0;
+  const restante = valido ? l.saldoCentavos - total : l.saldoCentavos;
+
+  const dividir = (): void => {
+    const falta = Math.max(0, l.saldoCentavos - total);
+    setLinhas((atual) => [
+      ...atual,
+      { valor: (falta / 100).toFixed(2).replace('.', ','), metodo: 'CASH' },
+    ]);
+  };
+
+  const mudar = (i: number, campo: 'valor' | 'metodo', v: string): void => {
+    setLinhas((atual) =>
+      atual.map((x, k) => (k === i ? { ...x, [campo]: v } : x)),
+    );
+  };
+
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setErro(null);
     setEnviando(true);
     try {
-      await api.darBaixa(l.id, { valor, metodo, pagoEm: quando });
+      if (linhas.length === 1) {
+        /* Uma forma só continua indo pela rota antiga: é o caminho
+           exercitado por todo o resto e não há por que mudá-lo. */
+        await api.darBaixa(l.id, { valor: linhas[0]!.valor, metodo: linhas[0]!.metodo, pagoEm: quando });
+      } else {
+        await api.darBaixaEmLote(
+          l.id,
+          linhas.map((x) => ({ valor: x.valor, metodo: x.metodo, pagoEm: quando })),
+        );
+      }
       aoBaixar();
     } catch (x) {
       setErro(x instanceof api.ApiError ? x.message : 'Não foi possível registrar a baixa.');
       setEnviando(false);
     }
   };
-
-  /* O RESULTADO CALCULADO AO VIVO. É o detalhe que mais reduz erro de
-     digitação: a pessoa confere antes de confirmar, em vez de descobrir
-     depois na listagem que digitou 3500 no lugar de 350,00. */
-  const centavos = Math.round(Number(valor.replace(/\./g, '').replace(',', '.')) * 100);
-  const valido = Number.isFinite(centavos) && centavos > 0;
-  const restante = valido ? l.saldoCentavos - centavos : l.saldoCentavos;
 
   return (
     <form className="fin-baixa" onSubmit={(e) => void enviar(e)}>
@@ -596,38 +631,71 @@ function FormularioDeBaixa({
         )}
       </div>
 
-      <div className="fin-baixa-campos">
-        <label className="campo">
-          <span className="campo-rotulo">Valor recebido</span>
-          <input
-            inputMode="decimal"
-            value={valor}
-            onChange={(e) => setValor(e.target.value)}
-            required
-            autoFocus
-          />
-        </label>
-        <label className="campo">
-          <span className="campo-rotulo">Forma</span>
-          <select value={metodo} onChange={(e) => setMetodo(e.target.value as api.MetodoPagamento)}>
-            {METODOS.map((m) => (
-              <option key={m.valor} value={m.valor}>
-                {m.nome}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="campo">
-          <span className="campo-rotulo">Quando</span>
-          <input type="date" value={quando} onChange={(e) => setQuando(e.target.value)} required />
-        </label>
-        <button type="submit" className="botao-acao" disabled={enviando || !valido}>
-          {enviando ? 'Registrando…' : 'Confirmar'}
-        </button>
-      </div>
+      {linhas.map((linha, i) => (
+        <div className="fin-baixa-campos" key={i}>
+          <label className="campo">
+            <span className="campo-rotulo">
+              {linhas.length === 1 ? 'Valor recebido' : `${i + 1}ª forma`}
+            </span>
+            <input
+              inputMode="decimal"
+              value={linha.valor}
+              onChange={(e) => mudar(i, 'valor', e.target.value)}
+              required
+              autoFocus={i === 0}
+            />
+          </label>
+          <label className="campo">
+            <span className="campo-rotulo">Forma</span>
+            <select
+              value={linha.metodo}
+              onChange={(e) => mudar(i, 'metodo', e.target.value)}
+            >
+              {METODOS.map((m) => (
+                <option key={m.valor} value={m.valor}>
+                  {m.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+          {i === 0 ? (
+            <label className="campo">
+              <span className="campo-rotulo">Quando</span>
+              <input type="date" value={quando} onChange={(e) => setQuando(e.target.value)} required />
+            </label>
+          ) : (
+            <button
+              type="button"
+              className="fin-baixa-tirar"
+              onClick={() => setLinhas((atual) => atual.filter((_, k) => k !== i))}
+              aria-label={`Remover a ${i + 1}ª forma`}
+            >
+              Remover
+            </button>
+          )}
+          {i === 0 && (
+            <button type="submit" className="botao-acao" disabled={enviando || !valido}>
+              {enviando ? 'Registrando…' : 'Confirmar'}
+            </button>
+          )}
+        </div>
+      ))}
 
+      {/* Seis é onde uma baixa dividida deixa de ser uma baixa dividida.
+          O servidor recusa acima disso; o botão some antes, para que a
+          recusa nunca precise aparecer. */}
+      {linhas.length < 6 && (
+        <button type="button" className="botao-texto fin-baixa-dividir" onClick={dividir}>
+          + Recebeu em mais de uma forma?
+        </button>
+      )}
+
+      {/* O RESULTADO CALCULADO AO VIVO. É o detalhe que mais reduz erro de
+          digitação: a pessoa confere antes de confirmar, em vez de descobrir
+          depois na listagem que digitou 3500 no lugar de 350,00. */}
       {valido && (
         <p className={`fin-previsao ${restante <= 0 ? 'quita' : ''}`} aria-live="polite">
+          {linhas.length > 1 && `${formatCents(total)} em ${linhas.length} formas. `}
           {restante <= 0
             ? restante < 0
               ? `A conta fica QUITADA, com ${formatCents(-restante)} a mais que o devido.`

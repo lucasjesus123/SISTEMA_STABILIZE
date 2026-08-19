@@ -4278,3 +4278,278 @@
   text-underline-offset: 3px;
 }
 .rec-cartao .botao-secundario:hover { color: var(--teal); }
+
+/* ====================================================================
+   TRIAGEM DE SAÚDE — PAR-Q e termo
+
+   O FORMULÁRIO É GRANDE DE PROPÓSITO. Sete perguntas com sim e não é
+   um formulário que dá para espremer em meia tela — e não se deve. Quem
+   responde depressa demais a um questionário de saúde responde errado,
+   e a assinatura embaixo de respostas erradas não protege ninguém.
+   ================================================================== */
+
+.tri-aba { display: flex; flex-direction: column; gap: var(--e-5); }
+
+.tri-situacao {
+  display: flex;
+  align-items: center;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+}
+.tri-validade { font-size: var(--t-sm); color: var(--texto-apoio); }
+
+.tri-nota { font-size: var(--t-sm); color: var(--texto-apoio); max-width: 62ch; }
+.tri-nota-forte {
+  padding: var(--e-4);
+  border-radius: var(--raio-md);
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+  font-size: var(--t-sm);
+  max-width: 68ch;
+}
+
+.tri-liberacao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid color-mix(in srgb, var(--erro) 34%, transparent);
+  border-radius: var(--raio-md);
+  background: var(--erro-fundo);
+}
+.tri-liberacao p { font-size: var(--t-sm); color: var(--erro-texto); margin: 0; }
+
+/* -------------------------------------------------------------------
+   O formulário
+   ----------------------------------------------------------------- */
+
+.tri-formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-5);
+  max-width: 76ch;
+}
+
+.tri-perguntas {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  counter-reset: none;
+}
+.tri-perguntas li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-5);
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+}
+.tri-pergunta-texto {
+  display: flex;
+  gap: var(--e-3);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--texto-corpo);
+}
+.tri-numero {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--raio-pilula);
+  background: var(--superficie-realce);
+  color: var(--texto-apoio);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* SIM E NÃO SÃO BOTÕES, e não um par de rádios pequeno. O alvo de
+   toque de um rádio é de 12px; num tablet de balcão isso é errar. */
+.tri-sim-nao {
+  display: flex;
+  flex: none;
+  gap: var(--e-2);
+}
+.tri-sim-nao button {
+  min-width: 62px;
+  padding: var(--e-2) var(--e-4);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--texto-corpo);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+.tri-sim-nao button:hover { border-color: var(--teal); }
+.tri-sim-nao button.escolhido {
+  background: var(--teal-fundo);
+  border-color: var(--teal-fundo);
+  color: var(--superficie-baixa);
+}
+
+.tri-alerta {
+  padding: var(--e-4);
+  border-radius: var(--raio-md);
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+}
+
+.tri-termo summary {
+  cursor: pointer;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--teal);
+}
+.tri-termo pre,
+.tri-historico pre {
+  margin-top: var(--e-3);
+  padding: var(--e-4);
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio);
+  background: var(--superficie-baixa);
+  color: var(--texto-corpo);
+  font-family: inherit;
+  font-size: var(--t-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.tri-li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+  cursor: pointer;
+}
+.tri-li input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+
+.tri-falta { font-size: var(--t-sm); color: var(--texto-apoio); }
+
+/* -------------------------------------------------------------------
+   Histórico
+   ----------------------------------------------------------------- */
+
+.tri-historico { display: flex; flex-direction: column; gap: var(--e-2); }
+.tri-historico h3 {
+  font-size: var(--t-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+  margin-bottom: var(--e-2);
+}
+.tri-registro {
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+  overflow: hidden;
+}
+.tri-registro-topo {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding: var(--e-3) var(--e-4);
+  background: none;
+  text-align: left;
+  font-size: var(--t-sm);
+  color: var(--texto);
+}
+.tri-registro-topo:hover { background: var(--superficie-realce); }
+.tri-origem {
+  margin-left: var(--e-3);
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+}
+.tri-registro-corpo {
+  padding: 0 var(--e-4) var(--e-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+}
+.tri-resumo { font-size: var(--t-sm); color: var(--texto-corpo); }
+.tri-sins {
+  list-style: disc;
+  padding-left: var(--e-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  font-size: var(--t-sm);
+  color: var(--erro-texto);
+}
+.tri-obs {
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+  font-style: italic;
+  padding-left: var(--e-4);
+  border-left: 2px solid var(--fio-forte);
+}
+
+/* A pendência de saúde na recepção: separada da financeira de
+   propósito — riscos de naturezas diferentes não dividem tarja. */
+.rec-saude {
+  padding: var(--e-3) var(--e-4);
+  border-radius: var(--raio);
+  border: 1px dashed color-mix(in srgb, var(--atencao) 45%, transparent);
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+  font-size: var(--t-sm);
+}
+
+/* O campo de observação nasce fora de `.formulario`, que é onde mora a
+   regra de largura dos campos do sistema. Sem isto ele renderiza com a
+   largura padrão do textarea — cerca de vinte caracteres — e o texto
+   quebra em quatro linhas dentro de uma caixa estreita. */
+.tri-formulario .campo { display: block; }
+.tri-formulario .campo input,
+.tri-formulario .campo textarea {
+  width: 100%;
+  padding: var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-alta);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  resize: vertical;
+}
+.tri-formulario .campo input:focus,
+.tri-formulario .campo textarea:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--realce-teclado);
+}
+
+/* Dividir a baixa em várias formas: o link fica leve porque a operação
+   é a exceção, e o botão de remover fica alinhado com os campos para
+   não empurrar a linha. */
+.fin-baixa-dividir {
+  align-self: flex-start;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.fin-baixa-dividir:hover { color: var(--teal); }
+
+.fin-baixa-tirar {
+  align-self: end;
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio);
+  background: none;
+  color: var(--texto-apoio);
+  font-size: var(--t-sm);
+}
+.fin-baixa-tirar:hover { border-color: var(--erro); color: var(--erro); }

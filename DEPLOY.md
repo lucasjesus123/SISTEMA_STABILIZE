@@ -166,11 +166,19 @@ superusuário do compose, que é justamente o ponto.
 ## 5. Backup — a parte que costuma ser mentira
 
 ```bash
-crontab -e
+./deploy/agendar-backup.sh
 ```
 
-```cron
-0 3 * * * /opt/stabilize/deploy/backup.sh >> /var/log/stabilize-backup.log 2>&1
+Um comando. Ele **roda um backup completo primeiro** — inclusive a
+verificação por restauração — e só agenda no cron depois que aquele
+backup passou. Agendar um comando que falha só troca "sem backup" por
+"sem backup e sem ninguém sabendo". Rodar de novo substitui a entrada em
+vez de criar uma segunda.
+
+Horário e destino saem de variáveis, se você quiser outros:
+
+```bash
+STABILIZE_BACKUP_HORA=4 STABILIZE_BACKUP_DIR=/mnt/backup ./deploy/agendar-backup.sh
 ```
 
 O `backup.sh` faz algo que a maioria dos scripts de backup não faz:
@@ -200,6 +208,38 @@ rclone config          # configure um destino (S3, Backblaze, Drive…)
 Faça isso **agora**, com o sistema recém-instalado, e não durante o
 incidente. Quem restaura pela primeira vez às três da manhã descobre os
 problemas às três da manhã.
+
+#### O que restaurar de verdade nos ensinou
+
+A restauração foi exercitada num banco com dados reais, e apareceu um
+defeito que nenhuma leitura do script teria mostrado: `pg_restore
+--no-owner` faz todos os objetos nascerem pertencendo ao superusuário.
+
+O sistema volta e **funciona**. A API entra como `stabilize_app`, as
+permissões vêm dentro do dump, a RLS continua isolando as empresas. Não
+há sintoma nenhum.
+
+Até o próximo deploy, quando as migrations rodam como
+`stabilize_migrator` e morrem na primeira linha:
+
+```
+ERROR:  must be owner of table students
+```
+
+Dias ou semanas depois, longe do incidente que causou, com um sintoma
+("não consigo mais atualizar o sistema") que não parece ter nada a ver
+com a restauração.
+
+O `restaurar.sh` agora roda `deploy/normalizar-donos.sql` logo depois do
+`pg_restore` e confere, no fim, que sobrou zero tabela com dono errado.
+Se você restaurou com uma versão anterior do script, rode uma vez:
+
+```bash
+docker compose exec -T -e PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" postgres \
+  psql -v ON_ERROR_STOP=1 -U postgres -d stabilize < deploy/normalizar-donos.sql
+```
+
+É idempotente: rodar de novo não muda nada.
 
 ---
 

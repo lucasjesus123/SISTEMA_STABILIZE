@@ -37,6 +37,7 @@ import { Financeiro } from './Financeiro.jsx';
 import { Agenda } from './Agenda.jsx';
 import { Equipe } from './Equipe.jsx';
 import { Recepcao } from './Recepcao.jsx';
+import { AbaTriagem } from './Triagem.jsx';
 import {
   CadastroConcluido,
   SecaoDoPlano,
@@ -1159,7 +1160,14 @@ function Ficha({
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [secao, setSecao] = useState<
-    'cadastro' | 'carteirinha' | 'anamnese' | 'evolucao' | 'medidas' | 'treino' | 'anexos'
+    | 'cadastro'
+    | 'carteirinha'
+    | 'triagem'
+    | 'anamnese'
+    | 'evolucao'
+    | 'medidas'
+    | 'treino'
+    | 'anexos'
   >('cadastro');
 
   const pode = (p: string): boolean => principal.permissions.includes(p);
@@ -1343,6 +1351,7 @@ function Ficha({
         ))}
       </nav>
 
+      {secao === 'triagem' && <AbaTriagem alunoId={f.id} nome={f.nome} />}
       {secao === 'anamnese' && (
         <AbaAnamnese
           alunoId={f.id}
@@ -1434,7 +1443,15 @@ function Ficha({
    interface, não segurança: as rotas exigem a permissão de qualquer
    forma, e quem chamar direto recebe 403. */
 const SECOES_FICHA: {
-  id: 'cadastro' | 'carteirinha' | 'anamnese' | 'evolucao' | 'medidas' | 'treino' | 'anexos';
+  id:
+    | 'cadastro'
+    | 'carteirinha'
+    | 'triagem'
+    | 'anamnese'
+    | 'evolucao'
+    | 'medidas'
+    | 'treino'
+    | 'anexos';
   nome: string;
   permissao: string | null;
 }[] = [
@@ -1442,6 +1459,12 @@ const SECOES_FICHA: {
   /* CARTEIRINHA logo depois do cadastro: foto, cartão e acesso ao
      aplicativo são a mesma conversa de quem acabou de cadastrar. */
   { id: 'carteirinha', nome: 'Carteirinha', permissao: null },
+  /* TRIAGEM ANTES DE ANAMNESE porque vem antes no tempo: o PAR-Q é
+     respondido pelo próprio aluno antes do primeiro treino; a anamnese é
+     feita pelo profissional depois, com calma. Invertê-las na tela faria
+     a ordem sugerir que a anamnese substitui a triagem — e ela não
+     substitui: uma é registro clínico, a outra é declaração assinada. */
+  { id: 'triagem', nome: 'Saúde e termo', permissao: 'anamnesis:read' },
   { id: 'anamnese', nome: 'Anamnese', permissao: 'anamnesis:read' },
   { id: 'evolucao', nome: 'Evolução', permissao: 'evolution:read' },
   /* MEDIDAS separada de EVOLUÇÃO, apesar de usarem a mesma permissão.

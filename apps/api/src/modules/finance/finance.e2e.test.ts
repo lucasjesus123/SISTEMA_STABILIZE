@@ -455,4 +455,126 @@ suite('financeiro e comissões pela API', () => {
       expect(pago.statusCode).toBe(201);
     });
   });
+
+  /* ==================================================================
+   * Baixa dividida em mais de uma forma
+   *
+   * Metade no PIX e metade no cartão é rotina de balcão. Até aqui a
+   * tela mandava um pagamento por vez, e a pessoa dava duas baixas
+   * seguidas — o que funcionava até a segunda falhar e deixar a conta
+   * meio paga sem que ninguém soubesse.
+   * ================================================================ */
+  describe('baixa em várias formas', () => {
+    async function umaCobranca(valor: string): Promise<string> {
+      const t = await tokenDe(ids.emailAdmin);
+      const criado = await app.inject({
+        method: 'POST',
+        url: '/api/finance/lancamentos',
+        headers: auth(t),
+        payload: {
+          direcao: 'RECEIVABLE',
+          descricao: 'Mensalidade dividida',
+          valor,
+          vencimento: '2026-04-10',
+          studentId: ids.aluno1,
+        },
+      });
+      expect(criado.statusCode).toBe(201);
+      return (criado.json() as { data: { id: string } }).data.id;
+    }
+
+    it('registra as duas formas e quita a conta', async () => {
+      const entryId = await umaCobranca('300,00');
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/finance/lancamentos/${entryId}/pagamentos/lote`,
+        headers: auth(await tokenDe(ids.emailAdmin)),
+        payload: {
+          pagamentos: [
+            { valor: '180,00', metodo: 'PIX' },
+            { valor: '120,00', metodo: 'CREDIT_CARD' },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      expect((res.json() as { data: { ids: string[] } }).data.ids).toHaveLength(2);
+
+      const linha = await tx((c) =>
+        c.query<{ status: string; pago: string }>(
+          'SELECT status::text, paid_cents::text AS pago FROM finance_entries WHERE id = $1',
+          [entryId],
+        ),
+      );
+      expect(linha.rows[0]!.status).toBe('PAID');
+      expect(Number(linha.rows[0]!.pago)).toBe(30000);
+
+      /* DOIS PAGAMENTOS, e não um somado. É o que faz o relatório por
+         forma de pagamento dizer a verdade: R$ 180 entraram no PIX e
+         R$ 120 no cartão, não R$ 300 em algum lugar. */
+      const pagamentos = await tx((c) =>
+        c.query<{ method: string; amount_cents: string }>(
+          'SELECT method::text, amount_cents::text FROM finance_payments WHERE entry_id = $1 ORDER BY amount_cents DESC',
+          [entryId],
+        ),
+      );
+      expect(pagamentos.rows.map((r) => r.method)).toEqual(['PIX', 'CREDIT_CARD']);
+    });
+
+    it('ou entram todas as formas ou não entra nenhuma', async () => {
+      const entryId = await umaCobranca('300,00');
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/finance/lancamentos/${entryId}/pagamentos/lote`,
+        headers: auth(await tokenDe(ids.emailAdmin)),
+        payload: {
+          pagamentos: [
+            { valor: '180,00', metodo: 'PIX' },
+            /* Método que não existe: o segundo INSERT falha. */
+            { valor: '120,00', metodo: 'BITCOIN' },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(422);
+
+      /* Se a transação não abraçasse o lote, os R$ 180 do PIX teriam
+         entrado e a conta ficaria meio paga por causa de um erro de
+         digitação na segunda linha. */
+      const pagamentos = await tx((c) =>
+        c.query('SELECT 1 FROM finance_payments WHERE entry_id = $1', [entryId]),
+      );
+      expect(pagamentos.rowCount).toBe(0);
+
+      const linha = await tx((c) =>
+        c.query<{ status: string }>('SELECT status::text FROM finance_entries WHERE id = $1', [
+          entryId,
+        ]),
+      );
+      expect(linha.rows[0]!.status).not.toBe('PAID');
+    });
+
+    it('recusa lote vazio e lote grande demais', async () => {
+      const entryId = await umaCobranca('300,00');
+      const t = auth(await tokenDe(ids.emailAdmin));
+
+      const vazio = await app.inject({
+        method: 'POST',
+        url: `/api/finance/lancamentos/${entryId}/pagamentos/lote`,
+        headers: t,
+        payload: { pagamentos: [] },
+      });
+      expect(vazio.statusCode).toBe(422);
+
+      /* Sete formas de pagamento numa cobrança só não é "dividiu a
+         conta", é outra coisa — e merece lançamentos separados. */
+      const demais = await app.inject({
+        method: 'POST',
+        url: `/api/finance/lancamentos/${entryId}/pagamentos/lote`,
+        headers: t,
+        payload: {
+          pagamentos: Array.from({ length: 7 }, () => ({ valor: '10,00', metodo: 'CASH' })),
+        },
+      });
+      expect(demais.statusCode).toBe(422);
+    });
+  });
 });

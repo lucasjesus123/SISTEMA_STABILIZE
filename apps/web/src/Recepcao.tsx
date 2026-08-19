@@ -400,6 +400,26 @@ function Cartao({
         <p className="rec-pendencia">Sem plano ativo. Vale conferir o cadastro antes de liberar.</p>
       )}
 
+      {/* A PENDÊNCIA DE SAÚDE APARECE SEPARADA DA FINANCEIRA, e nunca no
+          mesmo bloco. São riscos de naturezas diferentes: dívida é
+          problema de caixa, treinar sem ter declarado a saúde é problema
+          de corpo — e é a academia que responde por ele. Misturar as
+          duas na mesma tarja faz a recepção tratar as duas como "aquele
+          aviso vermelho de sempre".
+
+          O TEXTO NÃO DIZ O QUE A PESSOA RESPONDEU. A recepção precisa
+          saber que falta um documento; as respostas do PAR-Q são dado de
+          saúde e não passam pelo balcão. */}
+      {aluno.triagem !== 'VALIDA' && (
+        <p className="rec-saude">
+          {aluno.triagem === 'AGUARDANDO_ATESTADO'
+            ? 'Aguardando atestado médico — o PAR-Q pediu liberação e ela não chegou.'
+            : aluno.triagem === 'VENCIDA'
+              ? 'Ficha de saúde vencida. Peça para renovar no aplicativo.'
+              : 'Nunca preencheu a ficha de saúde nem assinou o termo.'}
+        </p>
+      )}
+
       {aluno.dentro ? (
         <p className="rec-ja-dentro">
           Já está registrado dentro da academia. A saída é registrada na coluna ao lado.
