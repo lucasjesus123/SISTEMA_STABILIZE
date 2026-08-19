@@ -324,6 +324,22 @@ function Sistema({
      quem chamar a rota direto recebe 403 de qualquer forma. */
   const pode = (p: string): boolean => principal.permissions.includes(p);
 
+  /* O navegador avisa quando a rede cai e quando volta. É a mesma
+     informação que o ponto verde do menu mostra — e ela precisa vir de
+     um evento, não de uma requisição que falha: descobrir a queda pelo
+     erro no meio de um cadastro é descobrir tarde demais. */
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const ligou = (): void => setOnline(true);
+    const caiu = (): void => setOnline(false);
+    window.addEventListener('online', ligou);
+    window.addEventListener('offline', caiu);
+    return () => {
+      window.removeEventListener('online', ligou);
+      window.removeEventListener('offline', caiu);
+    };
+  }, []);
+
   const abas: {
     id: Aba;
     nome: string;
@@ -374,7 +390,7 @@ function Sistema({
        quadro de pessoal. */
     {
       id: 'equipe',
-      nome: 'Equipe',
+      nome: 'Usuários',
       icone: <IconeEquipe />,
       visivel: pode('user:read'),
       grupo: 'Administração',
@@ -409,6 +425,24 @@ function Sistema({
           <Marca variante="horizontal" altura={36} />
         </div>
 
+        {/* QUEM VOCÊ É, no alto e não no rodapé.
+            Num SaaS a mesma tela muda de conteúdo conforme o papel — o
+            profissional vê a agenda de todos e edita só a sua, o
+            administrador vê o caixa. Quem opera precisa saber com qual
+            crachá está olhando ANTES de interpretar o que vê, e o
+            rodapé é onde o olho chega por último. */}
+        <div className="lateral-crachá">
+          <span className="lateral-crachá-icone" aria-hidden="true">
+            <IconePerfil />
+          </span>
+          <span className="lateral-crachá-texto">
+            <span className="lateral-crachá-papel">{principal.roleLabel}</span>
+            <span className="lateral-crachá-nome" title={principal.name}>
+              {principal.name}
+            </span>
+          </span>
+        </div>
+
         <nav className="lateral-nav" aria-label="Seções do sistema">
           {(['Operação', 'Administração'] as const).map((grupo) => {
             const doGrupo = visiveis.filter((a) => a.grupo === grupo);
@@ -436,23 +470,49 @@ function Sistema({
         </nav>
 
         <div className="lateral-rodape">
-          <div className="lateral-conta">
-            <span className="conta-papel">{principal.roleLabel}</span>
-            <span className="conta-nome" title={principal.name}>
-              {principal.name}
-            </span>
-          </div>
+          {/* O PONTO VERDE É INFORMAÇÃO, não decoração: diz que a aba
+              está falando com o servidor. Quando cai, a cor muda antes
+              de qualquer requisição falhar, e quem está no balcão
+              descobre pelo menu em vez de por um erro no meio de um
+              cadastro. */}
+          <span className={`lateral-estado ${online ? '' : 'offline'}`}>
+            <span className="lateral-ponto" aria-hidden="true" />
+            {online ? 'conectado' : 'sem conexão'}
+          </span>
           <button type="button" className="lateral-sair" onClick={() => void sair().then(aoSair)}>
             Sair
           </button>
         </div>
       </aside>
 
-      {/* O CANTO SUPERIOR DIREITO DA TELA, e não mais o rodapé do menu.
-          Fixo na janela em tela larga; na estreita, o CSS o devolve para
-          dentro da faixa do topo, que já é o canto superior direito de
-          lá. Ver `.tema-troca` em app.css. */}
-      <BotaoTema efetivo={efetivo} definir={definir} />
+      <div className="painel-direito">
+        {/* A BARRA DO TOPO é a mesma em todas as telas: onde você está,
+            em que academia, e quem é você. Antes o único elemento fixo
+            era o botão de tema flutuando no canto — o resto de cada
+            tela recomeçava do zero. */}
+        <header className="topo">
+          <div className="topo-onde">
+            <span className="topo-migalha">
+              <span className={`lateral-ponto ${online ? '' : 'offline'}`} aria-hidden="true" />
+              {principal.tenantNome ?? 'Academia'}
+              <span className="topo-barra">/</span>
+              {abas.find((a) => a.id === aba)?.nome ?? ''}
+            </span>
+          </div>
+
+          <div className="topo-acoes">
+            <BotaoTema efetivo={efetivo} definir={definir} />
+            <span className="topo-quem">
+              <span className="topo-quem-texto">
+                <span className="topo-quem-nome">{principal.name}</span>
+                <span className="topo-quem-papel">{principal.roleLabel}</span>
+              </span>
+              <span className="topo-quem-inicial" aria-hidden="true">
+                {iniciais(principal.name)}
+              </span>
+            </span>
+          </div>
+        </header>
 
       <main id="conteudo" className="conteudo">
         <div className="folha">
@@ -465,6 +525,7 @@ function Sistema({
         {aba === 'perfil' && <Perfil principal={principal} />}
         </div>
       </main>
+      </div>
     </div>
   );
 }

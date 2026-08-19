@@ -25,6 +25,8 @@ export interface Principal {
   timezone?: string;
   /** Entrou com senha provisória e precisa trocar antes de usar. */
   mustChangePassword?: boolean;
+  /** Nome da academia — num SaaS, saber onde se está é a primeira coisa. */
+  tenantNome?: string;
   studentId?: string;
 }
 

@@ -215,8 +215,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const { rows } = await withTenant(
       { tenantId: principal.tenantId, userId: principal.userId },
       (client) =>
-        client.query<{ full_name: string; timezone: string; must_change_password: boolean }>(
-          `SELECT u.full_name, u.must_change_password, t.timezone
+        client.query<{
+          full_name: string;
+          timezone: string;
+          must_change_password: boolean;
+          tenant_nome: string;
+        }>(
+          `SELECT u.full_name, u.must_change_password, t.timezone, t.name AS tenant_nome
              FROM users u JOIN tenants t ON t.id = u.tenant_id
             WHERE u.id = $1`,
           [principal.userId],
@@ -242,6 +247,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
          recarregar a página para contorná-la e entrar no prontuário com
          uma senha que meia academia conhece. */
       mustChangePassword: rows[0]?.must_change_password === true,
+      /* O NOME DA ACADEMIA. Num SaaS a mesma tela serve dezenas de
+         empresas, e quem dá suporte entra em várias no mesmo dia —
+         saber em qual está é a primeira coisa, não a última. */
+      tenantNome: rows[0]?.tenant_nome ?? '',
       ...(principal.studentId !== undefined ? { studentId: principal.studentId } : {}),
     };
   });

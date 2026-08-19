@@ -3518,3 +3518,246 @@
   color: var(--ok-texto);
   text-align: center;
 }
+
+/* =====================================================================
+   ESTRUTURA: coluna + barra do topo + folha
+
+   Antes o único elemento fixo da tela era o botão de tema flutuando no
+   canto, e cada seção recomeçava do zero. Agora existe um lugar
+   constante que responde três perguntas antes de qualquer conteúdo:
+   em que academia estou, em que tela estou, e com qual crachá.
+   ================================================================== */
+
+.painel-direito {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topo {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding: var(--e-3) clamp(var(--e-4), 3vw, var(--e-6));
+  background: color-mix(in srgb, var(--superficie-baixa) 88%, transparent);
+  /* O desfoque atrás da barra faz o conteúdo passar por baixo sem
+     sumir — uma barra opaca corta a lista em duas e parece que a
+     página acabou ali. */
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--fio);
+}
+
+.topo-migalha {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--texto-corpo);
+}
+.topo-barra {
+  color: var(--texto-apoio);
+}
+
+.topo-acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--e-4);
+}
+.topo-quem {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+}
+.topo-quem-texto {
+  display: grid;
+  text-align: right;
+  line-height: 1.25;
+}
+.topo-quem-nome {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto);
+}
+.topo-quem-papel {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-apoio);
+}
+.topo-quem-inicial {
+  width: 2.1rem;
+  height: 2.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--raio-pilula);
+  background: var(--teal);
+  color: #fff;
+  font-family: var(--fonte-display);
+  font-size: var(--t-xs);
+  font-weight: 600;
+}
+
+/* ---- o crachá na coluna --------------------------------------------
+   Quem opera precisa saber com qual papel está olhando ANTES de
+   interpretar a tela — o rodapé é onde o olho chega por último.
+   ------------------------------------------------------------------ */
+.lateral-crachá {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  margin: var(--e-4) var(--e-3) 0;
+  padding: var(--e-3);
+  border: 1px solid color-mix(in srgb, var(--teal-vivo) 30%, transparent);
+  border-radius: var(--raio-md);
+  background: color-mix(in srgb, var(--teal-vivo) 9%, transparent);
+  min-width: 0;
+}
+.lateral-crachá-icone {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: none;
+  border-radius: var(--raio-pilula);
+  background: color-mix(in srgb, var(--teal-vivo) 20%, transparent);
+  color: var(--teal-vivo);
+}
+.lateral-crachá-texto {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+.lateral-crachá-papel {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--teal-vivo);
+}
+.lateral-crachá-nome {
+  font-size: var(--t-sm);
+  color: #eaf7f8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- barra de estado no rodapé da coluna ---------------------------- */
+.lateral-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+.lateral-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #7d9497;
+}
+.lateral-ponto {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--raio-pilula);
+  flex: none;
+  background: #3ecf8e;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #3ecf8e 22%, transparent);
+}
+.lateral-ponto.offline,
+.lateral-estado.offline .lateral-ponto {
+  background: var(--erro);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--erro) 25%, transparent);
+}
+.lateral-estado.offline {
+  color: #ffa79a;
+}
+
+/* O botão de tema deixa de flutuar: agora mora na barra do topo, junto
+   das outras ações, e não precisa mais de posição fixa. */
+.tema-troca {
+  position: static !important;
+}
+
+@media (max-width: 60rem) {
+  .topo {
+    padding: var(--e-2) var(--e-4);
+  }
+  .topo-quem-texto {
+    display: none;
+  }
+}
+
+/* =====================================================================
+   PÍLULAS DE ESTADO
+
+   Um vocabulário só para o sistema inteiro. Antes cada tela inventava a
+   sua — `selo`, `fin-selo`, `plt-pilula` — e três formas do mesmo
+   conceito é como uma delas fica para trás quando o tema muda.
+   ================================================================== */
+
+.pilula {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--raio-pilula);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+/* Situação: viva é o normal, apagada é o desligado. O verde não grita —
+   "ativo" é o estado da maioria, e cor forte no que é comum ensina o
+   olho a ignorar a cor. */
+.pilula.viva {
+  background: var(--ok-fundo);
+  color: var(--ok-texto);
+  border-color: color-mix(in srgb, var(--ok) 22%, transparent);
+}
+.pilula.apagada {
+  background: var(--superficie-realce);
+  color: var(--texto-apoio);
+  border-color: var(--fio);
+}
+
+/* Papel: cada um com seu tom, do mais amplo ao mais restrito. É a
+   hierarquia real de alcance, e vê-la de relance numa lista de vinte
+   pessoas é o que a coluna existe para dar. */
+.pilula.papel-owner {
+  background: color-mix(in srgb, var(--teal) 14%, transparent);
+  color: var(--teal-fundo);
+  border-color: color-mix(in srgb, var(--teal) 30%, transparent);
+}
+.pilula.papel-admin {
+  background: color-mix(in srgb, var(--menta) 16%, transparent);
+  color: var(--ok-texto);
+  border-color: color-mix(in srgb, var(--menta) 32%, transparent);
+}
+.pilula.papel-professional {
+  background: var(--superficie-realce);
+  color: var(--texto-corpo);
+  border-color: var(--fio-forte);
+}
+.pilula.papel-reception {
+  background: var(--superficie-realce);
+  color: var(--texto-apoio);
+  border-color: var(--fio);
+}
+
+/* O botão principal ganha o brilho da referência: presença sem peso. */
+.botao-acao {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.1),
+    0 6px 18px -8px color-mix(in srgb, var(--teal-fundo) 70%, transparent);
+}

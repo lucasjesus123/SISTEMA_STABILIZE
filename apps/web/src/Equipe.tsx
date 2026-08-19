@@ -99,11 +99,15 @@ export function Equipe({ principal }: { principal: Principal }): ReactNode {
     <>
       <div className="secao-cabecalho linha-cabecalho">
         <div>
-          <h1>Equipe</h1>
-          <p>Quem trabalha na academia, o que cada um alcança e a cor de cada um na agenda.</p>
+          <h1>Usuários</h1>
+          <p>
+            {lista === null
+              ? 'Quem trabalha na academia e o que cada um alcança.'
+              : `${lista.filter((u) => u.ativo).length} ativos de ${lista.length} · o papel decide o que cada um enxerga, e a cor é como ele aparece na agenda.`}
+          </p>
         </div>
         <button type="button" className="botao-acao" onClick={() => setEditando('novo')}>
-          Cadastrar pessoa
+          <span aria-hidden="true">+</span> Novo usuário
         </button>
       </div>
 
@@ -214,21 +218,26 @@ function Linha({
             </span>
           </span>
         </td>
-        <td>{NOME_DO_PAPEL[u.papel] ?? u.papel}</td>
+        <td>
+          {/* PÍLULA, e não texto solto: o papel é a informação que muda
+              o que a pessoa alcança no sistema inteiro, e merece a forma
+              que o olho encontra primeiro numa lista. */}
+          <span className={`pilula papel-${u.papel.toLowerCase()}`}>
+            {NOME_DO_PAPEL[u.papel] ?? u.papel}
+          </span>
+        </td>
         <td className="tabular">
           {u.ultimoAcesso === null ? (
-            <span className="fin-selo atencao">nunca entrou</span>
+            <span className="plt-secundario">nunca entrou</span>
           ) : (
             new Date(u.ultimoAcesso).toLocaleDateString('pt-BR')
           )}
         </td>
         <td>
-          <span className={`fin-selo ${u.ativo ? 'ok' : 'neutra'}`}>
-            {u.ativo ? 'ativo' : 'desligado'}
+          <span className={`pilula ${u.ativo ? 'viva' : 'apagada'}`}>
+            {u.ativo ? 'Ativo' : 'Desligado'}
           </span>
-          {u.precisaTrocarSenha && u.ativo && (
-            <span className="eq-nota">senha provisória</span>
-          )}
+          {u.precisaTrocarSenha && u.ativo && <span className="eq-nota">senha provisória</span>}
         </td>
         <td className="fin-acao">
           {posso && (
