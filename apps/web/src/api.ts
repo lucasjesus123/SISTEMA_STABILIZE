@@ -1316,3 +1316,55 @@ export const trocarMinhaSenha = (atual: string, nova: string) =>
     method: 'POST',
     body: JSON.stringify({ currentPassword: atual, newPassword: nova }),
   });
+
+/* ====================================================================
+ * RELATÓRIOS E RECORRÊNCIAS DO FINANCEIRO
+ * ================================================================== */
+
+export interface Relatorios {
+  fluxo: { mes: string; recebidoCentavos: number; pagoCentavos: number; saldoCentavos: number }[];
+  categorias: {
+    categoria: string;
+    direcao: DirecaoLancamento;
+    totalCentavos: number;
+    totalFormatado: string;
+    quantidade: number;
+  }[];
+  inadimplentes: {
+    studentId: string;
+    nome: string;
+    telefone: string | null;
+    devendoCentavos: number;
+    devendoFormatado: string;
+    cobrancas: number;
+    diasDeAtraso: number;
+  }[];
+  totalDevendoCentavos: number;
+}
+
+export const buscarRelatorios = (de: Date, ate: Date) =>
+  api<{ data: Relatorios }>(`/api/finance/relatorios?de=${iso(de)}&ate=${iso(ate)}`);
+
+export interface Recorrencia {
+  contratoId: string;
+  studentId: string;
+  aluno: string;
+  ciclo: string;
+  valorCentavos: number;
+  valorFormatado: string;
+  diaDeCobranca: number | null;
+  profissional: string | null;
+  desde: string;
+  encerrandoNoFim: boolean;
+  vencidasAbertas: number;
+}
+
+export const buscarRecorrencias = () => api<{ data: Recorrencia[] }>('/api/finance/recorrencias');
+
+/** Baixa o CSV do período. O contador do cliente sempre pede. */
+export async function baixarCsvDoFinanceiro(de: Date, ate: Date): Promise<void> {
+  await baixarRelatorio(
+    `/api/finance/lancamentos.csv?de=${iso(de)}&ate=${iso(ate)}`,
+    `lancamentos-${iso(de)}.csv`,
+  );
+}

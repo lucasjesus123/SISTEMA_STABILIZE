@@ -3761,3 +3761,126 @@
     0 1px 2px rgba(0, 0, 0, 0.1),
     0 6px 18px -8px color-mix(in srgb, var(--teal-fundo) 70%, transparent);
 }
+
+/* =====================================================================
+   RELATÓRIOS DO FINANCEIRO
+   ================================================================== */
+
+.rel-apoio {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  max-width: 66ch;
+}
+
+/* Barras em CSS puro, sem biblioteca de gráfico. Doze meses e dois
+   valores por mês não justificam trezentos kilobytes de JavaScript —
+   e uma barra que é um `<span>` com altura em porcentagem responde à
+   mesma pergunta com o mesmo rigor. */
+.rel-barras {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--e-2);
+  height: 11rem;
+  padding: var(--e-3) 0 0;
+  border-bottom: 1px solid var(--fio-forte);
+  margin-bottom: var(--e-2);
+}
+/* FLEX E NÃO GRADE, e é o motivo de o gráfico ter nascido achatado:
+   `height: 100%` dentro de uma linha de grade de altura automática
+   resolve contra "auto" e vira zero. Com flex-column e `flex: 1` na
+   área das barras, a altura passa a ser o espaço que sobra de verdade
+   — e aí a porcentagem de cada barra tem contra o que medir. */
+.rel-mes {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--e-2);
+  min-width: 0;
+  height: 100%;
+}
+.rel-par {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  min-height: 0;
+}
+.rel-barra {
+  width: 45%;
+  max-width: 1.1rem;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  transition: height var(--medio) var(--saida);
+}
+.rel-barra.entrou {
+  background: var(--teal);
+}
+.rel-barra.saiu {
+  background: color-mix(in srgb, var(--texto-apoio) 55%, transparent);
+}
+.rel-mes-nome {
+  text-align: center;
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+  font-variant-numeric: tabular-nums;
+}
+.rel-legenda {
+  display: flex;
+  gap: var(--e-4);
+  margin: 0 0 var(--e-6);
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+.rel-categorias {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  gap: var(--e-6);
+  margin-bottom: var(--e-4);
+}
+.rel-lado h3 {
+  margin: 0 0 var(--e-3);
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--texto-apoio);
+}
+.rel-categoria {
+  display: grid;
+  gap: 5px;
+  margin-bottom: var(--e-3);
+}
+.rel-categoria-topo {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+}
+.rel-fatia {
+  height: 6px;
+  border-radius: var(--raio-pilula);
+  display: block;
+}
+.rel-fatia.entrou {
+  background: var(--teal);
+}
+.rel-fatia.saiu {
+  background: color-mix(in srgb, var(--texto-apoio) 55%, transparent);
+}
+.rel-total {
+  font-family: var(--fonte-display);
+  font-weight: 500;
+  color: var(--erro);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Atraso: a pílula do que precisa de ligação hoje. */
+.pilula.atrasada {
+  background: var(--erro-fundo);
+  color: var(--erro-texto);
+  border-color: color-mix(in srgb, var(--erro) 28%, transparent);
+}

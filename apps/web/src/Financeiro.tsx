@@ -20,7 +20,7 @@ import type { Principal } from './api.js';
  * desatualizado: não é falta de disciplina, é atrito.
  */
 
-type Painel = 'receber' | 'pagar' | 'comissoes';
+type Painel = 'receber' | 'pagar' | 'recorrencias' | 'relatorios' | 'comissoes';
 
 const METODOS: { valor: api.MetodoPagamento; nome: string }[] = [
   { valor: 'PIX', nome: 'PIX' },
@@ -161,6 +161,10 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
           [
             ['receber', 'A receber'],
             ['pagar', 'A pagar'],
+            /* RECORRÊNCIAS antes de RELATÓRIOS: é operação (o que vai
+               nascer sozinho mês que vem), e relatório é leitura. */
+            ['recorrencias', 'Recorrências'],
+            ['relatorios', 'Relatórios'],
             ['comissoes', 'Comissões'],
           ] as [Painel, string][]
         ).map(([id, nome]) => (
@@ -179,6 +183,10 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
 
       {painel === 'comissoes' ? (
         <Comissoes mes={mes} principal={principal} />
+      ) : painel === 'recorrencias' ? (
+        <Recorrencias />
+      ) : painel === 'relatorios' ? (
+        <Relatorios de={de} ate={ate} />
       ) : (
         <Lancamentos
           direcao={painel === 'receber' ? 'RECEIVABLE' : 'PAYABLE'}
@@ -910,6 +918,294 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
             </table>
           </div>
         </>
+      )}
+    </>
+  );
+}
+
+/* ====================================================================
+ * Recorrências — o que nasce sozinho todo mês
+ * ================================================================== */
+
+const NOME_DO_CICLO: Record<string, string> = {
+  SESSION: 'por sessão',
+  WEEKLY: 'semanal',
+  BIWEEKLY: 'quinzenal',
+  MONTHLY: 'mensal',
+  QUARTERLY: 'trimestral',
+  SEMIANNUAL: 'semestral',
+  ANNUAL: 'anual',
+};
+
+/**
+ * Os contratos ativos, que é de onde a mensalidade nasce.
+ *
+ * A ABA EXISTE PARA RESPONDER "O QUE VAI ENTRAR MÊS QUE VEM". A lista de
+ * lançamentos mostra o que já foi emitido; sem esta, o previsto do mês
+ * seguinte é uma conta que alguém faz de cabeça — e ninguém faz.
+ */
+function Recorrencias(): ReactNode {
+  const [linhas, setLinhas] = useState<api.Recorrencia[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    api
+      .buscarRecorrencias()
+      .then((r) => vivo && setLinhas(r.data))
+      .catch((e: unknown) => {
+        if (!vivo) return;
+        setLinhas([]);
+        setErro(e instanceof api.ApiError ? e.message : 'Falha ao carregar.');
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const mensais = (linhas ?? []).filter((r) => r.ciclo === 'MONTHLY');
+  const previsto = mensais
+    .filter((r) => !r.encerrandoNoFim)
+    .reduce((a, r) => a + r.valorCentavos, 0);
+
+  return (
+    <>
+      {erro !== null && <Erro mensagem={erro} />}
+      {linhas === null ? (
+        <Carregando rotulo="Carregando as recorrências" />
+      ) : linhas.length === 0 ? (
+        <Vazio
+          titulo="Nenhum contrato ativo."
+          descricao="O plano do aluno é definido no cadastro dele. É o contrato que faz a mensalidade nascer sozinha todo mês."
+        />
+      ) : (
+        <>
+          <div className="fin-kpis fin-kpis-largo">
+            <Kpi
+              rotulo="Previsto por mês"
+              valor={previsto}
+              /* "mensais", não "mensalis": o plural de mensal troca o
+                 -l por -is. Concatenar sufixo cegamente produz a forma
+                 errada em toda palavra terminada em -al. */
+              nota={
+                mensais.length === 1
+                  ? '1 contrato mensal'
+                  : `${mensais.length} contratos mensais`
+              }
+            />
+            <div className="fin-kpi">
+              <span className="fin-kpi-rotulo">Saindo</span>
+              <strong className="fin-kpi-valor">
+                {linhas.filter((r) => r.encerrandoNoFim).length}
+              </strong>
+              <span className="fin-kpi-nota">pediram para encerrar no fim do período</span>
+            </div>
+            <div className="fin-kpi">
+              <span className="fin-kpi-rotulo">Com atraso</span>
+              <strong className="fin-kpi-valor">
+                {linhas.filter((r) => r.vencidasAbertas > 0).length}
+              </strong>
+              <span className="fin-kpi-nota">têm cobrança vencida em aberto</span>
+            </div>
+          </div>
+
+          <div className="rolo">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th scope="col">Aluno</th>
+                  <th scope="col">Plano</th>
+                  <th scope="col" className="fin-col-num">Valor</th>
+                  <th scope="col">Cobra dia</th>
+                  <th scope="col">Situação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {linhas.map((r) => (
+                  <tr key={r.contratoId}>
+                    <td>
+                      <span className="celula-forte">{r.aluno}</span>
+                      <span className="celula-apoio">
+                        {r.profissional ?? 'sem professor'} · desde {r.desde.slice(0, 7)}
+                      </span>
+                    </td>
+                    <td className="plt-secundario">{NOME_DO_CICLO[r.ciclo] ?? r.ciclo}</td>
+                    <td className="fin-col-num">
+                      <span className="dinheiro">{r.valorFormatado}</span>
+                    </td>
+                    <td className="tabular">{r.diaDeCobranca ?? '—'}</td>
+                    <td>
+                      {r.encerrandoNoFim ? (
+                        <span className="pilula apagada">encerrando</span>
+                      ) : r.vencidasAbertas > 0 ? (
+                        /* O NÚMERO, e não só "em atraso": três vencidas
+                           é um aluno a ligar hoje, uma é um boleto que
+                           venceu ontem. */
+                        <span className="pilula atrasada">
+                          {r.vencidasAbertas} vencida{r.vencidasAbertas === 1 ? '' : 's'}
+                        </span>
+                      ) : (
+                        <span className="pilula viva">em dia</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+/* ====================================================================
+ * Relatórios
+ * ================================================================== */
+
+function Relatorios({ de, ate }: { de: Date; ate: Date }): ReactNode {
+  const [dados, setDados] = useState<api.Relatorios | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    setDados(null);
+    api
+      .buscarRelatorios(de, ate)
+      .then((r) => vivo && setDados(r.data))
+      .catch((e: unknown) => {
+        if (!vivo) return;
+        setErro(e instanceof api.ApiError ? e.message : 'Falha ao carregar os relatórios.');
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [de, ate]);
+
+  if (erro !== null) return <Erro mensagem={erro} />;
+  if (dados === null) return <Carregando rotulo="Calculando os relatórios" />;
+
+  const maior = Math.max(
+    1,
+    ...dados.fluxo.map((m) => Math.max(m.recebidoCentavos, m.pagoCentavos)),
+  );
+
+  return (
+    <>
+      <div className="fin-barra">
+        <p className="rel-apoio">
+          Entradas e saídas contadas pela data do PAGAMENTO — é a pergunta sobre caixa. Uma
+          mensalidade de janeiro paga em março entrou em março.
+        </p>
+        <button
+          type="button"
+          className="botao-secundario"
+          onClick={() => void api.baixarCsvDoFinanceiro(de, ate)}
+        >
+          Exportar CSV
+        </button>
+      </div>
+
+      {/* ---- 1. estou melhorando? ---- */}
+      <h2 className="plt-titulo">Entrou e saiu, mês a mês</h2>
+      <div className="rel-barras" role="img" aria-label="Entradas e saídas dos últimos meses">
+        {dados.fluxo.map((m) => (
+          <div key={m.mes} className="rel-mes">
+            <div className="rel-par">
+              <span
+                className="rel-barra entrou"
+                style={{ height: `${(m.recebidoCentavos / maior) * 100}%` }}
+                title={`Entrou ${formatCents(m.recebidoCentavos)}`}
+              />
+              <span
+                className="rel-barra saiu"
+                style={{ height: `${(m.pagoCentavos / maior) * 100}%` }}
+                title={`Saiu ${formatCents(m.pagoCentavos)}`}
+              />
+            </div>
+            <span className="rel-mes-nome">{m.mes.slice(5)}</span>
+          </div>
+        ))}
+      </div>
+      <p className="rel-legenda">
+        <span className="fin-entrou">entrou</span>
+        <span className="fin-saiu">saiu</span>
+      </p>
+
+      {/* ---- 2. para onde vai o dinheiro? ---- */}
+      <h2 className="plt-titulo">Por categoria</h2>
+      {dados.categorias.length === 0 ? (
+        <p className="rel-apoio">Nenhum pagamento no período.</p>
+      ) : (
+        <div className="rel-categorias">
+          {(['RECEIVABLE', 'PAYABLE'] as const).map((direcao) => {
+            const doLado = dados.categorias.filter((c) => c.direcao === direcao);
+            if (doLado.length === 0) return null;
+            const total = doLado.reduce((a, c) => a + c.totalCentavos, 0);
+            return (
+              <section key={direcao} className="rel-lado">
+                <h3>{direcao === 'RECEIVABLE' ? 'Entrou' : 'Saiu'}</h3>
+                {doLado.map((c) => (
+                  <div key={c.categoria} className="rel-categoria">
+                    <div className="rel-categoria-topo">
+                      <span>{c.categoria}</span>
+                      <span className="dinheiro">{c.totalFormatado}</span>
+                    </div>
+                    {/* A barra proporcional responde "quanto disso é
+                        isso" sem o leitor dividir dois números de cabeça. */}
+                    <span
+                      className={`rel-fatia ${direcao === 'RECEIVABLE' ? 'entrou' : 'saiu'}`}
+                      style={{ width: `${Math.max(2, (c.totalCentavos / total) * 100)}%` }}
+                    />
+                  </div>
+                ))}
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ---- 3. quem eu cobro hoje? ---- */}
+      <h2 className="plt-titulo">
+        Quem está devendo{' '}
+        <span className="rel-total">{formatCents(dados.totalDevendoCentavos)}</span>
+      </h2>
+      {dados.inadimplentes.length === 0 ? (
+        <p className="rel-apoio">Ninguém em atraso. Raro e bom.</p>
+      ) : (
+        <div className="rolo">
+          <table className="tabela">
+            <thead>
+              <tr>
+                <th scope="col">Aluno</th>
+                <th scope="col">Contato</th>
+                <th scope="col" className="fin-col-num">Deve</th>
+                <th scope="col" className="fin-col-num">Cobranças</th>
+                <th scope="col" className="fin-col-num">Atraso</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dados.inadimplentes.map((i) => (
+                <tr key={i.studentId}>
+                  <td className="celula-forte">{i.nome}</td>
+                  <td className="tabular plt-secundario">{i.telefone ?? '—'}</td>
+                  <td className="fin-col-num">
+                    <span className="dinheiro">{i.devendoFormatado}</span>
+                  </td>
+                  <td className="fin-col-num tabular">{i.cobrancas}</td>
+                  <td className="fin-col-num">
+                    {/* ORDENADO POR DIAS, não por valor: quem deve R$ 200
+                        há seis meses é um problema diferente de quem deve
+                        R$ 800 desde ontem. */}
+                    <span className={`pilula ${i.diasDeAtraso > 60 ? 'atrasada' : 'apagada'}`}>
+                      {i.diasDeAtraso} dias
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   );

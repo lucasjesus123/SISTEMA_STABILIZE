@@ -332,3 +332,217 @@ export async function resumoDoPeriodo(
     venceHojeQtd: Number(linha?.venceHojeQtd ?? 0),
   };
 }
+
+/* --------------------------------------------------------------------
+ * Relatórios
+ *
+ * Três perguntas, nesta ordem de importância — a mesma ordem que
+ * qualquer ERP maduro usa, porque é a ordem em que o dono do negócio
+ * pensa: "estou melhorando?", "para onde vai o dinheiro?", "quem eu
+ * cobro hoje?".
+ * ------------------------------------------------------------------ */
+
+export interface MesDoFluxo {
+  mes: string;
+  recebidoCentavos: number;
+  pagoCentavos: number;
+}
+
+/**
+ * Entrou × saiu, mês a mês.
+ *
+ * PELA DATA DO PAGAMENTO, e não pela do lançamento. A pergunta é sobre
+ * CAIXA: uma mensalidade de janeiro paga em março entrou em março, e é
+ * em março que ela aparece no gráfico. Agrupar pela competência
+ * responderia outra pergunta — legítima, mas não esta.
+ */
+export async function fluxoPorMes(client: TenantClient, meses: number): Promise<MesDoFluxo[]> {
+  const { rows } = await client.query<{
+    mes: string;
+    recebido: string;
+    pago: string;
+  }>(
+    `WITH janela AS (
+       SELECT date_trunc('month', (now() AT TIME ZONE t.timezone))::date AS fim
+         FROM tenants t WHERE t.id = current_tenant_id()
+     ),
+     meses AS (
+       SELECT (SELECT fim FROM janela) - (n * INTERVAL '1 month') AS inicio
+         FROM generate_series(0, $1::int - 1) AS n
+     )
+     SELECT to_char(m.inicio, 'YYYY-MM') AS mes,
+            COALESCE(SUM(p.amount_cents) FILTER (WHERE e.direction = 'RECEIVABLE'), 0)::text AS recebido,
+            COALESCE(SUM(p.amount_cents) FILTER (WHERE e.direction = 'PAYABLE'), 0)::text AS pago
+       FROM meses m
+       LEFT JOIN finance_payments p
+              ON date_trunc('month', p.paid_at) = date_trunc('month', m.inicio)
+       LEFT JOIN finance_entries e ON e.id = p.entry_id
+      GROUP BY m.inicio
+      ORDER BY m.inicio`,
+    [meses],
+  );
+
+  return rows.map((r) => ({
+    mes: r.mes,
+    recebidoCentavos: Number(r.recebido),
+    pagoCentavos: Number(r.pago),
+  }));
+}
+
+export interface LinhaDeCategoria {
+  categoria: string;
+  direcao: Direcao;
+  totalCentavos: number;
+  quantidade: number;
+}
+
+/** Para onde vai o dinheiro. Sem categoria vira "sem categoria", e não
+    some: a fatia sem nome costuma ser a maior, e escondê-la faz o
+    gráfico mentir por omissão. */
+export async function porCategoria(
+  client: TenantClient,
+  de: Date,
+  ate: Date,
+): Promise<LinhaDeCategoria[]> {
+  const { rows } = await client.query<{
+    categoria: string;
+    direction: Direcao;
+    total: string;
+    quantidade: number;
+  }>(
+    `SELECT COALESCE(NULLIF(btrim(e.category), ''), 'Sem categoria') AS categoria,
+            e.direction,
+            COALESCE(SUM(p.amount_cents), 0)::text AS total,
+            count(DISTINCT e.id)::int AS quantidade
+       FROM finance_entries e
+       JOIN finance_payments p ON p.entry_id = e.id
+      WHERE p.paid_at::date BETWEEN $1::date AND $2::date
+        AND e.cancelled_at IS NULL
+      GROUP BY 1, 2
+     HAVING SUM(p.amount_cents) > 0
+      ORDER BY SUM(p.amount_cents) DESC`,
+    [de, ate],
+  );
+
+  return rows.map((r) => ({
+    categoria: r.categoria,
+    direcao: r.direction,
+    totalCentavos: Number(r.total),
+    quantidade: r.quantidade,
+  }));
+}
+
+export interface Inadimplente {
+  studentId: string;
+  nome: string;
+  telefone: string | null;
+  devendoCentavos: number;
+  cobrancas: number;
+  diasDeAtraso: number;
+}
+
+/**
+ * Quem eu cobro hoje.
+ *
+ * ORDENADO POR DIAS DE ATRASO, não por valor. Quem deve R$ 200 há seis
+ * meses é um problema diferente de quem deve R$ 800 desde ontem — e a
+ * lista existe para virar ligação, não para somar.
+ */
+export async function inadimplentes(client: TenantClient): Promise<Inadimplente[]> {
+  const { rows } = await client.query<{
+    student_id: string;
+    nome: string;
+    telefone: string | null;
+    devendo: string;
+    cobrancas: number;
+    dias: number;
+  }>(
+    `WITH hoje AS (
+       SELECT (now() AT TIME ZONE t.timezone)::date AS d
+         FROM tenants t WHERE t.id = current_tenant_id()
+     )
+     SELECT e.student_id, s.full_name AS nome,
+            COALESCE(s.whatsapp, s.phone) AS telefone,
+            SUM(e.amount_cents - e.paid_cents)::text AS devendo,
+            count(*)::int AS cobrancas,
+            ((SELECT d FROM hoje) - MIN(e.due_date))::int AS dias
+       FROM finance_entries e
+       JOIN students s ON s.id = e.student_id
+      WHERE e.direction = 'RECEIVABLE'
+        AND e.cancelled_at IS NULL
+        AND e.status <> 'PAID'
+        AND e.due_date < (SELECT d FROM hoje)
+      GROUP BY e.student_id, s.full_name, s.whatsapp, s.phone
+      ORDER BY dias DESC
+      LIMIT 200`,
+  );
+
+  return rows.map((r) => ({
+    studentId: r.student_id,
+    nome: r.nome,
+    telefone: r.telefone,
+    devendoCentavos: Number(r.devendo),
+    cobrancas: r.cobrancas,
+    diasDeAtraso: r.dias,
+  }));
+}
+
+/** Os contratos que geram cobrança sozinhos — a aba "Recorrências". */
+export interface Recorrencia {
+  contratoId: string;
+  studentId: string;
+  aluno: string;
+  ciclo: string;
+  valorCentavos: number;
+  diaDeCobranca: number | null;
+  profissional: string | null;
+  desde: string;
+  encerrandoNoFim: boolean;
+  vencidasAbertas: number;
+}
+
+export async function listarRecorrencias(client: TenantClient): Promise<Recorrencia[]> {
+  const { rows } = await client.query<{
+    contrato: string;
+    student_id: string;
+    aluno: string;
+    ciclo: string;
+    valor: string;
+    dia: number | null;
+    profissional: string | null;
+    desde: string;
+    encerrando: boolean;
+    vencidas: number;
+  }>(
+    `WITH hoje AS (
+       SELECT (now() AT TIME ZONE t.timezone)::date AS d
+         FROM tenants t WHERE t.id = current_tenant_id()
+     )
+     SELECT c.id AS contrato, c.student_id, s.full_name AS aluno,
+            c.cycle::text AS ciclo, c.amount_cents::text AS valor,
+            c.billing_day AS dia, u.full_name AS profissional,
+            c.starts_on::text AS desde,
+            c.encerrar_no_fim_do_periodo AS encerrando,
+            (SELECT count(*) FROM finance_entries v
+              WHERE v.contract_id = c.id AND v.cancelled_at IS NULL
+                AND v.status <> 'PAID' AND v.due_date < (SELECT d FROM hoje))::int AS vencidas
+       FROM student_contracts c
+       JOIN students s ON s.id = c.student_id
+       LEFT JOIN users u ON u.id = c.professional_id
+      WHERE c.is_active
+      ORDER BY s.full_name`,
+  );
+
+  return rows.map((r) => ({
+    contratoId: r.contrato,
+    studentId: r.student_id,
+    aluno: r.aluno,
+    ciclo: r.ciclo,
+    valorCentavos: Number(r.valor),
+    diaDeCobranca: r.dia,
+    profissional: r.profissional,
+    desde: r.desde,
+    encerrandoNoFim: r.encerrando,
+    vencidasAbertas: r.vencidas,
+  }));
+}

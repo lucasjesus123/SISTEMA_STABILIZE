@@ -73,6 +73,27 @@ export async function gerarCobrancasDoMes(
               AND c.cycle = 'MONTHLY'
               AND c.amount_cents > 0
               AND c.starts_on <= h.d
+              /* PEDIU PARA SAIR: o contrato continua valendo até o fim
+                 do período que ele já pagou, mas não gera cobrança nova.
+                 Encerrar na hora tiraria o acesso de quem pagou o mês
+                 inteiro; encerrar em silêncio no dia 30 exigiria alguém
+                 lembrar de voltar lá. */
+              AND NOT c.encerrar_no_fim_do_periodo
+              /* JÁ NÃO PAGA HÁ N MESES: para de gerar.
+                 Sem isto, um aluno que sumiu em março acumula uma
+                 mensalidade nova todo mês, para sempre — em dezembro
+                 "deve" dez meses de um serviço que não usou, e o
+                 relatório de inadimplência vira ficção. O limite é da
+                 EMPRESA: academia de bairro segura três meses, estúdio
+                 de pilates corta no primeiro. */
+              AND (
+                SELECT count(*)
+                  FROM finance_entries v
+                 WHERE v.contract_id = c.id
+                   AND v.cancelled_at IS NULL
+                   AND v.status <> 'PAID'
+                   AND v.due_date < h.d
+              ) < (SELECT parar_cobranca_apos_vencidas FROM tenants WHERE id = current_tenant_id())
               AND (c.ends_on IS NULL OR c.ends_on >= h.d)
               /* Aluno desligado não recebe cobrança nova. */
               AND s.status IN ('ACTIVE', 'LEAD')

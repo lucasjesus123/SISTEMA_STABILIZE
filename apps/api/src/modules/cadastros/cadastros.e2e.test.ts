@@ -81,6 +81,18 @@ async function tokenDe(email: string): Promise<string> {
 
 const como = (token: string) => ({ authorization: `Bearer ${token}` });
 
+/** Quantas cobranças de contrato um aluno tem. */
+async function contarCobrancas(studentId: string): Promise<number> {
+  const r = await comTenant(ids.tenant, (c) =>
+    c.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM finance_entries
+        WHERE student_id = $1 AND contract_id IS NOT NULL AND cancelled_at IS NULL`,
+      [studentId],
+    ),
+  );
+  return Number(r.rows[0]!.n);
+}
+
 suite('Cadastros da agenda e do financeiro', () => {
   beforeAll(async () => {
     process.env['NODE_ENV'] = 'test';
@@ -715,6 +727,99 @@ suite('Cadastros da agenda e do financeiro', () => {
     for (const l of linhas.rows) {
       expect(l.due_date.getDate()).toBe(20);
     }
+  });
+
+  it('para de gerar mensalidade para quem acumulou vencidas', async () => {
+    const { gerarCobrancasDoMes } = await import('../finance/cobranca-recorrente.js');
+
+    const novo = await comTenant(ids.tenant, (c) =>
+      c.query<{ id: string }>(
+        `INSERT INTO students (tenant_id, full_name) VALUES ($1,'Sumiu em março') RETURNING id`,
+        [ids.tenant],
+      ),
+    );
+    const sumido = novo.rows[0]!.id;
+
+    const hoje = new Date();
+    const primeiro = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+    await app.inject({
+      method: 'PUT',
+      url: `/api/students/${sumido}/contrato`,
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: { ciclo: 'MONTHLY', valor: '200,00', diaDeCobranca: 5, inicioEm: primeiro },
+    });
+
+    /* Três mensalidades vencidas e não pagas, o limite padrão. */
+    const contrato = await comTenant(ids.tenant, (c) =>
+      c.query<{ id: string }>(
+        'SELECT id FROM student_contracts WHERE student_id = $1 AND is_active',
+        [sumido],
+      ),
+    );
+    await comTenant(ids.tenant, (c) =>
+      c.query(
+        `INSERT INTO finance_entries
+           (tenant_id, direction, description, amount_cents, due_date, competence_date,
+            student_id, contract_id, status)
+         SELECT $1,'RECEIVABLE','Mensalidade atrasada',20000,
+                (CURRENT_DATE - (n * 30))::date, (CURRENT_DATE - (n * 30))::date,
+                $2, $3, 'OVERDUE'
+           FROM generate_series(1,3) AS n`,
+        [ids.tenant, sumido, contrato.rows[0]!.id],
+      ),
+    );
+
+    const antes = await contarCobrancas(sumido);
+    await gerarCobrancasDoMes(app.log);
+    /* Sem esta regra, o aluno que sumiu acumula uma mensalidade nova
+       todo mês para sempre, e o relatório de inadimplência vira
+       ficção. */
+    expect(await contarCobrancas(sumido)).toBe(antes);
+  });
+
+  it('quem pediu para sair não recebe cobrança nova, mas o contrato segue ativo', async () => {
+    const { gerarCobrancasDoMes } = await import('../finance/cobranca-recorrente.js');
+
+    const novo = await comTenant(ids.tenant, (c) =>
+      c.query<{ id: string }>(
+        `INSERT INTO students (tenant_id, full_name) VALUES ($1,'Vai sair') RETURNING id`,
+        [ids.tenant],
+      ),
+    );
+    const saindo = novo.rows[0]!.id;
+
+    const hoje = new Date();
+    const primeiro = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+    await app.inject({
+      method: 'PUT',
+      url: `/api/students/${saindo}/contrato`,
+      headers: como(await tokenDe(ids.emailDono)),
+      payload: { ciclo: 'MONTHLY', valor: '150,00', diaDeCobranca: 5, inicioEm: primeiro },
+    });
+    await gerarCobrancasDoMes(app.log);
+    const comCobranca = await contarCobrancas(saindo);
+
+    await comTenant(ids.tenant, (c) =>
+      c.query(
+        'UPDATE student_contracts SET encerrar_no_fim_do_periodo = true WHERE student_id = $1 AND is_active',
+        [saindo],
+      ),
+    );
+
+    /* O contrato CONTINUA ativo — ele pagou o mês e tem direito de
+       treinar até o fim. O que não acontece é nascer a mensalidade
+       seguinte. */
+    const ativo = await comTenant(ids.tenant, (c) =>
+      c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM student_contracts
+          WHERE student_id = $1 AND is_active`,
+        [saindo],
+      ),
+    );
+    expect(Number(ativo.rows[0]!.n)).toBe(1);
+
+    await gerarCobrancasDoMes(app.log);
+    expect(await contarCobrancas(saindo)).toBe(comCobranca);
   });
 
   it('recusa contrato que começa antes de um já existente, com a data no aviso', async () => {

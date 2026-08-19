@@ -9,10 +9,28 @@ import {
   baseDeComissao,
   criarLancamento,
   estornarPagamento,
+  fluxoPorMes,
+  inadimplentes,
   listarLancamentos,
+  listarRecorrencias,
+  porCategoria,
   registrarPagamento,
   resumoDoPeriodo,
 } from './finance.repository.js';
+
+/**
+ * Um campo de CSV, escapado.
+ *
+ * Aspas em volta de qualquer campo com separador, aspas ou quebra de
+ * linha, e aspas internas dobradas. Sem isto, uma descrição como
+ * `Mensalidade; 3 sessões` parte a linha em duas colunas e desloca
+ * TODAS as seguintes — o arquivo abre e os números aparecem na coluna
+ * errada, que é pior do que não abrir.
+ */
+function paraCampoCsv(valor: string): string {
+  if (!/[;"\r\n]/.test(valor)) return valor;
+  return `"${valor.replace(/"/g, '""')}"`;
+}
 
 /**
  * Rotas do financeiro.
@@ -281,6 +299,145 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  /* ==================================================================
+   * RELATÓRIOS
+   *
+   * Três blocos, na ordem em que o dono do negócio pensa: "estou
+   * melhorando?", "para onde vai o dinheiro?", "quem eu cobro hoje?".
+   * ================================================================ */
+
+  app.get('/relatorios', { preHandler: [app.authorize('finance:report:read')] }, async (request) => {
+    const query = z
+      .object({
+        de: z.coerce.date(),
+        ate: z.coerce.date(),
+        meses: z.coerce.number().int().min(3).max(24).default(12),
+      })
+      .parse(request.query);
+    if (query.ate < query.de) throw unprocessable('O fim do período precisa ser depois do início.');
+
+    return inTenant(request, async (client, principal) => {
+      const [fluxo, categorias, devendo] = await Promise.all([
+        fluxoPorMes(client, query.meses),
+        porCategoria(client, query.de, query.ate),
+        inadimplentes(client),
+      ]);
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'finance.report.read',
+        resourceType: 'report',
+        resourceId: 'relatorios',
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+      });
+
+      return {
+        data: {
+          fluxo: fluxo.map((m) => ({
+            ...m,
+            saldoCentavos: m.recebidoCentavos - m.pagoCentavos,
+          })),
+          categorias: categorias.map((c) => ({ ...c, totalFormatado: formatCents(c.totalCentavos) })),
+          inadimplentes: devendo.map((i) => ({
+            ...i,
+            devendoFormatado: formatCents(i.devendoCentavos),
+          })),
+          totalDevendoCentavos: devendo.reduce((a, i) => a + i.devendoCentavos, 0),
+        },
+      };
+    });
+  });
+
+  /* ------------------------------------------------------------------
+   * Recorrências: os contratos que geram cobrança sozinhos
+   * ---------------------------------------------------------------- */
+  app.get('/recorrencias', { preHandler: [app.authorize('finance:report:read')] }, async (request) =>
+    inTenant(request, async (client) => {
+      const linhas = await listarRecorrencias(client);
+      return {
+        data: linhas.map((r) => ({ ...r, valorFormatado: formatCents(r.valorCentavos) })),
+      };
+    }),
+  );
+
+  /* ------------------------------------------------------------------
+   * CSV — o contador do cliente sempre pede.
+   *
+   * PONTO E VÍRGULA como separador, e não vírgula. O Excel em português
+   * lê CSV com vírgula como uma coluna só, porque a vírgula já é o
+   * separador decimal daqui — o arquivo "abre", fica ilegível, e o
+   * cliente conclui que o sistema exportou errado.
+   * ---------------------------------------------------------------- */
+  app.get('/lancamentos.csv', { preHandler: [app.authorize('finance:report:read')] }, async (request, reply) => {
+    const query = z
+      .object({
+        de: z.coerce.date(),
+        ate: z.coerce.date(),
+        direcao: z.enum(['RECEIVABLE', 'PAYABLE']).optional(),
+      })
+      .parse(request.query);
+
+    return inTenant(request, async (client, principal) => {
+      const { rows } = await listarLancamentos(client, {
+        direcao: query.direcao,
+        de: query.de,
+        ate: query.ate,
+        limit: 200,
+        offset: 0,
+      });
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'finance.report.read',
+        resourceType: 'report',
+        resourceId: 'csv',
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+        metadata: { linhas: rows.length },
+      });
+
+      const cabecalho = [
+        'Vencimento',
+        'Competência',
+        'Direção',
+        'Descrição',
+        'Categoria',
+        'Aluno ou fornecedor',
+        'Valor',
+        'Pago',
+        'Situação',
+      ];
+      const linhas = rows.map((e) => [
+        e.due_date,
+        e.competence_date ?? '',
+        e.direction === 'RECEIVABLE' ? 'Receita' : 'Despesa',
+        e.description,
+        e.category ?? '',
+        e.student_name ?? e.supplier_name ?? '',
+        /* Vírgula decimal: é assim que a planilha em português espera o
+           número, e é assim que o contador soma sem reformatar nada. */
+        (e.amount_cents / 100).toFixed(2).replace('.', ','),
+        (e.paid_cents / 100).toFixed(2).replace('.', ','),
+        e.status,
+      ]);
+
+      const csv = [cabecalho, ...linhas]
+        .map((l) => l.map(paraCampoCsv).join(';'))
+        .join('\r\n');
+
+      void reply.header('Content-Type', 'text/csv; charset=utf-8');
+      void reply.header(
+        'Content-Disposition',
+        `attachment; filename="lancamentos-${query.de.toISOString().slice(0, 10)}.csv"`,
+      );
+      /* BOM no começo: sem ele o Excel abre o arquivo em Latin-1 e todo
+         "ã" vira "Ã£". O arquivo está certo; o Excel é que adivinha
+         errado sem a marca. */
+      return `\uFEFF${csv}`;
+    });
+  });
 
   /* ==================================================================
    * COMISSÕES — a aba do profissional
