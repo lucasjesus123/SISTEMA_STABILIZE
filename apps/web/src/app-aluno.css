@@ -454,3 +454,270 @@
   .app-anel-valor, .sessao-progresso span { transition: none; }
   .sessao-relogio, .app-esqueleto span, .app-esqueleto-linhas span { animation: none; }
 }
+
+/* =====================================================================
+   A ABA "EU": carteirinha, anamnese e exames
+
+   "Eu" e não "Perfil": é o que é DELE — a carteirinha que mostra na
+   catraca, o que escreveram sobre a saúde dele, os exames que mandou.
+   Não é tela de configuração.
+   ================================================================== */
+
+.app-eu {
+  display: grid;
+  gap: var(--e-5);
+  padding-bottom: var(--e-8);
+}
+
+/* ---- o pedido de foto ----------------------------------------------
+   INSISTENTE E NÃO BLOQUEANTE. Uma parede antes do app faz a pessoa
+   desistir na porta — ela abriu às seis da manhã para ver o treino, não
+   para resolver pendência de cadastro. Um aviso no rodapé nunca seria
+   lido. Este fica no alto, com cor, e some sozinho quando a foto chega.
+   ------------------------------------------------------------------ */
+.app-pedido {
+  display: grid;
+  gap: var(--e-2);
+  justify-items: start;
+  padding: var(--e-5);
+  border-radius: var(--raio-md);
+  background: linear-gradient(140deg, #1a3d40, #10282b);
+  border: 1px solid rgba(123, 226, 224, 0.28);
+  color: #eaf7f8;
+}
+.app-pedido h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #eaf7f8;
+}
+.app-pedido p {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: #b9d6d7;
+  max-width: 44ch;
+}
+
+/* ---- a carteirinha -------------------------------------------------- */
+.app-carteirinha {
+  display: grid;
+  gap: var(--e-4);
+  padding: var(--e-5);
+  border-radius: var(--raio-md);
+  background: linear-gradient(150deg, #10282b 0%, #0a1a1c 60%, #123033 100%);
+  color: #eaf7f8;
+  position: relative;
+  overflow: hidden;
+}
+.app-carteirinha::after {
+  content: '';
+  position: absolute;
+  inset: -40% -10% auto auto;
+  width: 70%;
+  height: 140%;
+  background: radial-gradient(ellipse at top right, rgba(123, 226, 224, 0.16), transparent 62%);
+  pointer-events: none;
+}
+.app-cart-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.app-cart-academia {
+  color: #8fb6b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-cart-tipo {
+  color: #7be2e0;
+  flex: none;
+}
+.app-cart-corpo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-4);
+  min-width: 0;
+}
+.app-cart-retrato {
+  width: 4.5rem;
+  height: 4.5rem;
+  flex: none;
+  border-radius: var(--raio-md);
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #9fc4c6;
+  font-size: 1.6rem;
+  font-weight: 500;
+}
+.app-cart-nome {
+  display: block;
+  font-size: var(--t-md);
+  font-weight: 600;
+  line-height: 1.2;
+}
+/* O CÓDIGO GRANDE: é o número que a recepção pede na catraca, e o aluno
+   mostra a tela — não decora. */
+.app-cart-codigo {
+  display: block;
+  margin-top: 3px;
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: #7be2e0;
+  font-variant-numeric: tabular-nums;
+}
+.app-cart-rodape {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+  font-size: var(--t-xs);
+  color: #8fb6b8;
+}
+
+/* ---- blocos --------------------------------------------------------- */
+.app-bloco {
+  display: grid;
+  gap: var(--e-3);
+  justify-items: stretch;
+}
+/* O MESMO TRATAMENTO DAS OUTRAS SEÇÕES DO APP: caixa alta pequena e
+   cinza-claro. Herdando o `h2` cru, o título saía com a cor de texto do
+   sistema — grafite escuro sobre o fundo quase preto do aplicativo,
+   praticamente invisível. */
+.app-bloco h2 {
+  margin: 0 0 2px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8fa5a7;
+}
+.app-nota,
+.app-vazio {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #8fa5a7;
+  max-width: 52ch;
+  text-align: left;
+}
+
+.app-anamnese {
+  border: 1px solid var(--app-fio, rgba(255, 255, 255, 0.1));
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+.app-anamnese-topo {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.app-anamnese-corpo {
+  display: grid;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0 var(--e-4) var(--e-4);
+}
+.app-anamnese-corpo dt {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--app-texto-apoio, #8fa5a7);
+}
+.app-anamnese-corpo dd {
+  margin: 2px 0 0;
+}
+
+.app-campo {
+  display: grid;
+  gap: 5px;
+}
+.app-campo span {
+  font-size: var(--t-sm);
+  color: var(--app-texto-apoio, #8fa5a7);
+}
+.app-campo input {
+  padding: var(--e-3);
+  border-radius: var(--raio);
+  border: 1px solid var(--app-fio, rgba(255, 255, 255, 0.14));
+  background: var(--app-campo-fundo, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  font: inherit;
+}
+
+.app-botao,
+.app-botao-fraco {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--e-3) var(--e-5);
+  border-radius: var(--raio);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.app-botao {
+  background: #7be2e0;
+  color: #06191b;
+}
+.app-botao-fraco {
+  border-color: var(--app-fio, rgba(255, 255, 255, 0.18));
+  color: inherit;
+}
+.app-botao input[type='file'],
+.app-botao-fraco input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.app-exames {
+  list-style: none;
+  margin: var(--e-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--e-2);
+}
+.app-exames li {
+  display: grid;
+  gap: 1px;
+  padding: var(--e-3);
+  border-radius: var(--raio);
+  background: var(--app-campo-fundo, rgba(255, 255, 255, 0.04));
+}
+.app-exame-nome {
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+.app-exame-meta {
+  font-size: var(--t-xs);
+  color: var(--app-texto-apoio, #8fa5a7);
+}
+
+.app-erro-linha {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: #ff9c8d;
+}
+.app-carregando {
+  padding: var(--e-6);
+  text-align: center;
+  color: var(--app-texto-apoio, #8fa5a7);
+}

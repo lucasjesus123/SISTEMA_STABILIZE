@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { MeuProntuario } from './MeuProntuario.jsx';
 import {
   ApiError,
   agendar,
@@ -48,7 +49,7 @@ import { Marca } from './Marca.jsx';
  * de "estou treinando com o aplicativo na mão".
  */
 
-type Aba = 'hoje' | 'treino' | 'agenda';
+type Aba = 'hoje' | 'treino' | 'agenda' | 'eu';
 
 export function Aplicativo({ nome, aoSair }: { nome: string; aoSair: () => void }): ReactNode {
   const [aba, setAba] = useState<Aba>('hoje');
@@ -117,6 +118,8 @@ export function Aplicativo({ nome, aoSair }: { nome: string; aoSair: () => void 
             aoTreinar={(dia) => setEmSessao({ dia })}
             aoIrParaAgenda={() => setAba('agenda')}
           />
+        ) : aba === 'eu' ? (
+          <MeuProntuario />
         ) : aba === 'treino' ? (
           <TelaTreino treino={treino} aoTreinar={(dia) => setEmSessao({ dia })} />
         ) : (
@@ -137,6 +140,9 @@ export function Aplicativo({ nome, aoSair }: { nome: string; aoSair: () => void 
             ['hoje', 'Hoje', 'M3 10.5 12 3l9 7.5V21H3z'],
             ['treino', 'Treino', 'M6.5 6.5v11M17.5 6.5v11M3 9v6M21 9v6M6.5 12h11'],
             ['agenda', 'Agenda', 'M4 5h16v16H4zM4 9h16M9 3v4M15 3v4'],
+            /* "Eu" e não "Perfil": é a carteirinha, a anamnese e os
+               exames — o que é DELE, não uma tela de configuração. */
+            ['eu', 'Eu', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21a8 8 0 0 1 16 0'],
           ] as const
         ).map(([id, rotulo, desenho]) => (
           <button

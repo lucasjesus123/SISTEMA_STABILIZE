@@ -264,16 +264,22 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
               pílula usando placeholder. Placeholder NÃO é rótulo: ele
               some quando a pessoa começa a digitar, e quem usa leitor de
               tela nunca o ouve como nome do campo. */}
+          {/* `type="text"` e não `type="email"`: o ALUNO entra pelo
+              CPF, e um campo de e-mail rejeitaria "12345678909" na
+              validação do próprio navegador — antes de a requisição
+              sair. O `inputMode` continua sugerindo o teclado de
+              e-mail, que tem a arroba e os números à mão. */}
           <label className="campo-pilula">
-            <span className="apenas-leitor-de-tela">E-mail</span>
+            <span className="apenas-leitor-de-tela">E-mail ou CPF</span>
             <input
-              type="email"
+              type="text"
+              inputMode="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
               required
               autoFocus
-              placeholder="E-mail"
+              placeholder="E-mail ou CPF"
             />
           </label>
 
@@ -1212,6 +1218,24 @@ function Ficha({
           >
             Ficha em PDF
           </button>
+          {/* O PROGRESSO É OUTRO DOCUMENTO. A ficha é o cadastro de
+              hoje; o progresso é a linha do tempo com os gráficos, e
+              cabe a quem acompanha a evolução — por isso depende de
+              `evolution:read` e não de `student:read`. */}
+          {pode('evolution:read') && (
+            <button
+              type="button"
+              className="botao-secundario"
+              onClick={() =>
+                void baixarRelatorio(
+                  `/api/relatorios/progresso/${f.id}`,
+                  `progresso-${f.nome}.pdf`,
+                )
+              }
+            >
+              Progresso em PDF
+            </button>
+          )}
           <button type="button" className="botao-acao" onClick={aoEditar}>
             Editar
           </button>

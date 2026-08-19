@@ -6,6 +6,7 @@ import { badRequest, notFound } from '../../http/errors.js';
 import { assertStudentInScope } from '../students/students.repository.js';
 import {
   anexoParaLeitura,
+  editarAnexo,
   excluirAnexo,
   listarAnexos,
   registrarAnexo,
@@ -237,6 +238,55 @@ export async function attachmentsRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * DELETE /api/students/:id/anexos/:anexoId
    * ---------------------------------------------------------------- */
+  /* ------------------------------------------------------------------
+   * PATCH /api/students/:id/anexos/:anexoId — corrige o que descreve
+   *
+   * SÓ OS METADADOS. O arquivo tem checksum gravado e é peça de
+   * prontuário; trocar os bytes por baixo de um registro já lido e
+   * auditado apagaria a prova do que estava lá. Exame errado se corrige
+   * enviando outro e apagando o primeiro — as duas ações ficam no log.
+   * ---------------------------------------------------------------- */
+  app.patch(
+    '/:id/anexos/:anexoId',
+    { preHandler: [app.authorize('attachment:write')] },
+    async (request) => {
+      const { id, anexoId } = z
+        .object({
+          id: z.string().uuid('Identificador inválido'),
+          anexoId: z.string().uuid('Identificador inválido'),
+        })
+        .parse(request.params);
+      const body = z
+        .object({
+          descricao: z.string().trim().max(500).nullish().transform((v) => v || null),
+          categoria: z.string().trim().max(80).nullish().transform((v) => v || null),
+          dataDoDocumento: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.')
+            .nullish()
+            .transform((v) => v ?? null),
+        })
+        .parse(request.body);
+      const scope = requireScope(request);
+
+      return inTenant(request, async (client, principal) => {
+        const ok = await editarAnexo(client, scope, id, anexoId, body, principal.userId);
+        if (!ok) throw notFound('Anexo');
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'attachment.upload',
+          resourceType: 'attachment',
+          resourceId: anexoId,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: { editou: true, alunoId: id },
+        });
+        return { ok: true };
+      });
+    },
+  );
+
   app.delete(
     '/:id/anexos/:anexoId',
     { preHandler: [app.authorize('attachment:delete')] },

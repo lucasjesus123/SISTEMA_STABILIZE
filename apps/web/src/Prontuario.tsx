@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Carregando, Vazio } from './ui.jsx';
 import {
   ApiError,
+  editarAnexo,
   baixarAnexo,
   buscarAnamnese,
   buscarAnexos,
@@ -593,6 +594,7 @@ export function AbaAnexos({
   const [descricao, setDescricao] = useState('');
   const [baixando, setBaixando] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [editando, setEditando] = useState<string | null>(null);
   const entrada = useRef<HTMLInputElement>(null);
 
   const carregar = async (): Promise<void> => {
@@ -734,11 +736,39 @@ export function AbaAnexos({
                 <span className="anexo-detalhe">
                   {a.categoria !== null && `${rotuloCategoria(a.categoria)} · `}
                   {tamanho(a.tamanhoBytes)}
-                  {a.enviadoPor !== null && ` · ${a.enviadoPor}`}
-                  {` · ${formatarData(a.criadoEm)}`}
+                  {/* A DATA DO DOCUMENTO na frente da do envio: um exame
+                      de janeiro digitalizado em julho pertence a janeiro
+                      na leitura do prontuário. */}
+                  {a.dataDoDocumento != null
+                    ? ` · documento de ${a.dataDoDocumento.split('-').reverse().join('/')}`
+                    : ''}
+                  {a.enviadoPor !== null && ` · enviado por ${a.enviadoPor}`}
+                  {` em ${formatarData(a.criadoEm)}`}
                 </span>
                 {a.descricao !== null && <span className="anexo-descricao">{a.descricao}</span>}
+                {/* QUEM MEXEU POR ÚLTIMO. `enviadoPor` diz quem mandou o
+                    arquivo e isso não muda nunca; esta linha diz quem
+                    corrigiu a descrição depois. Sem a distinção, quem
+                    confere vai atrás da pessoa errada. */}
+                {a.editadoPor != null && a.editadoEm != null && (
+                  <span className="anexo-editado">
+                    descrição corrigida por {a.editadoPor} em {formatarData(a.editadoEm)}
+                  </span>
+                )}
+                {a.enviadoPeloAluno === true && (
+                  <span className="anexo-origem">enviado pelo próprio aluno</span>
+                )}
               </div>
+
+              {podeEnviar && (
+                <button
+                  type="button"
+                  className="botao-texto"
+                  onClick={() => setEditando(editando === a.id ? null : a.id)}
+                >
+                  {editando === a.id ? 'fechar' : 'editar'}
+                </button>
+              )}
 
               {podeExcluir &&
                 (confirmando === a.id ? (
@@ -768,6 +798,17 @@ export function AbaAnexos({
                     excluir
                   </button>
                 ))}
+
+              {editando === a.id && (
+                <FormularioDeAnexo
+                  alunoId={alunoId}
+                  anexo={a}
+                  aoSalvar={() => {
+                    setEditando(null);
+                    void carregar();
+                  }}
+                />
+              )}
             </li>
           ))}
         </ul>
@@ -785,4 +826,90 @@ function tamanho(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/* ====================================================================
+ * Corrigir o que descreve um anexo
+ * ================================================================== */
+
+/**
+ * Edita descrição, categoria e data do documento — nunca o arquivo.
+ *
+ * O ARQUIVO É IMUTÁVEL de propósito. Ele tem checksum gravado e é peça
+ * de prontuário; trocar os bytes por baixo de um registro já lido e
+ * auditado apagaria a prova do que estava lá. Exame errado se corrige
+ * enviando outro e apagando o primeiro — as duas ações ficam no log, a
+ * substituição silenciosa não ficaria.
+ */
+function FormularioDeAnexo({
+  alunoId,
+  anexo,
+  aoSalvar,
+}: {
+  alunoId: string;
+  anexo: Anexo;
+  aoSalvar: () => void;
+}): ReactNode {
+  const [descricao, setDescricao] = useState(anexo.descricao ?? '');
+  const [categoria, setCategoria] = useState(anexo.categoria ?? '');
+  const [data, setData] = useState(anexo.dataDoDocumento ?? '');
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  const enviar = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setErro(null);
+    setSalvando(true);
+    try {
+      await editarAnexo(alunoId, anexo.id, {
+        descricao: descricao.trim() === '' ? null : descricao.trim(),
+        categoria: categoria.trim() === '' ? null : categoria.trim(),
+        dataDoDocumento: data === '' ? null : data,
+      });
+      aoSalvar();
+    } catch (x) {
+      setErro(x instanceof ApiError ? x.message : 'Não foi possível salvar.');
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <form className="anexo-form" onSubmit={(e) => void enviar(e)}>
+      <label className="campo">
+        <span className="campo-rotulo">O que é este arquivo</span>
+        <input
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+          placeholder="Hemograma completo"
+          autoFocus
+          maxLength={500}
+        />
+      </label>
+      <label className="campo">
+        <span className="campo-rotulo">Categoria</span>
+        <input
+          value={categoria}
+          onChange={(e) => setCategoria(e.target.value)}
+          placeholder="Exame, laudo, receita…"
+          maxLength={80}
+        />
+      </label>
+      <label className="campo">
+        <span className="campo-rotulo">Data do documento</span>
+        <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+        {/* A DATA DO DOCUMENTO, não a do envio: um exame de janeiro
+            digitalizado em julho pertence a janeiro na linha do tempo
+            clínica, e é por ela que a lista se ordena. */}
+        <span className="campo-dica">Quando o exame foi feito, não quando foi enviado.</span>
+      </label>
+      <button type="submit" className="botao-acao" disabled={salvando}>
+        {salvando ? 'Salvando…' : 'Salvar'}
+      </button>
+      {erro !== null && (
+        <p className="mensagem-erro anexo-form-erro" role="alert">
+          {erro}
+        </p>
+      )}
+    </form>
+  );
 }

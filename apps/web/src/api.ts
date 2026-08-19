@@ -438,6 +438,10 @@ export const editarEvolucao = (
  * ------------------------------------------------------------------ */
 
 export interface Anexo {
+  dataDoDocumento?: string | null;
+  editadoPor?: string | null;
+  editadoEm?: string | null;
+  enviadoPeloAluno?: boolean;
   id: string;
   nome: string;
   tipo: string;
@@ -1368,3 +1372,83 @@ export async function baixarCsvDoFinanceiro(de: Date, ate: Date): Promise<void> 
     `lancamentos-${iso(de)}.csv`,
   );
 }
+
+/* ====================================================================
+ * O PRONTUÁRIO PELO APLICATIVO DO ALUNO
+ *
+ * Nenhuma destas rotas leva o id dele: ele sai do token. O que não é
+ * parâmetro não é adulterável.
+ * ================================================================== */
+
+export interface MinhaCarteirinha {
+  nome: string;
+  codigo: string | null;
+  status: string;
+  temFoto: boolean;
+  academia: string;
+  desde: string | null;
+}
+
+export const buscarMinhaCarteirinha = () =>
+  api<{ data: MinhaCarteirinha }>('/api/eu/carteirinha');
+
+export async function baixarMinhaFoto(): Promise<string | null> {
+  const r = await fetch('/api/eu/foto', {
+    headers: accessToken === null ? {} : { Authorization: `Bearer ${accessToken}` },
+    credentials: 'same-origin',
+  });
+  if (!r.ok) return null;
+  return URL.createObjectURL(await r.blob());
+}
+
+export async function enviarMinhaFoto(arquivo: File): Promise<void> {
+  const corpo = new FormData();
+  corpo.append('arquivo', arquivo);
+  await api<{ ok: boolean }>('/api/eu/foto', { method: 'POST', body: corpo });
+}
+
+export interface MinhaAnamnese {
+  id: string;
+  respostas: Record<string, unknown>;
+  criadoEm: string;
+  profissional: string | null;
+}
+
+export const buscarMinhasAnamneses = () =>
+  api<{ data: MinhaAnamnese[] }>('/api/eu/anamneses');
+
+export interface MeuExame {
+  id: string;
+  nome: string;
+  tipo: string;
+  tamanhoBytes: number;
+  descricao: string | null;
+  dataDoDocumento: string | null;
+  criadoEm: string;
+}
+
+export const buscarMeusExames = () => api<{ data: MeuExame[] }>('/api/eu/exames');
+
+export async function enviarMeuExame(arquivo: File, descricao: string): Promise<void> {
+  const corpo = new FormData();
+  /* A descrição vai ANTES do arquivo no multipart: o servidor lê o
+     fluxo em ordem, e um campo de texto depois do arquivo já chegaria
+     tarde demais para ser lido junto com ele. */
+  corpo.append('descricao', descricao);
+  corpo.append('arquivo', arquivo);
+  await api<{ data: { id: string } }>('/api/eu/exames', { method: 'POST', body: corpo });
+}
+
+/* --------------------------------------------------------------------
+ * Anexos: corrigir o que descreve
+ * ------------------------------------------------------------------ */
+
+export const editarAnexo = (
+  alunoId: string,
+  anexoId: string,
+  dados: { descricao: string | null; categoria: string | null; dataDoDocumento: string | null },
+) =>
+  api<{ ok: boolean }>(`/api/students/${alunoId}/anexos/${anexoId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(dados),
+  });

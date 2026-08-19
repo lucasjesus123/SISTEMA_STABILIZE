@@ -15,7 +15,9 @@ import { medidasRoutes } from './modules/medidas/medidas.routes.js';
 import { exercisesRoutes, workoutsRoutes } from './modules/workouts/workouts.routes.js';
 import { whatsappRoutes } from './modules/whatsapp/whatsapp.routes.js';
 import { reportsRoutes } from './modules/reports/reports.routes.js';
+import { progressoRoutes } from './modules/reports/progresso.routes.js';
 import { portalRoutes } from './modules/portal/portal.routes.js';
+import { prontuarioDoAlunoRoutes } from './modules/portal/prontuario.routes.js';
 import { perfilRoutes } from './modules/perfil/perfil.routes.js';
 import { cepRoutes } from './modules/cep/cep.routes.js';
 import { plataformaRoutes } from './modules/plataforma/plataforma.routes.js';
@@ -190,9 +192,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(exercisesRoutes, { prefix: '/api/exercises' });
   await app.register(whatsappRoutes, { prefix: '/api/whatsapp' });
   await app.register(reportsRoutes, { prefix: '/api/relatorios' });
+  /* O PDF de progresso, com as séries em gráfico. Separado porque é o
+     único relatório que desenha, e desenhar tem regras próprias. */
+  await app.register(progressoRoutes, { prefix: '/api/relatorios' });
   /* O portal do aluno. A URL não tem id de aluno em lugar nenhum: ele
      vem do token, e o que não é parâmetro não é adulterável. */
   await app.register(portalRoutes, { prefix: '/api/eu' });
+  /* O que o aluno alcança do próprio prontuário: carteirinha, foto,
+     anamneses em leitura e os exames que ele mesmo envia. Nenhuma URL
+     leva o id dele — ele sai do token. */
+  await app.register(prontuarioDoAlunoRoutes, { prefix: '/api/eu' });
   /* O perfil da própria pessoa, seja ela dona, recepcionista ou aluno.
      Como o portal, não carrega id na URL: o id vem do token. */
   await app.register(perfilRoutes, { prefix: '/api/perfil' });

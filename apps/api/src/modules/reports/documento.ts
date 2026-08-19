@@ -297,3 +297,148 @@ export function paraBuffer(doc: Documento): Promise<Buffer> {
     doc.on('error', rejeitar);
   });
 }
+
+/* --------------------------------------------------------------------
+ * Gráficos
+ *
+ * DESENHADOS À MÃO no próprio PDF, sem biblioteca de gráfico e sem
+ * gerar imagem. Duas razões: uma biblioteca de gráfico para servidor
+ * arrasta um runtime de navegador inteiro (Chromium headless) só para
+ * produzir um PNG de trezentos pixels; e um PNG embutido fica borrado
+ * quando alguém imprime ou dá zoom, enquanto linha e retângulo em PDF
+ * são vetor e continuam nítidos em qualquer tamanho.
+ * ------------------------------------------------------------------ */
+
+export interface PontoDoGrafico {
+  rotulo: string;
+  valor: number;
+}
+
+/**
+ * Linha da evolução de uma medida ao longo do tempo.
+ *
+ * A ESCALA NÃO COMEÇA EM ZERO, e é deliberado. Peso de 74 a 78 kg num
+ * eixo que começa em zero vira uma linha reta — a variação que importa
+ * some dentro da escala. Começar na faixa dos dados é o que torna a
+ * mudança visível, e a legenda diz os extremos para ninguém ler a
+ * inclinação como se fosse proporção.
+ */
+export function graficoDeLinha(
+  doc: Documento,
+  titulo: string,
+  pontos: PontoDoGrafico[],
+  formatar: (v: number) => string,
+): void {
+  if (pontos.length < 2) return;
+  garantirEspaco(doc, 150);
+
+  const alturaGrafico = 92;
+  const topo = doc.y + 16;
+  const esquerda = MARGEM + 46;
+  const largura = LARGURA_UTIL - 46;
+
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(GRAFITE).text(titulo, MARGEM, doc.y);
+
+  const valores = pontos.map((p) => p.valor);
+  const menor = Math.min(...valores);
+  const maior = Math.max(...valores);
+  /* Faixa mínima para uma série constante não virar divisão por zero e
+     desenhar a linha no topo do quadro. */
+  const faixa = maior - menor || Math.max(1, Math.abs(maior) * 0.1);
+  const emY = (v: number): number => topo + alturaGrafico - ((v - menor) / faixa) * alturaGrafico;
+
+  // Grade horizontal em três níveis, e os rótulos à esquerda.
+  for (const fracao of [0, 0.5, 1]) {
+    const v = menor + faixa * fracao;
+    const y = emY(v);
+    doc.strokeColor(FIO).lineWidth(0.5).moveTo(esquerda, y).lineTo(esquerda + largura, y).stroke();
+    doc
+      .font('Helvetica')
+      .fontSize(6.5)
+      .fillColor(APOIO)
+      .text(formatar(v), MARGEM, y - 3, { width: 42, align: 'right' });
+  }
+
+  const emX = (i: number): number => esquerda + (largura / (pontos.length - 1)) * i;
+
+  doc.strokeColor(MENTA).lineWidth(1.4);
+  pontos.forEach((p, i) => {
+    const x = emX(i);
+    const y = emY(p.valor);
+    if (i === 0) doc.moveTo(x, y);
+    else doc.lineTo(x, y);
+  });
+  doc.stroke();
+
+  pontos.forEach((p, i) => {
+    doc.circle(emX(i), emY(p.valor), 2).fillColor(MENTA).fill();
+  });
+
+  /* Só o primeiro e o último rótulo: com doze avaliações, escrever as
+     doze datas embaixo produz uma tarja ilegível. */
+  doc
+    .font('Helvetica')
+    .fontSize(6.5)
+    .fillColor(APOIO)
+    .text(pontos[0]!.rotulo, esquerda, topo + alturaGrafico + 5, { width: 60 })
+    .text(pontos[pontos.length - 1]!.rotulo, esquerda + largura - 60, topo + alturaGrafico + 5, {
+      width: 60,
+      align: 'right',
+    });
+
+  doc.y = topo + alturaGrafico + 22;
+}
+
+/**
+ * Barras verticais para uma série curta — frequência por mês, por
+ * exemplo. Ao contrário da linha, ESTA escala começa em zero: barra é
+ * comparação de tamanho, e cortar a base faz duas barras parecerem o
+ * dobro uma da outra quando são 10% diferentes.
+ */
+export function graficoDeBarras(
+  doc: Documento,
+  titulo: string,
+  pontos: PontoDoGrafico[],
+  formatar: (v: number) => string,
+): void {
+  if (pontos.length === 0) return;
+  garantirEspaco(doc, 140);
+
+  const altura = 78;
+  const topo = doc.y + 16;
+  const esquerda = MARGEM;
+  const largura = LARGURA_UTIL;
+
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(GRAFITE).text(titulo, MARGEM, doc.y);
+
+  const maior = Math.max(1, ...pontos.map((p) => p.valor));
+  const passo = largura / pontos.length;
+  const larguraBarra = Math.min(22, passo * 0.55);
+
+  pontos.forEach((p, i) => {
+    const alturaBarra = (p.valor / maior) * altura;
+    const x = esquerda + passo * i + (passo - larguraBarra) / 2;
+    const y = topo + altura - alturaBarra;
+
+    doc.rect(x, y, larguraBarra, Math.max(1, alturaBarra)).fillColor(MENTA).fill();
+    doc
+      .font('Helvetica')
+      .fontSize(6.5)
+      .fillColor(APOIO)
+      .text(p.rotulo, esquerda + passo * i, topo + altura + 4, { width: passo, align: 'center' });
+    if (p.valor > 0) {
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(6.5)
+        .fillColor(GRAFITE)
+        .text(formatar(p.valor), esquerda + passo * i, y - 9, { width: passo, align: 'center' });
+    }
+  });
+
+  doc.strokeColor(FIO).lineWidth(0.5)
+    .moveTo(esquerda, topo + altura)
+    .lineTo(esquerda + largura, topo + altura)
+    .stroke();
+
+  doc.y = topo + altura + 20;
+}
