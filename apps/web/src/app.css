@@ -2388,46 +2388,14 @@
   gap: var(--e-2);
 }
 
-.ag-filtros {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--e-5);
-  margin: var(--e-5) 0 var(--e-4);
-  flex-wrap: wrap;
-}
-.ag-filtro {
-  margin-bottom: 0;
-  min-width: 11rem;
-}
-.ag-filtro select {
-  width: 100%;
-  padding: var(--e-2) var(--e-3);
-  border: 1px solid var(--fio-forte);
-  border-radius: var(--raio);
-  background: var(--superficie-alta);
-  color: var(--texto);
-  font-size: var(--t-sm);
-}
-.ag-legenda {
-  display: flex;
-  gap: var(--e-4);
-  flex-wrap: wrap;
-  margin-left: auto;
-  padding-bottom: var(--e-2);
-}
-.ag-legenda-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--t-sm);
-  color: var(--texto-corpo);
-}
-.ag-ponto {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
+/* As regras antigas de `.ag-filtros`, `.ag-filtro`, `.ag-legenda` e
+   `.ag-ponto` viviam aqui e foram REESCRITAS mais abaixo, na seção da
+   passada de layout. Foram removidas daqui em vez de sobrescritas: a
+   antiga trazia `margin: var(--e-5) 0 var(--e-4)`, e como a nova não
+   redeclara `margin`, aquele espaço de baixo sobrevivia e abria uma
+   fresta entre o cartão dos filtros e o da legenda — que existem
+   justamente para parecer uma peça só. Duas regras para a mesma classe
+   em pontos distantes do arquivo é como esse tipo de defeito nasce. */
 
 .ag-grade {
   --ag-linha: 28px;
@@ -4553,3 +4521,193 @@
   font-size: var(--t-sm);
 }
 .fin-baixa-tirar:hover { border-color: var(--erro); color: var(--erro); }
+
+/* ====================================================================
+   AGENDA, PRONTUÁRIO E TREINO — a passada que faltava
+
+   As três telas já moravam dentro da casca nova, mas por dentro tinham
+   ficado como estavam: controles soltos no fundo da página, formulários
+   sem título, estados vazios que eram só uma frase cinza. O que muda
+   aqui é composição — nenhuma delas ganha função nova.
+   ================================================================== */
+
+/* -------------------------------------------------------------------
+   Agenda: o resumo da semana
+   ----------------------------------------------------------------- */
+
+.ag-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-6);
+  padding: var(--e-4) var(--e-5);
+  margin-bottom: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+}
+.ag-resumo-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.1;
+}
+.ag-resumo-item strong {
+  font-size: var(--t-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+.ag-resumo-item span {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+}
+.ag-resumo-item.destaque strong { color: var(--teal); }
+/* Zero faltas não é uma boa notícia para pintar de vermelho — é a
+   ausência de notícia. A cor só entra quando há alguém para ligar. */
+.ag-resumo-item.alerta strong { color: var(--erro); }
+
+/* -------------------------------------------------------------------
+   Agenda: filtros e legenda
+   ----------------------------------------------------------------- */
+
+.ag-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-4);
+  padding: var(--e-4) var(--e-5);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md) var(--raio-md) 0 0;
+  border-bottom: none;
+  background: var(--superficie-alta);
+}
+.ag-filtro { min-width: 200px; }
+.ag-filtro select {
+  width: 100%;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--texto);
+  font-size: var(--t-sm);
+  font-family: inherit;
+}
+.ag-filtro select:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--realce-teclado);
+}
+
+.ag-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-4);
+  padding: var(--e-3) var(--e-5);
+  margin-bottom: var(--e-5);
+  border: 1px solid var(--fio);
+  border-radius: 0 0 var(--raio-md) var(--raio-md);
+  background: var(--superficie-baixa);
+}
+.ag-legenda-titulo {
+  font-size: var(--t-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+}
+.ag-legenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+}
+.ag-ponto {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--raio-pilula);
+  flex: none;
+}
+
+/* -------------------------------------------------------------------
+   Prontuário: o formulário de evolução ganha cabeçalho e moldura
+   ----------------------------------------------------------------- */
+
+.evolucao-nova {
+  padding: var(--e-5);
+  margin-bottom: var(--e-6);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+  /* Some a linha de baixo que fazia as vezes de moldura. */
+  border-bottom: 1px solid var(--fio);
+}
+.evolucao-nova-topo h3 {
+  font-size: var(--t-md);
+  font-weight: 700;
+  color: var(--texto);
+  margin: 0 0 var(--e-1);
+}
+.evolucao-nova-topo p {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  margin: 0 0 var(--e-2);
+}
+
+/* -------------------------------------------------------------------
+   Estados vazios: eram uma frase cinza no meio do nada
+   ----------------------------------------------------------------- */
+
+/* A CLASSE É `estado-vazio`, e não `vazio` — esta última é do gráfico
+   sem dados, em ui.tsx. Escrever a regra na classe errada teria deixado
+   tudo exatamente como estava, e a tela continuaria mostrando uma frase
+   cinza solta no meio do nada. */
+.estado-vazio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  padding: var(--e-6) var(--e-5);
+  border: 1px dashed var(--fio-forte);
+  border-radius: var(--raio-md);
+  background: var(--superficie-baixa);
+  max-width: 62ch;
+}
+.estado-vazio h3 {
+  font-size: var(--t-md);
+  font-weight: 700;
+  color: var(--texto);
+  margin-bottom: 0;
+}
+.estado-vazio p {
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  color: var(--texto-apoio);
+  margin-bottom: 0;
+}
+
+.prontuario-vazio { display: grid; justify-items: start; gap: var(--e-4); }
+
+/* -------------------------------------------------------------------
+   Treino: um cabeçalho só
+   ----------------------------------------------------------------- */
+
+.treino-topo-acoes {
+  display: flex;
+  gap: var(--e-3);
+  align-items: center;
+  flex: none;
+}
+
+/* O botão grande desabilitado precisa parecer INERTE, e não apagado.
+   No tema escuro o cinza padrão do `:disabled` virava uma laje clara
+   maior que o próprio cartão, com o texto quase invisível dentro — o
+   contrário do que "não dá para clicar ainda" deveria comunicar. */
+.botao-acao.grande:disabled {
+  background: var(--superficie-realce);
+  border: 1px solid var(--fio);
+  color: var(--texto-apoio);
+  box-shadow: none;
+}

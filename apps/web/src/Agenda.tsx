@@ -201,6 +201,8 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
         </div>
       </div>
 
+      <ResumoDaSemana compromissos={compromissos} />
+
       <div className="ag-filtros">
         <label className="campo ag-filtro">
           <span className="campo-rotulo">Profissional</span>
@@ -231,16 +233,23 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
           </label>
         )}
 
-        <div className="ag-legenda">
-          {equipe
-            .filter((p) => p.ativo)
-            .map((p) => (
-              <span key={p.id} className="ag-legenda-item">
-                <span className="ag-ponto" style={{ background: cores.get(p.id) }} />
-                {p.nome}
-              </span>
-            ))}
-        </div>
+      </div>
+
+      {/* A LEGENDA SAIU DA LINHA DOS FILTROS. Ela não é um controle — não
+          se clica nela e não muda nada — e ficar ao lado de dois seletores
+          fazia com que parecesse uma terceira coisa selecionável. Numa
+          linha própria, embaixo, ela é o que é: o dicionário das cores da
+          grade. */}
+      <div className="ag-legenda">
+        <span className="ag-legenda-titulo">Cores</span>
+        {equipe
+          .filter((p) => p.ativo)
+          .map((p) => (
+            <span key={p.id} className="ag-legenda-item">
+              <span className="ag-ponto" style={{ background: cores.get(p.id) }} />
+              {p.nome}
+            </span>
+          ))}
       </div>
 
       {erro !== null && <Erro mensagem={erro} />}
@@ -268,6 +277,66 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
         />
       )}
     </>
+  );
+}
+
+/* ====================================================================
+ * O resumo da semana
+ * ================================================================== */
+
+/**
+ * A GRADE RESPONDE "QUANDO", E NÃO RESPONDE "QUANTO". Para saber se a
+ * semana está cheia era preciso contar retângulos com o dedo na tela — e
+ * ninguém conta, então ninguém sabia. Quatro números resolvem: quantos
+ * atendimentos, quantos ainda vêm, quantos vieram e quantas faltas.
+ *
+ * FALTA É O NÚMERO QUE VIRA TRABALHO. Aparece em vermelho quando existe
+ * e apagado quando é zero, porque uma semana com sete faltas é uma
+ * semana em que alguém precisa ligar para sete pessoas.
+ */
+function ResumoDaSemana({ compromissos }: { compromissos: api.Compromisso[] }): ReactNode {
+  if (compromissos.length === 0) return null;
+
+  const conta = (status: string): number =>
+    compromissos.filter((c) => c.status === status).length;
+  const vieram = conta('ATTENDED');
+  const faltaram = conta('NO_SHOW');
+  const cancelados = conta('CANCELLED');
+  /* Marcados que ainda não tiveram desfecho. Contar por data seria mais
+     preciso e mais frágil: o fuso do navegador não é o da academia. */
+  const porVir = compromissos.length - vieram - faltaram - cancelados;
+
+  /* A taxa só existe depois que alguma sessão teve desfecho. "0% de
+     presença" numa segunda de manhã é informação falsa apresentada com
+     dois dígitos de precisão. */
+  const comDesfecho = vieram + faltaram;
+  const presenca = comDesfecho === 0 ? null : Math.round((vieram / comDesfecho) * 100);
+
+  return (
+    <div className="ag-resumo">
+      <span className="ag-resumo-item">
+        <strong>{compromissos.length}</strong>
+        <span>na semana</span>
+      </span>
+      <span className="ag-resumo-item">
+        <strong>{porVir}</strong>
+        <span>ainda vêm</span>
+      </span>
+      <span className="ag-resumo-item">
+        <strong>{vieram}</strong>
+        <span>compareceram</span>
+      </span>
+      <span className={`ag-resumo-item ${faltaram > 0 ? 'alerta' : ''}`}>
+        <strong>{faltaram}</strong>
+        <span>{faltaram === 1 ? 'falta' : 'faltas'}</span>
+      </span>
+      {presenca !== null && (
+        <span className="ag-resumo-item destaque">
+          <strong>{presenca}%</strong>
+          <span>de presença</span>
+        </span>
+      )}
+    </div>
   );
 }
 

@@ -425,6 +425,14 @@ export function AbaEvolucao({
 
       {podeEscrever && (
         <div className="evolucao-nova formulario">
+          {/* O FORMULÁRIO PRECISAVA DE UM TÍTULO. Sem ele, quem abria a
+              aba via três campos soltos flutuando na página e levava um
+              instante para entender se aquilo era o histórico do aluno
+              ou um formulário em branco. Uma linha resolve. */}
+          <div className="evolucao-nova-topo campo-cheia">
+            <h3>Registrar atendimento de hoje</h3>
+            <p>O que ficar escrito aqui é o que explica o resultado daqui a três meses.</p>
+          </div>
           <label className="campo campo-terco">
             <span className="campo-rotulo">Data do atendimento</span>
             <input type="date" value={data} onChange={(e) => setData(e.target.value)} />

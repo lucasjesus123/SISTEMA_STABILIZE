@@ -202,11 +202,18 @@ export function AbaTreino({
             </div>
           </div>
         ) : (
-          <div className="treino-acoes">
-            <button type="button" className="botao-secundario" onClick={() => setCriando(true)}>
-              Novo treino
-            </button>
-          </div>
+          /* O BOTÃO SOLTO SÓ APARECE QUANDO NÃO HÁ TREINO ABERTO. Com um
+             treino na tela ele ia para cima do cabeçalho do treino e a
+             seção passava a ter dois títulos concorrendo — o do botão e o
+             do plano. Havendo treino, "Novo treino" vive dentro do
+             cabeçalho dele, ao lado de "Publicar". */
+          aberto === null && (
+            <div className="treino-acoes">
+              <button type="button" className="botao-secundario" onClick={() => setCriando(true)}>
+                Novo treino
+              </button>
+            </div>
+          )
         ))}
 
       {aberto === null ? (
@@ -221,6 +228,7 @@ export function AbaTreino({
           podeEscrever={podeEscrever}
           aoMudar={() => void recarregarAberto()}
           aoPublicar={() => void publicar()}
+          aoNovo={criando ? null : () => setCriando(true)}
         />
       )}
     </section>
@@ -235,12 +243,14 @@ function DetalheTreino({
   podeEscrever,
   aoMudar,
   aoPublicar,
+  aoNovo,
 }: {
   alunoId: string;
   treino: Treino;
   podeEscrever: boolean;
   aoMudar: () => void;
   aoPublicar: () => void;
+  aoNovo: (() => void) | null;
 }): ReactNode {
   const [adicionandoEm, setAdicionandoEm] = useState<string | null>(null);
 
@@ -272,13 +282,25 @@ function DetalheTreino({
           <span className="treino-meta">
             {treino.objetivo !== null && `${treino.objetivo} · `}
             {treino.profissional.nome}
+            {/* O TAMANHO DO PLANO EM UMA LINHA. "Treino ABC" não diz se
+                são três dias de seis exercícios ou um dia de dois — e é
+                essa a primeira coisa que quem abre quer saber. */}
+            {` · ${dias.length === 1 ? '1 dia' : `${dias.length} dias`}`}
+            {` · ${treino.itens.length === 1 ? '1 exercício' : `${treino.itens.length} exercícios`}`}
           </span>
         </div>
-        {podeEscrever && treino.status !== 'ACTIVE' && (
-          <button type="button" className="botao-acao" onClick={aoPublicar}>
-            Publicar para o aluno
-          </button>
-        )}
+        <div className="treino-topo-acoes">
+          {aoNovo !== null && podeEscrever && (
+            <button type="button" className="botao-secundario" onClick={aoNovo}>
+              Novo treino
+            </button>
+          )}
+          {podeEscrever && treino.status !== 'ACTIVE' && (
+            <button type="button" className="botao-acao" onClick={aoPublicar}>
+              Publicar para o aluno
+            </button>
+          )}
+        </div>
       </header>
 
       {/* OS DIAS EM QUADRADOS, e não empilhados um sob o outro.
