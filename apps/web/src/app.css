@@ -3056,3 +3056,117 @@
   outline-offset: 2px;
   border-radius: var(--raio);
 }
+
+/* =====================================================================
+   MEDIDAS CORPORAIS
+
+   Tabela com as datas LADO A LADO. A pergunta de uma avaliação física
+   nunca é "quanto mede a cintura hoje" — é "quanto mudou desde a
+   última". Uma ficha por data responde a primeira e esconde a segunda.
+   ================================================================== */
+
+.med-barra {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--e-4);
+}
+
+.med-tabela th[scope='row'] {
+  text-align: left;
+  font-weight: 500;
+  color: var(--texto-corpo);
+  white-space: nowrap;
+}
+.med-col {
+  text-align: right !important;
+  white-space: nowrap;
+}
+.med-ano {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 400;
+  color: var(--texto-apoio);
+}
+.med-valor {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.med-unidade {
+  margin-left: 5px;
+  font-size: var(--t-xs);
+  font-weight: 400;
+  color: var(--texto-apoio);
+}
+
+/* Peso e gordura em fio mais forte: são as duas linhas que o aluno
+   pergunta antes de qualquer outra. */
+.med-destaque th[scope='row'],
+.med-destaque .dinheiro {
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.med-separador th {
+  padding-top: var(--e-5) !important;
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-apoio);
+  text-align: left;
+  border-bottom: 1px solid var(--fio-forte);
+}
+
+/* A coluna de variação com fundo próprio: é a única que não é medida, é
+   conclusão, e misturá-la com as datas faria alguém lê-la como "a
+   medida de uma data chamada Variação". */
+.med-variacao-col,
+.med-variacao {
+  background: var(--superficie-baixa);
+  border-left: 1px solid var(--fio);
+}
+/* Subiu e desceu, sem julgar qual é bom: emagrecer quer o número
+   caindo, hipertrofia quer subindo, e a tela não sabe qual é o caso. */
+.med-variacao .subiu::before {
+  content: '↑ ';
+  color: var(--texto-apoio);
+}
+.med-variacao .desceu::before {
+  content: '↓ ';
+  color: var(--texto-apoio);
+}
+
+.med-rodape {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--e-3);
+  margin-top: var(--e-5);
+}
+.med-registro {
+  display: grid;
+  gap: 3px;
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+  align-content: start;
+}
+.med-registro-data {
+  font-family: var(--fonte-display);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+.med-registro-quem {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.med-registro-obs {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+}
+.med-nota {
+  margin-top: var(--e-3);
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}

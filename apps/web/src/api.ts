@@ -1196,3 +1196,63 @@ export const redefinirSenhaDeUsuario = (id: string) =>
   api<{ data: { senhaProvisoria: string } }>(`/api/cadastros/usuarios/${id}/senha`, {
     method: 'POST',
   });
+
+/* ====================================================================
+ * MEDIDAS CORPORAIS
+ *
+ * Tudo em INTEIRO: peso em gramas, circunferências em milímetros,
+ * gordura em décimos de por cento. A tela converte na entrada e na
+ * saída; o caminho do dado nunca passa por ponto flutuante.
+ * ================================================================== */
+
+export const CAMPOS_MEDIDA = [
+  'busto_mm',
+  'peito_mm',
+  'ombro_mm',
+  'braco_esq_mm',
+  'braco_dir_mm',
+  'antebraco_esq_mm',
+  'antebraco_dir_mm',
+  'abdomen_mm',
+  'cintura_mm',
+  'quadril_mm',
+  'culote_mm',
+  'coxa_esq_mm',
+  'coxa_dir_mm',
+  'panturrilha_esq_mm',
+  'panturrilha_dir_mm',
+] as const;
+
+export type CampoMedida = (typeof CAMPOS_MEDIDA)[number];
+
+export interface Medida {
+  id: string;
+  data: string;
+  profissional: string | null;
+  pesoG: number | null;
+  alturaCm: number | null;
+  gorduraPctX10: number | null;
+  observacoes: string | null;
+  circunferenciasMm: Record<CampoMedida, number | null>;
+}
+
+export const buscarMedidas = (alunoId: string) =>
+  api<{ data: Medida[] }>(`/api/students/${alunoId}/medidas`);
+
+export interface DadosDeMedida {
+  data: string;
+  pesoG?: number | null;
+  alturaCm?: number | null;
+  gorduraPctX10?: number | null;
+  observacoes?: string | null;
+  circunferenciasMm?: Partial<Record<CampoMedida, number | null>>;
+}
+
+export const gravarMedida = (alunoId: string, dados: DadosDeMedida) =>
+  api<{ data: Medida }>(`/api/students/${alunoId}/medidas`, {
+    method: 'PUT',
+    body: JSON.stringify(dados),
+  });
+
+export const excluirMedida = (alunoId: string, medidaId: string) =>
+  api<{ ok: boolean }>(`/api/students/${alunoId}/medidas/${medidaId}`, { method: 'DELETE' });

@@ -26,6 +26,7 @@ import { baixarRelatorio } from './api.js';
 import { Marca } from './Marca.jsx';
 import { AbaAnamnese, AbaAnexos, AbaEvolucao } from './Prontuario.jsx';
 import { AbaTreino } from './Treino.jsx';
+import { AbaMedidas } from './Medidas.jsx';
 import { Whatsapp } from './Whatsapp.jsx';
 import { Aplicativo } from './Aplicativo.jsx';
 import { BotaoTema, useTema } from './tema.jsx';
@@ -1000,7 +1001,9 @@ function Ficha({
   const [ficha, setFicha] = useState<FichaAluno | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [secao, setSecao] = useState<'cadastro' | 'anamnese' | 'evolucao' | 'treino' | 'anexos'>('cadastro');
+  const [secao, setSecao] = useState<
+    'cadastro' | 'anamnese' | 'evolucao' | 'medidas' | 'treino' | 'anexos'
+  >('cadastro');
 
   const pode = (p: string): boolean => principal.permissions.includes(p);
 
@@ -1177,6 +1180,9 @@ function Ficha({
       {secao === 'evolucao' && (
         <AbaEvolucao alunoId={f.id} podeEscrever={pode('evolution:write')} />
       )}
+      {secao === 'medidas' && (
+        <AbaMedidas alunoId={f.id} podeEscrever={pode('evolution:write')} />
+      )}
       {secao === 'treino' && (
         <AbaTreino alunoId={f.id} podeEscrever={pode('workout:write')} />
       )}
@@ -1246,13 +1252,18 @@ function Ficha({
    interface, não segurança: as rotas exigem a permissão de qualquer
    forma, e quem chamar direto recebe 403. */
 const SECOES_FICHA: {
-  id: 'cadastro' | 'anamnese' | 'evolucao' | 'treino' | 'anexos';
+  id: 'cadastro' | 'anamnese' | 'evolucao' | 'medidas' | 'treino' | 'anexos';
   nome: string;
   permissao: string | null;
 }[] = [
   { id: 'cadastro', nome: 'Cadastro', permissao: null },
   { id: 'anamnese', nome: 'Anamnese', permissao: 'anamnesis:read' },
   { id: 'evolucao', nome: 'Evolução', permissao: 'evolution:read' },
+  /* MEDIDAS separada de EVOLUÇÃO, apesar de usarem a mesma permissão.
+     São duas leituras diferentes do mesmo acompanhamento: evolução é
+     texto no tempo, medida é número comparado. Juntá-las faria a tabela
+     de circunferências aparecer no meio de anotações clínicas. */
+  { id: 'medidas', nome: 'Medidas', permissao: 'evolution:read' },
   { id: 'treino', nome: 'Treino', permissao: 'workout:read' },
   { id: 'anexos', nome: 'Anexos', permissao: 'attachment:read' },
 ];
