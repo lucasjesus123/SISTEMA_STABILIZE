@@ -196,7 +196,16 @@ export function FormularioDaTriagem({
  * MOSTRA A SITUAÇÃO ANTES DO FORMULÁRIO. Quem abre esta aba na maioria
  * das vezes quer conferir se está em dia, não preencher de novo.
  */
-export function AbaTriagem({ alunoId, nome }: { alunoId: string; nome: string }): ReactNode {
+export function AbaTriagem({
+  alunoId,
+  nome,
+  podeConfigurar = false,
+}: {
+  alunoId: string;
+  nome: string;
+  /** `tenant:settings` — quem responde pela empresa edita o questionário. */
+  podeConfigurar?: boolean;
+}): ReactNode {
   const [dados, setDados] = useState<{
     atual: api.TriagemResumo;
     historico: api.TriagemCompleta[];
@@ -206,6 +215,7 @@ export function AbaTriagem({ alunoId, nome }: { alunoId: string; nome: string })
     termo: api.TermoVigente;
   } | null>(null);
   const [assinando, setAssinando] = useState(false);
+  const [editandoPerguntas, setEditandoPerguntas] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [versao, setVersao] = useState(0);
 
@@ -232,6 +242,19 @@ export function AbaTriagem({ alunoId, nome }: { alunoId: string; nome: string })
     (h) => h.precisaLiberacaoMedica && h.liberadoEm === null,
   );
 
+  if (editandoPerguntas) {
+    return (
+      <EditorDePerguntas
+        perguntas={base.perguntas}
+        aoSair={() => setEditandoPerguntas(false)}
+        aoSalvar={() => {
+          setEditandoPerguntas(false);
+          recarregar();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="tri-aba">
       <div className="tri-situacao">
@@ -247,6 +270,19 @@ export function AbaTriagem({ alunoId, nome }: { alunoId: string; nome: string })
         {!assinando && (
           <button type="button" className="botao-acao" onClick={() => setAssinando(true)}>
             {dados.atual.situacao === 'NUNCA_ASSINOU' ? 'Preencher agora' : 'Renovar'}
+          </button>
+        )}
+        {/* A EDIÇÃO DO QUESTIONÁRIO MORA AQUI, ao lado de onde ele é
+            usado. Numa tela de configurações à parte, quem percebe que
+            falta uma pergunta é quem está preenchendo — e essa pessoa
+            nunca vai procurar em Configurações. */}
+        {podeConfigurar && !assinando && (
+          <button
+            type="button"
+            className="botao-texto"
+            onClick={() => setEditandoPerguntas(true)}
+          >
+            Editar as perguntas
           </button>
         )}
       </div>
@@ -311,7 +347,16 @@ export function AbaTriagem({ alunoId, nome }: { alunoId: string; nome: string })
         <section className="tri-historico">
           <h3>Histórico</h3>
           {dados.historico.map((h) => (
-            <Registro key={h.id} triagem={h} perguntas={base.perguntas} />
+            /* AS PERGUNTAS DA PRÓPRIA ASSINATURA, e não as de hoje. Ler o
+               questionário atual para exibir uma assinatura antiga faria
+               um "sim" de dois anos atrás responder a uma pergunta que
+               nunca foi feita. As assinaturas anteriores a esta
+               funcionalidade têm a lista vazia e caem no padrão. */
+            <Registro
+              key={h.id}
+              triagem={h}
+              perguntas={h.perguntas.length > 0 ? h.perguntas : base.perguntas}
+            />
           ))}
         </section>
       )}
@@ -374,4 +419,225 @@ function Registro({
 function dataCurta(iso: string): string {
   const [a, m, d] = iso.slice(0, 10).split('-');
   return `${d}/${m}/${a}`;
+}
+
+/* ==================================================================== */
+
+/**
+ * O editor do questionário da academia.
+ *
+ * A RESSALVA VAI NA TELA, e não só no código. O peso do PAR-Q vem de ele
+ * ser O PAR-Q — questionário validado, revisado por sociedades de
+ * medicina do esporte, que um perito reconhece. Quem edita precisa saber
+ * disso no momento em que está editando, e não descobrir depois. Por
+ * isso as perguntas do padrão vêm marcadas, e a de apagar avisa.
+ *
+ * ACRESCENTAR É O CAMINHO PRINCIPAL, e é onde o botão está. Editar a
+ * redação existe (nem toda academia fala com o aluno do mesmo jeito) e
+ * apagar uma do PAR-Q é o caminho estreito de propósito.
+ *
+ * CADA PERGUNTA DIZ SE ELA EXIGE ATESTADO. É a única configuração que
+ * muda comportamento de verdade: "já treinou antes?" não pode mandar
+ * ninguém ao médico, e "tem pino na articulação?" precisa mandar.
+ */
+export function EditorDePerguntas({
+  perguntas,
+  aoSair,
+  aoSalvar,
+}: {
+  perguntas: api.PerguntaDoParq[];
+  aoSair: () => void;
+  aoSalvar: () => void;
+}): ReactNode {
+  const [lista, setLista] = useState<api.PerguntaEditavel[]>(() =>
+    perguntas.map((p) => ({ ...p })),
+  );
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const mexer = (i: number, campo: 'texto' | 'exigeLiberacao', valor: string | boolean): void => {
+    setLista((atual) => atual.map((p, k) => (k === i ? { ...p, [campo]: valor } : p)));
+  };
+
+  const mover = (i: number, passo: -1 | 1): void => {
+    const destino = i + passo;
+    if (destino < 0 || destino >= lista.length) return;
+    setLista((atual) => {
+      const copia = [...atual];
+      const [item] = copia.splice(i, 1);
+      copia.splice(destino, 0, item!);
+      return copia;
+    });
+  };
+
+  const doParq = lista.filter((p) => p.origem === 'PARQ').length;
+  const valido = lista.length > 0 && lista.every((p) => p.texto.trim().length >= 8);
+
+  const gravar = async (): Promise<void> => {
+    setErro(null);
+    setSalvando(true);
+    try {
+      await api.salvarPerguntasDaTriagem(
+        lista.map((p) => ({
+          ...(p.chave !== undefined ? { chave: p.chave } : {}),
+          texto: p.texto.trim(),
+          exigeLiberacao: p.exigeLiberacao,
+          origem: p.origem,
+        })),
+      );
+      aoSalvar();
+    } catch (e) {
+      setErro(e instanceof api.ApiError ? e.message : 'Não foi possível salvar.');
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="ped">
+      <div className="secao-cabecalho linha-cabecalho">
+        <div>
+          <h2>Perguntas da triagem</h2>
+          <p>
+            O que o aluno responde antes do primeiro treino — no aplicativo ou no balcão.
+          </p>
+        </div>
+        <button type="button" className="botao-secundario" onClick={aoSair}>
+          ← Voltar
+        </button>
+      </div>
+
+      {/* O AVISO FICA NO ALTO E NÃO NO RODAPÉ. Quem vai reescrever sete
+          perguntas precisa saber o que está em jogo antes de reescrever a
+          primeira. */}
+      <p className="ped-ressalva">
+        <strong>As {doParq} perguntas marcadas como padrão são o PAR-Q</strong> — um questionário
+        validado por sociedades de medicina do esporte, e o que um perito reconhece numa
+        discussão sobre o que a academia perguntou. Ajustar a redação para a linguagem de quem
+        atende aqui é seguro; <strong>apagar uma delas</strong> deixa a triagem de ser o PAR-Q.
+        Acrescentar as suas perguntas não tira nada disso.
+      </p>
+
+      <ol className="ped-lista">
+        {lista.map((p, i) => (
+          <li key={p.chave ?? `nova-${i}`} className={p.origem === 'PARQ' ? 'padrao' : ''}>
+            <div className="ped-cabeca">
+              <span className="ped-n">{i + 1}</span>
+              <span className={`pilula ${p.origem === 'PARQ' ? 'ok' : 'apagada'} pequena`}>
+                {p.origem === 'PARQ' ? 'PAR-Q' : 'da academia'}
+              </span>
+              <span className="ped-mover">
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  aria-label="Subir"
+                  onClick={() => mover(i, -1)}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  disabled={i === lista.length - 1}
+                  aria-label="Descer"
+                  onClick={() => mover(i, 1)}
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  className="ped-tirar"
+                  onClick={() => {
+                    const aviso =
+                      p.origem === 'PARQ'
+                        ? 'Esta é uma pergunta do PAR-Q. Sem ela a triagem deixa de ser o questionário padrão — e a academia deixa de perguntar sobre isso. Tirar mesmo assim?'
+                        : 'Tirar esta pergunta?';
+                    if (window.confirm(aviso)) {
+                      setLista((atual) => atual.filter((_, k) => k !== i));
+                    }
+                  }}
+                >
+                  tirar
+                </button>
+              </span>
+            </div>
+
+            <textarea
+              value={p.texto}
+              rows={2}
+              maxLength={400}
+              onChange={(e) => mexer(i, 'texto', e.target.value)}
+            />
+
+            <label className={`ped-exige ${p.origem === 'PARQ' ? 'travada' : ''}`}>
+              <input
+                type="checkbox"
+                checked={p.exigeLiberacao}
+                /* As do PAR-Q exigem sempre — é a regra do questionário, e
+                   o servidor força isso de qualquer jeito. Travar aqui
+                   evita oferecer um controle que não obedece. */
+                disabled={p.origem === 'PARQ'}
+                onChange={(e) => mexer(i, 'exigeLiberacao', e.target.checked)}
+              />
+              <span>
+                Um <strong>Sim</strong> aqui exige atestado médico antes de treinar
+                {p.origem === 'PARQ' && ' (sempre, no PAR-Q)'}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ol>
+
+      <div className="ped-acoes">
+        <button
+          type="button"
+          className="botao-secundario"
+          onClick={() =>
+            setLista((atual) => [
+              ...atual,
+              { texto: '', exigeLiberacao: false, origem: 'ACADEMIA' },
+            ])
+          }
+        >
+          + Acrescentar pergunta
+        </button>
+
+        <button
+          type="button"
+          className="botao-texto"
+          onClick={() => {
+            if (
+              window.confirm(
+                'Descartar as suas alterações e voltar às sete perguntas do PAR-Q padrão?',
+              )
+            ) {
+              void api
+                .restaurarPerguntasDaTriagem()
+                .then(aoSalvar)
+                .catch((e: unknown) =>
+                  setErro(e instanceof api.ApiError ? e.message : 'Não foi possível restaurar.'),
+                );
+            }
+          }}
+        >
+          Restaurar o PAR-Q padrão
+        </button>
+      </div>
+
+      {erro !== null && <Erro mensagem={erro} />}
+
+      <div className="ped-rodape">
+        <span className="campo-dica">
+          {lista.length === 1 ? '1 pergunta' : `${lista.length} perguntas`} · quem já assinou
+          continua com o questionário do dia da assinatura.
+        </span>
+        <button
+          type="button"
+          className="botao-acao"
+          disabled={salvando || !valido}
+          onClick={() => void gravar()}
+        >
+          {salvando ? 'Salvando…' : 'Salvar o questionário'}
+        </button>
+      </div>
+    </div>
+  );
 }

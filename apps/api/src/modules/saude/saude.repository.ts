@@ -1,5 +1,5 @@
 import type { TenantClient } from '../../db/pool.js';
-import { CHAVES_PARQ, montarTermo } from './termo.js';
+import { montarTermo, PERGUNTAS_PARQ, type PerguntaDaTriagem } from './termo.js';
 
 /**
  * A triagem de saúde no banco.
@@ -76,6 +76,9 @@ export async function situacaoDoAluno(
 export interface TriagemCompleta extends TriagemResumo {
   id: string;
   respostas: Record<string, boolean>;
+  /** As perguntas como estavam no dia. Vazio nas triagens anteriores a
+      esta funcionalidade — a tela cai no PAR-Q padrão nesse caso. */
+  perguntas: PerguntaDaTriagem[];
   observacoes: string | null;
   termoVersao: string;
   termoTexto: string;
@@ -91,6 +94,7 @@ export async function historico(
   const { rows } = await client.query<
     LinhaDaTriagem & {
       respostas: Record<string, boolean>;
+      perguntas: PerguntaDaTriagem[] | null;
       observacoes: string | null;
       termo_versao: string;
       termo_texto: string;
@@ -101,7 +105,7 @@ export async function historico(
     `SELECT h.id, h.assinado_em, h.valido_ate::text AS valido_ate,
             h.precisa_liberacao_medica, h.atestado_id, h.liberado_em,
             (h.valido_ate < (now() AT TIME ZONE t.timezone)::date) AS vencida,
-            h.respostas, h.observacoes, h.termo_versao, h.termo_texto,
+            h.respostas, h.perguntas, h.observacoes, h.termo_versao, h.termo_texto,
             h.assinado_nome, h.assinado_pelo_aluno
        FROM health_screenings h
        JOIN tenants t ON t.id = h.tenant_id
@@ -119,12 +123,42 @@ export async function historico(
     temAtestado: l.atestado_id !== null,
     liberadoEm: l.liberado_em?.toISOString() ?? null,
     respostas: l.respostas,
+    perguntas: l.perguntas ?? [],
     observacoes: l.observacoes,
     termoVersao: l.termo_versao,
     termoTexto: l.termo_texto,
     assinadoNome: l.assinado_nome,
     assinadoPeloAluno: l.assinado_pelo_aluno,
   }));
+}
+
+/**
+ * O questionário que a academia usa hoje.
+ *
+ * NULL NO BANCO SIGNIFICA "USE O PADRÃO", e não "sem perguntas". Copiar
+ * as sete do PAR-Q para dentro de cada empresa na criação faria a
+ * correção de uma vírgula no texto padrão nunca chegar a quem nunca
+ * editou — e são a maioria.
+ */
+export async function perguntasVigentes(client: TenantClient): Promise<PerguntaDaTriagem[]> {
+  const { rows } = await client.query<{ perguntas: PerguntaDaTriagem[] | null }>(
+    'SELECT triagem_perguntas AS perguntas FROM tenants WHERE id = current_tenant_id()',
+  );
+  const guardadas = rows[0]?.perguntas;
+  if (guardadas === null || guardadas === undefined || guardadas.length === 0) {
+    return PERGUNTAS_PARQ;
+  }
+  return guardadas;
+}
+
+/** Grava o questionário da academia. Lista vazia volta ao padrão. */
+export async function salvarPerguntas(
+  client: TenantClient,
+  perguntas: PerguntaDaTriagem[],
+): Promise<void> {
+  await client.query('UPDATE tenants SET triagem_perguntas = $1 WHERE id = current_tenant_id()', [
+    perguntas.length === 0 ? null : JSON.stringify(perguntas),
+  ]);
 }
 
 /** O termo que a academia usa hoje, com o nome dela já dentro. */
@@ -188,24 +222,30 @@ export async function assinar(
   studentId: string,
   dados: AssinaturaRecebida,
 ): Promise<{ id: string; precisaLiberacaoMedica: boolean }> {
-  const faltando = [...CHAVES_PARQ].filter(
-    (chave) => typeof dados.respostas[chave] !== 'boolean',
-  );
+  /* AS PERGUNTAS SÃO AS DA ACADEMIA, e não mais a lista fixa do PAR-Q.
+     Ler daqui — e não do que o cliente mandou — é o que impede alguém de
+     assinar respondendo a um questionário que não é o vigente. */
+  const perguntas = await perguntasVigentes(client);
+
+  const faltando = perguntas
+    .map((p) => p.chave)
+    .filter((chave) => typeof dados.respostas[chave] !== 'boolean');
   if (faltando.length > 0) throw new RespostaFaltandoError(faltando);
 
-  /* Só as chaves do PAR-Q entram. Sem este filtro, um cliente qualquer
-     grava o que quiser dentro do jsonb de um registro de saúde. */
+  /* Só as chaves do questionário vigente entram. Sem este filtro, um
+     cliente qualquer grava o que quiser dentro do jsonb de um registro
+     de saúde. */
   const limpas: Record<string, boolean> = {};
-  for (const chave of CHAVES_PARQ) limpas[chave] = dados.respostas[chave] === true;
+  for (const p of perguntas) limpas[p.chave] = dados.respostas[p.chave] === true;
 
   const termo = await termoVigente(client);
 
   const { rows } = await client.query<{ id: string; precisa_liberacao_medica: boolean }>(
     `INSERT INTO health_screenings
-       (tenant_id, student_id, respostas, observacoes,
+       (tenant_id, student_id, respostas, perguntas, observacoes,
         termo_versao, termo_texto, assinado_nome, assinado_ip, assinado_agente,
         assinado_pelo_aluno, registrado_por, valido_ate)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+     VALUES ($1,$2,$3,$13,$4,$5,$6,$7,$8,$9,$10,$11,
              /* Validade zero significa "nunca vence" — e "nunca" aqui é
                 uma data absurdamente distante, e não NULL: NULL obrigaria
                 toda consulta de vencimento a tratar o caso especial, e é
@@ -228,6 +268,10 @@ export async function assinar(
       dados.assinadoPeloAluno,
       dados.registradoPor,
       termo.validadeDias,
+      /* AS PERGUNTAS CONGELADAS, ao lado do texto do termo que já era
+         congelado. Sem isto, reescrever a pergunta 3 no ano que vem faria
+         um "sim" antigo responder a uma pergunta que nunca foi feita. */
+      JSON.stringify(perguntas),
     ],
   );
 

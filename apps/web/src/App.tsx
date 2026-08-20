@@ -1351,7 +1351,9 @@ function Ficha({
         ))}
       </nav>
 
-      {secao === 'triagem' && <AbaTriagem alunoId={f.id} nome={f.nome} />}
+      {secao === 'triagem' && (
+        <AbaTriagem alunoId={f.id} nome={f.nome} podeConfigurar={pode('tenant:settings')} />
+      )}
       {secao === 'anamnese' && (
         <AbaAnamnese
           alunoId={f.id}

@@ -476,6 +476,180 @@ suite('Triagem de saúde: PAR-Q e termo', () => {
    * Isolamento
    * ================================================================ */
 
+  /* ==================================================================
+   * A academia edita as próprias perguntas
+   * ================================================================ */
+
+  describe('questionário da academia', () => {
+    async function perguntasAtuais(): Promise<
+      { chave: string; texto: string; exigeLiberacao: boolean; origem: string }[]
+    > {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/students/triagem/perguntas',
+        headers: como(await tokenDe(ids.emailDono)),
+      });
+      expect(res.statusCode).toBe(200);
+      return (res.json() as { data: { perguntas: typeof perguntas } }).data.perguntas;
+      type perguntas = { chave: string; texto: string; exigeLiberacao: boolean; origem: string }[];
+    }
+
+    async function salvar(
+      perguntas: unknown[],
+    ): Promise<ReturnType<FastifyInstance['inject']>> {
+      return app.inject({
+        method: 'PUT',
+        url: '/api/students/triagem/perguntas',
+        headers: como(await tokenDe(ids.emailDono)),
+        payload: { perguntas },
+      });
+    }
+
+    it('sem edição, vale o PAR-Q padrão', async () => {
+      const p = await perguntasAtuais();
+      expect(p).toHaveLength(7);
+      expect(p.every((x) => x.origem === 'PARQ' && x.exigeLiberacao)).toBe(true);
+    });
+
+    it('a academia acrescenta uma pergunta própria e edita a redação de outra', async () => {
+      const base = await perguntasAtuais();
+      const res = await salvar([
+        /* Redação ajustada, chave preservada. */
+        { chave: 'coracao', texto: 'Algum médico já falou que você tem problema no coração?', exigeLiberacao: true, origem: 'PARQ' },
+        ...base.slice(1),
+        { texto: 'Você já treinou musculação antes?', exigeLiberacao: false, origem: 'ACADEMIA' },
+        { texto: 'Tem prótese, pino ou placa em alguma articulação?', exigeLiberacao: true, origem: 'ACADEMIA' },
+      ]);
+      expect(res.statusCode).toBe(200);
+
+      const p = await perguntasAtuais();
+      expect(p).toHaveLength(9);
+      expect(p[0]!.chave).toBe('coracao');
+      expect(p[0]!.texto).toContain('problema no coração');
+      /* A chave da pergunta nova sai do texto, e é estável — mas o
+         servidor a trunca em 40 caracteres. O teste LÊ a chave em vez de
+         adivinhá-la: adivinhar aqui é como se escreve um teste que passa
+         hoje e quebra quando alguém mexer no limite. */
+      expect(p[7]!.chave).toMatch(/^voce_ja_treinou/);
+      expect(p[7]!.chave.length).toBeLessThanOrEqual(40);
+      expect(p[7]!.exigeLiberacao).toBe(false);
+    });
+
+    /** As chaves das duas perguntas que a academia acrescentou. */
+    async function chavesDaAcademia(): Promise<{ treinou: string; protese: string }> {
+      const p = await perguntasAtuais();
+      const proprias = p.filter((x) => x.origem === 'ACADEMIA');
+      return {
+        treinou: proprias.find((x) => !x.exigeLiberacao)!.chave,
+        protese: proprias.find((x) => x.exigeLiberacao)!.chave,
+      };
+    }
+
+    it('um SIM em pergunta própria marcada exige atestado', async () => {
+      const aluno = await comTenant(async (c) => {
+        const { rows } = await c.query<{ id: string }>(
+          `INSERT INTO students (tenant_id,full_name) VALUES ($1,'Com Prótese') RETURNING id`,
+          [ids.tenant],
+        );
+        return rows[0]!.id;
+      });
+
+      /* Todas as sete do PAR-Q em "não", e "sim" só na pergunta que a
+         ACADEMIA criou. Se o gatilho tivesse ficado com a lista fixa das
+         sete chaves, isto não exigiria atestado nenhum — e a pergunta
+         nova seria decorativa. */
+      const chaves = await chavesDaAcademia();
+      const res = await assinarPelaAcademia(
+        aluno,
+        { ...TUDO_NAO, [chaves.treinou]: false, [chaves.protese]: true },
+        'Com Prótese',
+      );
+      expect(res.statusCode).toBe(201);
+      expect(
+        (res.json() as { data: { precisaLiberacaoMedica: boolean } }).data.precisaLiberacaoMedica,
+      ).toBe(true);
+      expect(await situacao(aluno)).toBe('AGUARDANDO_ATESTADO');
+    });
+
+    it('um SIM em pergunta que NÃO exige liberação não pede atestado', async () => {
+      const aluno = await comTenant(async (c) => {
+        const { rows } = await c.query<{ id: string }>(
+          `INSERT INTO students (tenant_id,full_name) VALUES ($1,'Ja Treinou') RETURNING id`,
+          [ids.tenant],
+        );
+        return rows[0]!.id;
+      });
+
+      const chaves = await chavesDaAcademia();
+      const res = await assinarPelaAcademia(
+        aluno,
+        { ...TUDO_NAO, [chaves.treinou]: true, [chaves.protese]: false },
+        'Ja Treinou',
+      );
+      expect(res.statusCode).toBe(201);
+      expect(await situacao(aluno)).toBe('VALIDA');
+    });
+
+    it('a pergunta nova é obrigatória como todas as outras', async () => {
+      const aluno = await comTenant(async (c) => {
+        const { rows } = await c.query<{ id: string }>(
+          `INSERT INTO students (tenant_id,full_name) VALUES ($1,'Pulou Uma') RETURNING id`,
+          [ids.tenant],
+        );
+        return rows[0]!.id;
+      });
+      /* Responde só as sete do PAR-Q: as duas da academia ficam em
+         branco, e branco não pode valer como "não". */
+      const res = await assinarPelaAcademia(aluno, TUDO_NAO, 'Pulou Uma');
+      expect(res.statusCode).toBe(422);
+    });
+
+    it('as perguntas são congeladas na assinatura', async () => {
+      const detalhe = await app.inject({
+        method: 'GET',
+        url: `/api/students/${ids.saudavel}/triagem`,
+        headers: como(await tokenDe(ids.emailDono)),
+      });
+      const h = (detalhe.json() as {
+        data: { historico: { perguntas: { chave: string }[] }[] };
+      }).data.historico;
+
+      /* A assinatura mais recente do Helena foi feita ANTES da edição,
+         com as sete originais. Se a tela lesse o questionário de hoje
+         para exibi-la, um "sim" antigo passaria a responder a uma
+         pergunta que nunca foi feita. */
+      const antiga = h[h.length - 1]!;
+      expect(antiga.perguntas.length === 0 || antiga.perguntas.length === 7).toBe(true);
+    });
+
+    it('o professor não edita o questionário — é decisão da empresa', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/students/triagem/perguntas',
+        headers: como(await tokenDe(ids.loginAluno)),
+        payload: { perguntas: [{ texto: 'Qualquer coisa aqui', exigeLiberacao: false }] },
+      });
+      expect([403, 404]).toContain(res.statusCode);
+    });
+
+    it('questionário vazio é recusado', async () => {
+      expect((await salvar([])).statusCode).toBe(422);
+    });
+
+    it('restaurar volta ao PAR-Q padrão', async () => {
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/students/triagem/perguntas',
+        headers: como(await tokenDe(ids.emailDono)),
+      });
+      expect(res.statusCode).toBe(200);
+
+      const p = await perguntasAtuais();
+      expect(p).toHaveLength(7);
+      expect(p[0]!.texto).toContain('supervisionado por profissionais de saúde');
+    });
+  });
+
   it('a triagem de outra academia não é alcançável', async () => {
     const outra = crypto.randomUUID();
     const alunoDeFora = await (async (): Promise<string> => {

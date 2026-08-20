@@ -1588,6 +1588,10 @@ export type SituacaoDaTriagem = 'NUNCA_ASSINOU' | 'VALIDA' | 'VENCIDA' | 'AGUARD
 export interface PerguntaDoParq {
   chave: string;
   texto: string;
+  /** Um SIM aqui obriga liberação médica antes de treinar. */
+  exigeLiberacao: boolean;
+  /** Do questionário padrão, ou criada pela academia. */
+  origem: 'PARQ' | 'ACADEMIA';
 }
 
 export interface TermoVigente {
@@ -1609,6 +1613,8 @@ export interface TriagemResumo {
 export interface TriagemCompleta extends TriagemResumo {
   id: string;
   respostas: Record<string, boolean>;
+  /** As perguntas como estavam no dia. Vazio nas assinaturas antigas. */
+  perguntas: PerguntaDoParq[];
   observacoes: string | null;
   termoVersao: string;
   termoTexto: string;
@@ -1761,3 +1767,27 @@ export const cancelarReserva = (id: string) =>
 /** Cancela a série daqui para a frente. O passado não é apagado. */
 export const cancelarSerieDeReservas = (serieId: string) =>
   api<{ data: { canceladas: number } }>(`/api/reservas/serie/${serieId}`, { method: 'DELETE' });
+
+/* --------------------------------------------------------------------
+ * A academia edita o próprio questionário
+ * ------------------------------------------------------------------ */
+
+/** `chave` ausente = pergunta nova; o servidor a batiza a partir do texto. */
+export interface PerguntaEditavel {
+  chave?: string;
+  texto: string;
+  exigeLiberacao: boolean;
+  origem: 'PARQ' | 'ACADEMIA';
+}
+
+export const salvarPerguntasDaTriagem = (perguntas: PerguntaEditavel[]) =>
+  api<{ data: { perguntas: PerguntaDoParq[] } }>('/api/students/triagem/perguntas', {
+    method: 'PUT',
+    body: JSON.stringify({ perguntas }),
+  });
+
+/** Volta ao PAR-Q padrão do sistema. */
+export const restaurarPerguntasDaTriagem = () =>
+  api<{ data: { perguntas: PerguntaDoParq[] } }>('/api/students/triagem/perguntas', {
+    method: 'DELETE',
+  });

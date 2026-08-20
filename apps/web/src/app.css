@@ -5233,3 +5233,136 @@
   .ex-grande { height: auto; aspect-ratio: 4 / 3; }
   .ex-solta { height: auto; aspect-ratio: 4 / 3; }
 }
+
+/* ====================================================================
+   EDITOR DAS PERGUNTAS DA TRIAGEM
+
+   A ressalva sobre o PAR-Q fica no alto e não no rodapé: quem vai
+   reescrever sete perguntas precisa saber o que está em jogo antes de
+   reescrever a primeira.
+   ================================================================== */
+
+.ped { display: flex; flex-direction: column; gap: var(--e-5); max-width: 80ch; }
+
+.ped-ressalva {
+  padding: var(--e-4) var(--e-5);
+  border-radius: var(--raio-md);
+  background: var(--atencao-fundo);
+  color: var(--atencao-texto);
+  font-size: var(--t-sm);
+  line-height: 1.6;
+}
+
+.ped-lista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  counter-reset: none;
+}
+.ped-lista li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+}
+/* A do padrão ganha um fundo levemente distinto, e não um filete
+   colorido na borda: o que se quer marcar é a natureza da pergunta, não
+   um alerta. */
+.ped-lista li.padrao { background: var(--superficie-baixa); }
+
+.ped-cabeca {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+}
+.ped-n {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--raio-pilula);
+  background: var(--superficie-realce);
+  color: var(--texto-apoio);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ped-mover { margin-left: auto; display: flex; align-items: center; gap: var(--e-2); }
+.ped-mover button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--texto-corpo);
+  font-size: var(--t-sm);
+  line-height: 1;
+}
+.ped-mover button:hover:not(:disabled) { border-color: var(--teal); color: var(--teal); }
+.ped-mover button:disabled { opacity: 0.35; cursor: not-allowed; }
+.ped-tirar {
+  width: auto !important;
+  padding: 0 var(--e-3);
+  border: none !important;
+  background: none !important;
+  color: var(--texto-apoio) !important;
+  font-size: var(--t-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ped-tirar:hover { color: var(--erro) !important; }
+
+.ped-lista textarea {
+  width: 100%;
+  padding: var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  resize: vertical;
+}
+.ped-lista textarea:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--realce-teclado);
+}
+
+.ped-exige {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.ped-exige input { margin-top: 2px; width: 17px; height: 17px; flex: none; }
+/* Travada e não escondida: sumir com o controle faria parecer que a
+   regra não existe. Visível e desabilitada, ela ENSINA a regra. */
+.ped-exige.travada { cursor: default; color: var(--texto-apoio); }
+
+.ped-acoes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+}
+
+.ped-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+  padding-top: var(--e-4);
+  border-top: 1px solid var(--fio);
+}

@@ -5,13 +5,15 @@ import { writeAudit } from '../../audit/audit.js';
 import { notFound, unprocessable } from '../../http/errors.js';
 import { assertStudentInScope } from '../students/students.repository.js';
 import type { AccessScope } from '../../auth/scope.js';
-import { PERGUNTAS_PARQ } from './termo.js';
+import { chaveDe, PERGUNTAS_PARQ, type PerguntaDaTriagem } from './termo.js';
 import {
   assinar,
   historico,
   liberar,
   pendentes,
+  perguntasVigentes,
   RespostaFaltandoError,
+  salvarPerguntas,
   situacaoDoAluno,
   termoVigente,
 } from './saude.repository.js';
@@ -66,7 +68,122 @@ export async function triagemRoutes(app: FastifyInstance): Promise<void> {
     async (request) =>
       inTenant(request, async (client) => {
         const termo = await termoVigente(client);
-        return { data: { perguntas: PERGUNTAS_PARQ, termo } };
+        return { data: { perguntas: await perguntasVigentes(client), termo } };
+      }),
+  );
+
+  /* ------------------------------------------------------------------
+   * PUT /api/students/triagem/perguntas — a academia edita o questionário
+   *
+   * A RESSALVA QUE O CÓDIGO PRECISA CARREGAR: o peso do PAR-Q vem de ele
+   * ser O PAR-Q — um questionário validado, revisado por sociedades de
+   * medicina do esporte, que um perito reconhece. Reescrevê-lo inteiro
+   * transforma a triagem num formulário caseiro, e numa discussão sobre
+   * o que a academia deveria ter perguntado isso pesa contra ela.
+   *
+   * Ainda assim a edição existe, porque a alternativa é pior: academia
+   * que precisa perguntar mais coisa (prótese, pino, acompanhamento
+   * nutricional) acabaria mantendo uma segunda ficha em papel, fora do
+   * sistema e fora do prontuário.
+   *
+   * O QUE O SERVIDOR GARANTE, faça o que a tela fizer:
+   *
+   *   A CHAVE DE UMA PERGUNTA EXISTENTE NUNCA MUDA. Ela é o que amarra a
+   *   resposta gravada à pergunta; regerá-la a partir do texto editado
+   *   faria toda resposta antiga apontar para o vazio.
+   *
+   *   CHAVES NÃO SE REPETEM. Duas perguntas com a mesma chave gravam na
+   *   mesma posição do jsonb, e a segunda apaga a primeira.
+   *
+   *   `exigeLiberacao` DE PERGUNTA DO PAR-Q É SEMPRE VERDADEIRO. É a
+   *   regra do questionário, e desligá-la esvaziaria a única
+   *   consequência que ele tem.
+   * ---------------------------------------------------------------- */
+  app.put(
+    '/triagem/perguntas',
+    { preHandler: [app.authorize('tenant:settings')] },
+    async (request) => {
+      const body = z
+        .object({
+          perguntas: z
+            .array(
+              z.object({
+                /* Ausente = pergunta nova; presente = existente, e a
+                   chave vem junto para não se perder na edição. */
+                chave: z.string().trim().max(60).optional(),
+                texto: z.string().trim().min(8, 'A pergunta ficou curta demais.').max(400),
+                exigeLiberacao: z.boolean(),
+                origem: z.enum(['PARQ', 'ACADEMIA']).default('ACADEMIA'),
+              }),
+            )
+            .min(1, 'O questionário precisa de ao menos uma pergunta.')
+            .max(30, 'Trinta perguntas é mais do que alguém responde antes de treinar.'),
+        })
+        .parse(request.body);
+
+      return inTenant(request, async (client, principal) => {
+        const usadas = new Set<string>();
+        const limpas: PerguntaDaTriagem[] = [];
+
+        for (const p of body.perguntas) {
+          const chave =
+            p.chave !== undefined && p.chave !== ''
+              ? p.chave
+              : chaveDe(p.texto, usadas);
+          if (usadas.has(chave)) {
+            throw unprocessable(
+              'Há duas perguntas com o mesmo identificador. Recarregue a tela e tente de novo.',
+            );
+          }
+          usadas.add(chave);
+          limpas.push({
+            chave,
+            texto: p.texto,
+            /* Do PAR-Q, sempre exige. Ver a nota acima. */
+            exigeLiberacao: p.origem === 'PARQ' ? true : p.exigeLiberacao,
+            origem: p.origem,
+          });
+        }
+
+        await salvarPerguntas(client, limpas);
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'tenant.settings',
+          resourceType: 'tenant',
+          resourceId: principal.tenantId,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: {
+            questionario: limpas.length,
+            doParq: limpas.filter((p) => p.origem === 'PARQ').length,
+          },
+        });
+
+        return { data: { perguntas: limpas } };
+      });
+    },
+  );
+
+  /* Volta ao PAR-Q padrão. Existe porque desfazer uma edição de sete
+     perguntas à mão é o tipo de trabalho que faz alguém desistir de
+     mexer — e quem não mexe com medo fica com o questionário errado. */
+  app.delete(
+    '/triagem/perguntas',
+    { preHandler: [app.authorize('tenant:settings')] },
+    async (request) =>
+      inTenant(request, async (client, principal) => {
+        await salvarPerguntas(client, []);
+        await writeAudit(client, principal.tenantId, {
+          action: 'tenant.settings',
+          resourceType: 'tenant',
+          resourceId: principal.tenantId,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: { questionario: 'restaurado ao PAR-Q padrão' },
+        });
+        return { data: { perguntas: PERGUNTAS_PARQ } };
       }),
   );
 
@@ -184,7 +301,7 @@ export async function triagemDoAlunoRoutes(app: FastifyInstance): Promise<void> 
     const alunoId = alunoDoToken(requireScope(request));
     return inTenant(request, async (client) => ({
       data: {
-        perguntas: PERGUNTAS_PARQ,
+        perguntas: await perguntasVigentes(client),
         termo: await termoVigente(client),
         atual: await situacaoDoAluno(client, alunoId),
       },

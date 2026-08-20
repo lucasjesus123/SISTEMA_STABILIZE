@@ -13,51 +13,106 @@
  * respondido continua legível como foi lido.
  */
 
-export interface PerguntaDoParq {
+export interface PerguntaDaTriagem {
+  /** Estável: é a chave gravada nas respostas e a que o gatilho lê. */
   chave: string;
   texto: string;
+  /** Um SIM aqui obriga liberação médica antes de treinar. */
+  exigeLiberacao: boolean;
+  /** De onde a pergunta veio — o padrão do sistema ou a academia. */
+  origem: 'PARQ' | 'ACADEMIA';
 }
 
-/* As chaves são as que a coluna gerada `precisa_liberacao_medica`
-   verifica no banco. Renomear uma aqui sem mexer na migração faria a
-   regra parar de enxergar aquela resposta — e um "sim" deixaria de
-   exigir atestado, em silêncio. */
-export const PERGUNTAS_PARQ: PerguntaDoParq[] = [
+/** Compatibilidade com o nome antigo, quando só existia o PAR-Q. */
+export type PerguntaDoParq = PerguntaDaTriagem;
+
+/* AS SETE DO PAR-Q, e todas com `exigeLiberacao: true` — é a regra do
+   questionário: um "sim" em qualquer uma manda procurar um médico.
+
+   As chaves são gravadas dentro das respostas e lidas pelo gatilho do
+   banco. Renomear uma aqui sem migrar os dados faz aquele "sim" deixar
+   de exigir atestado, em silêncio.
+
+   Esta lista é o PADRÃO, e não mais a única possibilidade: cada academia
+   pode ajustar a redação, reordenar e acrescentar perguntas próprias.
+   O que ela não deve fazer é apagar as do PAR-Q — a tela avisa por quê. */
+export const PERGUNTAS_PARQ: PerguntaDaTriagem[] = [
   {
     chave: 'coracao',
     texto:
       'Algum médico já disse que você possui algum problema de coração e que só deveria fazer atividade física supervisionado por profissionais de saúde?',
+    exigeLiberacao: true,
+    origem: 'PARQ',
   },
   {
     chave: 'dor_no_peito',
     texto: 'Você sente dores no peito quando pratica atividade física?',
+    exigeLiberacao: true,
+    origem: 'PARQ',
   },
   {
     chave: 'tontura',
     texto:
       'No último mês, você sentiu dores no peito quando praticou atividade física, ou perdeu o equilíbrio por tontura ou desmaiou?',
+    exigeLiberacao: true,
+    origem: 'PARQ',
   },
   {
     chave: 'osso_articulacao',
     texto:
       'Você tem algum problema ósseo ou articular que poderia ser piorado pela atividade física?',
+    exigeLiberacao: true,
+    origem: 'PARQ',
   },
   {
     chave: 'remedio_pressao',
     texto:
       'Você toma atualmente algum medicamento para pressão arterial ou problema de coração?',
+    exigeLiberacao: true,
+    origem: 'PARQ',
   },
   {
     chave: 'outra_razao',
     texto: 'Sabe de alguma outra razão pela qual você não deve praticar atividade física?',
+    exigeLiberacao: true,
+    origem: 'PARQ',
   },
   {
     chave: 'gravidez',
     texto: 'Você está grávida ou teve bebê nos últimos três meses?',
+    exigeLiberacao: true,
+    origem: 'PARQ',
   },
 ];
 
 export const CHAVES_PARQ = new Set(PERGUNTAS_PARQ.map((p) => p.chave));
+
+/**
+ * Normaliza um texto em chave estável: "Já treinou antes?" → "ja_treinou_antes".
+ *
+ * A CHAVE NUNCA MUDA DEPOIS DE CRIADA. Ela é o que amarra a resposta
+ * gravada à pergunta; regerá-la a partir do texto editado faria as
+ * respostas antigas apontarem para o vazio. Por isso quem edita o texto
+ * de uma pergunta existente mantém a chave dela — esta função só serve
+ * para batizar pergunta NOVA.
+ */
+export function chaveDe(texto: string, jaUsadas: Set<string>): string {
+  const base =
+    texto
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40) || 'pergunta';
+
+  if (!jaUsadas.has(base)) return base;
+  for (let i = 2; i < 100; i += 1) {
+    const tentativa = `${base}_${i}`;
+    if (!jaUsadas.has(tentativa)) return tentativa;
+  }
+  return `${base}_${Date.now()}`;
+}
 
 /**
  * O termo padrão, usado quando a academia não escreveu o dela.
