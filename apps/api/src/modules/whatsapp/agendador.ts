@@ -52,6 +52,30 @@ const GIRO_DA_FILA_MS = 2 * 60 * 1000;
 const HORA_DO_ENVIO = 9;
 
 export function registrarAgendador(app: FastifyInstance): void {
+  /* NÃO RODA EM TESTE, e a razão é uma flakiness que custou caro para
+     achar.
+
+     Cada arquivo de teste levanta a própria app, e a app registrava o
+     agendador — que dispara uma passada IMEDIATA sobre TODAS as
+     academias do banco, inclusive as que os outros arquivos de teste
+     acabaram de criar. `gerarCobrancasDoMes` via um contrato recém-
+     criado por um teste do financeiro e gerava a mensalidade dele; o
+     teste seguinte, que esperava exatamente dois lançamentos, achava
+     três.
+
+     O sintoma era uma falha que aparecia numa rodada e sumia na
+     seguinte, sempre num teste que não tinha nada a ver com cobrança
+     recorrente. Quanto mais arquivos de teste, mais provável — e é assim
+     que uma suíte deixa de ser levada a sério.
+
+     As tarefas continuam testáveis: os testes que as exercitam chamam as
+     funções diretamente, que é o certo. O que não pode é o relógio rodar
+     por baixo de quem não pediu. */
+  if (process.env['NODE_ENV'] === 'test') {
+    app.log.debug('agendador desligado em teste');
+    return;
+  }
+
   let ultimaExecucao = '';
 
   const tique = async (): Promise<void> => {

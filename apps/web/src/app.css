@@ -4782,3 +4782,235 @@
 .ader-esforco { color: var(--menta); letter-spacing: 1px; font-size: 10px; }
 .ader-notas { color: var(--texto-corpo); font-style: italic; }
 .ader-mais { margin-top: var(--e-3); font-size: var(--t-xs); color: var(--texto-apoio); }
+
+/* ====================================================================
+   ESPAÇOS E RESERVA DE HORÁRIO
+
+   O cadastro de espaços existia na API e não tinha tela — em produção o
+   filtro "Espaço" da agenda simplesmente não aparecia, porque só aparece
+   quando existem espaços e nunca houve como cadastrar nenhum.
+   ================================================================== */
+
+.esp-mesa {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: var(--e-6);
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .esp-mesa { grid-template-columns: 1fr; }
+}
+
+.esp-coluna {
+  padding: var(--e-5);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.esp-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  margin-bottom: var(--e-4);
+}
+.esp-titulo h2 {
+  font-size: var(--t-md);
+  font-weight: 700;
+  color: var(--texto);
+  margin: 0;
+}
+.esp-nota { font-size: var(--t-sm); color: var(--texto-apoio); max-width: 52ch; }
+
+/* -------------------------------------------------------------------
+   Lista de lugares
+   ----------------------------------------------------------------- */
+
+.esp-lista { list-style: none; display: flex; flex-direction: column; }
+.esp-lista li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--e-3);
+  padding: var(--e-3) 0;
+  border-bottom: 1px solid var(--fio);
+}
+.esp-lista li:last-child { border-bottom: none; }
+.esp-lista li.inativo { opacity: 0.55; }
+
+.esp-cor {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+}
+.esp-nome {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto);
+  min-width: 0;
+}
+.esp-capacidade { font-size: var(--t-sm); color: var(--texto-apoio); white-space: nowrap; }
+
+/* -------------------------------------------------------------------
+   Formulários
+   ----------------------------------------------------------------- */
+
+.esp-formulario {
+  padding: var(--e-4);
+  margin-bottom: var(--e-4);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio-md);
+  background: var(--superficie);
+}
+
+.esp-cores { display: flex; flex-wrap: wrap; gap: var(--e-2); }
+.esp-cor-opcao {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--raio);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+/* O anel de escolha por fora, e não a borda por dentro: a cor precisa
+   continuar inteira para se poder compará-la com as outras. */
+.esp-cor-opcao.escolhida {
+  border-color: var(--superficie-alta);
+  box-shadow: 0 0 0 2px var(--teal);
+}
+
+.esp-ativo,
+.esp-repete {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.esp-ativo input,
+.esp-repete input { margin-top: 2px; width: 18px; height: 18px; flex: none; }
+
+/* Os dias da semana como botões, e não como caixas: o alvo de toque de
+   um checkbox é de 12px, e esta tela também é usada num tablet. */
+.esp-dias { display: flex; flex-wrap: wrap; gap: var(--e-2); }
+.esp-dias button {
+  min-width: 54px;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-alta);
+  color: var(--texto-corpo);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+.esp-dias button:hover { border-color: var(--teal); }
+.esp-dias button.escolhido {
+  background: var(--teal-fundo);
+  border-color: var(--teal-fundo);
+  color: var(--superficie-baixa);
+}
+
+/* -------------------------------------------------------------------
+   Lista de reservas
+   ----------------------------------------------------------------- */
+
+.esp-reservas { list-style: none; display: flex; flex-direction: column; gap: var(--e-2); }
+.esp-reserva {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie);
+}
+.esp-reserva-cor {
+  width: 4px;
+  align-self: stretch;
+  border-radius: 2px;
+  flex: none;
+}
+.esp-reserva-corpo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.esp-reserva-titulo { font-size: var(--t-sm); font-weight: 700; color: var(--texto); }
+.esp-reserva-meta { font-size: var(--t-sm); color: var(--texto-corpo); }
+.esp-reserva-quando { font-size: var(--t-xs); color: var(--texto-apoio); }
+
+.esp-datas {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--e-2);
+  padding-left: var(--e-3);
+  border-left: 2px solid var(--fio);
+}
+.esp-datas li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding: var(--e-1) 0;
+  font-size: var(--t-sm);
+  color: var(--texto-corpo);
+}
+
+/* -------------------------------------------------------------------
+   A reserva desenhada na grade da agenda
+   ----------------------------------------------------------------- */
+
+.ag-reserva {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  /* ATRÁS DOS ATENDIMENTOS. A reserva diz que o lugar está ocupado; o
+     atendimento é o que se clica.
+
+     ISTO SÓ FUNCIONA PORQUE `.ag-bloco` GANHOU z-index MAIOR logo
+     abaixo. Sem isso, um elemento posicionado com z-index 1 fica na
+     FRENTE de um posicionado sem z-index nenhum — e a faixa hachurada
+     cobriria o nome do aluno em toda sobreposição, que é exatamente o
+     contrário do que este comentário promete. */
+  z-index: 1;
+  overflow: hidden;
+  padding: 3px 6px;
+  border-radius: var(--raio);
+  border: 1px dashed var(--ag-cor);
+  /* Hachura leve: diferencia da faixa sólida de um atendimento mesmo
+     para quem não distingue as cores. */
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ag-cor) 14%, transparent),
+    color-mix(in srgb, var(--ag-cor) 14%, transparent) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  pointer-events: none;
+}
+.ag-reserva-titulo {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  color: var(--texto);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-reserva-espaco {
+  display: block;
+  font-size: 0.6875rem;
+  color: var(--texto-apoio);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* O atendimento fica NA FRENTE da reserva de espaço. Ver a regra da
+   `.ag-reserva` acima: sem este z-index explícito, quem tem z-index
+   perde para quem não tem — e a faixa do mezanino cobriria o nome do
+   aluno. */
+.ag-bloco { z-index: 2; }

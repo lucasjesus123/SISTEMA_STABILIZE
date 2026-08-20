@@ -28,6 +28,7 @@ import { triagemDoAlunoRoutes, triagemRoutes } from './modules/saude/saude.route
 import { registrarAgendador } from './modules/whatsapp/agendador.js';
 import multipart from '@fastify/multipart';
 import { scheduleRoutes } from './modules/schedule/schedule.routes.js';
+import { reservasRoutes } from './modules/schedule/reservas.routes.js';
 import { financeRoutes } from './modules/finance/finance.routes.js';
 import { insightsRoutes } from './modules/insights/insights.routes.js';
 import { withoutTenantContext } from './db/pool.js';
@@ -222,6 +223,9 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   registrarAgendador(app);
   await app.register(scheduleRoutes, { prefix: '/api/schedule' });
+  /* Reserva de espaço: mezanino, hall, sala de bike. A tabela existia e
+     nenhuma rota escrevia nela. */
+  await app.register(reservasRoutes, { prefix: '/api/reservas' });
   await app.register(financeRoutes, { prefix: '/api/finance' });
   await app.register(insightsRoutes, { prefix: '/api/insights' });
   /* Equipe e espaços: a agenda não tem cor nem legenda sem a primeira,

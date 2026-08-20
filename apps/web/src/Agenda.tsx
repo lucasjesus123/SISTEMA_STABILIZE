@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import * as api from './api.js';
 import { Erro } from './ui.jsx';
 import { JanelaDeAtendimento } from './JanelaDeAtendimento.jsx';
+import { Espacos } from './Espacos.jsx';
 import type { Principal } from './api.js';
 
 /**
@@ -57,6 +58,8 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
   const [compromissos, setCompromissos] = useState<api.CompromissoDetalhado[]>([]);
   const [equipe, setEquipe] = useState<api.Profissional[]>([]);
   const [salas, setSalas] = useState<api.Sala[]>([]);
+  const [espacos, setEspacos] = useState(false);
+  const [reservas, setReservas] = useState<api.Reserva[]>([]);
   const [filtroProf, setFiltroProf] = useState('');
   const [filtroSala, setFiltroSala] = useState('');
   const [erro, setErro] = useState<string | null>(null);
@@ -110,6 +113,25 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
         setErro(e instanceof api.ApiError ? e.message : 'Não foi possível carregar a agenda.');
       })
       .finally(() => vivo && setCarregando(false));
+
+    /* AS RESERVAS DE ESPAÇO ENTRAM NA MESMA GRADE. Um mezanino ocupado
+       que não aparece na agenda é um mezanino que vai ser marcado em
+       cima — e o conflito só vira problema quando as duas turmas chegam
+       na porta.
+
+       A falha é silenciosa de propósito: se esta chamada cair, a agenda
+       de atendimentos ainda precisa aparecer. */
+    const fimDaSemana = new Date(semana);
+    fimDaSemana.setDate(fimDaSemana.getDate() + 6);
+    api
+      .buscarReservas(comoData(semana), comoData(fimDaSemana))
+      .then((r) => {
+        if (vivo) setReservas(filtroSala === '' ? r.data : r.data.filter((x) => x.espacoId === filtroSala));
+      })
+      .catch(() => {
+        if (vivo) setReservas([]);
+      });
+
     return () => {
       vivo = false;
     };
@@ -169,6 +191,27 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
     );
   }
 
+  /* A TELA DE ESPAÇOS SUBSTITUI A AGENDA, e não abre por cima dela. É
+     uma tela de cadastro e planejamento, não uma janela de confirmação:
+     quem vai criar quatro lugares e três reservas precisa de espaço,
+     não de uma gaveta. */
+  if (espacos) {
+    return (
+      <Espacos
+        aoFechar={() => {
+          setEspacos(false);
+          /* Voltar da tela de espaços recarrega a agenda: quem acabou de
+             reservar o mezanino espera vê-lo ocupado na grade. */
+          setVersao((v) => v + 1);
+          api
+            .buscarSalas()
+            .then((r) => setSalas(r.data.filter((s) => s.ativa)))
+            .catch(() => undefined);
+        }}
+      />
+    );
+  }
+
   return (
     <>
       <div className="secao-cabecalho ag-cabecalho">
@@ -193,6 +236,11 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
           <button type="button" className="botao-secundario" onClick={() => andar(1)}>
             Semana ›
           </button>
+          {podeEscrever && (
+            <button type="button" className="botao-secundario" onClick={() => setEspacos(true)}>
+              Espaços
+            </button>
+          )}
           {podeEscrever && (
             <button type="button" className="botao-acao" onClick={() => setHorarios(true)}>
               Horários de atendimento
@@ -257,6 +305,7 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
       <Grade
         dias={dias}
         compromissos={compromissos}
+        reservas={reservas}
         cores={cores}
         carregando={carregando}
         podeMarcar={podeEscrever}
@@ -347,6 +396,7 @@ function ResumoDaSemana({ compromissos }: { compromissos: api.Compromisso[] }): 
 function Grade({
   dias,
   compromissos,
+  reservas,
   cores,
   carregando,
   podeMarcar,
@@ -355,6 +405,7 @@ function Grade({
 }: {
   dias: Date[];
   compromissos: api.CompromissoDetalhado[];
+  reservas: api.Reserva[];
   cores: Map<string, string>;
   carregando: boolean;
   podeMarcar: boolean;
@@ -386,6 +437,19 @@ function Grade({
           linha: minutosDoTopo / MINUTOS_POR_LINHA,
           altura: duracao / MINUTOS_POR_LINHA,
         };
+      })
+      .sort((a, b) => a.linha - b.linha);
+
+  /** Reservas de espaço do dia, posicionadas do mesmo jeito. */
+  const reservasDoDia = (dia: Date): (api.Reserva & { linha: number; altura: number })[] =>
+    reservas
+      .filter((r) => mesmoDia(new Date(r.inicio), dia))
+      .map((r) => {
+        const i = new Date(r.inicio);
+        const f = new Date(r.fim);
+        const minutosDoTopo = (i.getHours() - HORA_INICIAL) * 60 + i.getMinutes();
+        const duracao = Math.max(20, (f.getTime() - i.getTime()) / 60_000);
+        return { ...r, linha: minutosDoTopo / MINUTOS_POR_LINHA, altura: duracao / MINUTOS_POR_LINHA };
       })
       .sort((a, b) => a.linha - b.linha);
 
@@ -431,6 +495,27 @@ function Grade({
                 />
               );
             })}
+
+            {/* AS RESERVAS DE ESPAÇO FICAM ATRÁS DOS ATENDIMENTOS, e
+                não são clicáveis. Elas dizem "este lugar está ocupado",
+                não "clique para editar" — quem for mexer nelas vai pela
+                tela de Espaços. Deixá-las clicáveis aqui roubaria o
+                clique de quem quer marcar um atendimento em cima. */}
+            {reservasDoDia(d).map((r) => (
+              <div
+                key={r.id}
+                className="ag-reserva"
+                style={{
+                  top: `calc(${r.linha} * var(--ag-linha))`,
+                  height: `calc(${r.altura} * var(--ag-linha) - 2px)`,
+                  '--ag-cor': r.cor ?? 'var(--fio-forte)',
+                } as React.CSSProperties}
+                title={`${r.titulo} — ${r.espaco ?? ''}`}
+              >
+                <span className="ag-reserva-titulo">{r.titulo}</span>
+                {r.espaco !== null && <span className="ag-reserva-espaco">{r.espaco}</span>}
+              </div>
+            ))}
 
             {doDia(d).map((c) => (
               <button
@@ -1036,4 +1121,9 @@ function Horarios({
       </div>
     </>
   );
+}
+
+/** Data local em YYYY-MM-DD. `toISOString` deslocaria o dia a oeste de Greenwich. */
+function comoData(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }

@@ -1714,3 +1714,50 @@ export interface TreinoFeitoDoAluno {
 
 export const buscarTreinoFeitoDoAluno = (alunoId: string) =>
   api<{ data: TreinoFeitoDoAluno }>(`/api/students/${alunoId}/treino-feito`);
+
+/* ====================================================================
+ * RESERVA DE ESPAÇO
+ *
+ * `de` e `ate` são DATAS (YYYY-MM-DD) e `ate` é INCLUSIVO — uma tela de
+ * calendário pensa em dias, não em instantes.
+ * ================================================================== */
+
+export interface Reserva {
+  id: string;
+  /** Agrupa as ocorrências de uma reserva repetida. NULL = avulsa. */
+  serieId: string | null;
+  inicio: string;
+  fim: string;
+  titulo: string;
+  espacoId: string | null;
+  espaco: string | null;
+  cor: string | null;
+  reservadoPor: string | null;
+}
+
+export const buscarReservas = (de: string, ate: string) =>
+  api<{ data: Reserva[] }>(`/api/reservas?de=${de}&ate=${ate}`);
+
+export interface NovaReserva {
+  roomId: string;
+  titulo: string;
+  de: string;
+  horaInicio: string;
+  horaFim: string;
+  /** Vazio = um dia só. Domingo = 0, como `getDay()`. */
+  diasDaSemana?: number[];
+  ate?: string;
+}
+
+export const criarReserva = (dados: NovaReserva) =>
+  api<{ data: { criadas: number; serieId: string | null } }>('/api/reservas', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const cancelarReserva = (id: string) =>
+  api<{ ok: boolean }>(`/api/reservas/${id}`, { method: 'DELETE' });
+
+/** Cancela a série daqui para a frente. O passado não é apagado. */
+export const cancelarSerieDeReservas = (serieId: string) =>
+  api<{ data: { canceladas: number } }>(`/api/reservas/serie/${serieId}`, { method: 'DELETE' });
