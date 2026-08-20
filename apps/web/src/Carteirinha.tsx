@@ -100,7 +100,7 @@ export function AbaCarteirinha({
   return (
     <div className="cart-tela">
       <div className="cart-coluna">
-        <Cartao ficha={ficha} foto={foto} />
+        <Cartao ficha={ficha} foto={foto} desde={ficha.inicioEm ?? ficha.criadoEm} />
 
         <div className="cart-acoes">
           {/* IMPRIMIR, e não "baixar PNG". O navegador já sabe gerar PDF
@@ -252,53 +252,102 @@ export function AbaCarteirinha({
 /**
  * A carteirinha em si.
  *
- * Proporção de cartão de crédito (85,6 × 54 mm). Não é capricho: é o
- * tamanho que cabe na carteira, e uma carteirinha que não cabe na
- * carteira fica na gaveta.
+ * DIREÇÃO
+ *
+ * TESE — esta é a única peça do sistema que SAI DA TELA. Ela vai para
+ * uma carteira, ao lado do RG e do cartão do banco, e é estendida por
+ * cima de um balcão. O desenho anterior era o default de todo cartão
+ * gerado por computador: retângulo escuro, cantos arredondados, um
+ * brilho radial no canto superior direito. Bonito na tela e mentiroso no
+ * papel — fundo escuro imprime encardido, come tinta e não se parece com
+ * o que estava na tela.
+ *
+ * CENA — recepção às seis da manhã, luz fluorescente, a pessoa estende o
+ * cartão ou o celular. É essa cena que decide CLARO: todo documento que
+ * vive numa carteira é claro, e o que a recepção precisa ler de longe é
+ * o rosto e o número.
+ *
+ * MUNDO — credencial de atleta. Papel de segurança com guilhoché (a
+ * trama fina que o olho lê como "documento"), um campo de cor cheia
+ * carregando o retrato, e os dados em campos rotulados como num
+ * documento de identidade — rótulo miúdo em versal, valor grande.
+ *
+ * TEMA ÚNICO, de propósito. O cartão é um objeto físico: ele não inverte
+ * quando o sistema está no escuro, pela mesma razão que uma carteira de
+ * motorista não muda de cor à noite.
+ *
+ * Proporção de cartão de crédito (85,6 × 54 mm) — o tamanho que cabe na
+ * carteira, e carteirinha que não cabe na carteira fica na gaveta.
  */
 export function Cartao({
   ficha,
   foto,
+  academia,
+  desde,
   compacto = false,
 }: {
   ficha: Pick<FichaAluno, 'id' | 'nome' | 'codigo' | 'status'> & {
     contrato?: { ciclo: string } | null;
   };
   foto: string | null;
+  /** O nome da academia, quando quem chama souber. */
+  academia?: string | undefined;
+  /** Data de entrada em ISO; vira o ano do campo "membro desde". */
+  desde?: string | null | undefined;
   compacto?: boolean;
 }): ReactNode {
-  const referencia = useRef<HTMLDivElement>(null);
+  const ativo = ficha.status === 'ACTIVE';
 
   return (
-    <div ref={referencia} className={`cart-cartao ${compacto ? 'compacto' : ''}`}>
-      <div className="cart-cartao-topo">
-        <Marca variante="horizontal" altura={22} />
-        <span className="cart-cartao-tipo">Aluno</span>
-      </div>
-
-      <div className="cart-cartao-corpo">
+    <div className={`cart-cartao ${compacto ? 'compacto' : ''} ${ativo ? '' : 'inativo'}`}>
+      {/* O CAMPO DE COR É O RETRATO. A cor ocupa um terço da superfície e
+          tem função — é o fundo do rosto — em vez de ser um filete
+          decorativo na borda. */}
+      <div className="cart-retrato-campo">
         {foto === null ? (
-          <span className="cart-retrato vazio" aria-hidden="true">
+          <span className="cart-retrato-vazio" aria-hidden="true">
             {iniciaisDe(ficha.nome)}
           </span>
         ) : (
           <img className="cart-retrato" src={foto} alt={`Foto de ${ficha.nome}`} />
         )}
-
-        <div className="cart-cartao-dados">
-          <span className="cart-cartao-nome">{ficha.nome}</span>
-          {/* O CÓDIGO EM DESTAQUE. É o número que a recepção pede e o
-              que identifica o aluno quando o nome se repete — dois
-              "Ana Silva" numa academia não é hipótese, é terça-feira. */}
-          <span className="cart-cartao-codigo">
-            {ficha.codigo === null ? '—' : `Nº ${ficha.codigo}`}
-          </span>
-        </div>
+        <span className={`cart-selo ${ativo ? '' : 'inativo'}`}>
+          {ativo ? 'Ativo' : 'Inativo'}
+        </span>
       </div>
 
-      <div className="cart-cartao-rodape">
-        <span>{new Date().getFullYear()}</span>
-        <span className="cart-cartao-selo">{ficha.status === 'ACTIVE' ? 'ativo' : 'inativo'}</span>
+      <div className="cart-face">
+        <div className="cart-face-topo">
+          <Marca variante="horizontal" altura={24} />
+          <span className="cart-classe">Carteirinha de aluno</span>
+        </div>
+
+        <span className="cart-nome" title={ficha.nome}>
+          {ficha.nome}
+        </span>
+
+        {/* CAMPOS ROTULADOS, como em documento: o rótulo miúdo em versal
+            e o valor grande. É o que faz o olho encontrar a matrícula sem
+            ler o cartão inteiro. */}
+        <dl className="cart-campos">
+          <div>
+            <dt>Matrícula</dt>
+            <dd className="cart-numero">{ficha.codigo === null ? '—' : ficha.codigo}</dd>
+          </div>
+          <div>
+            <dt>Membro desde</dt>
+            <dd>{desde === null || desde === undefined ? '—' : desde.slice(0, 4)}</dd>
+          </div>
+        </dl>
+
+        {/* O RODAPÉ É O NOME DA ACADEMIA, e some quando não se sabe qual
+            é. A primeira versão caía em "Stabilize" — que é justamente o
+            que a marca no alto já diz, e repetir a mesma palavra duas
+            vezes num cartão de 85 mm é desperdiçar a única linha que
+            sobrou. */}
+        {academia !== undefined && academia !== '' && (
+          <span className="cart-rodape">{academia}</span>
+        )}
       </div>
     </div>
   );

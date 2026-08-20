@@ -3032,9 +3032,15 @@
   width: 2.6rem;
   height: 2.6rem;
 }
+/* 4:3 E NÃO QUADRADO. A imagem de um exercício é alguém executando um
+   movimento, e movimento acontece na horizontal: no quadrado, o corte
+   come o braço estendido ou a barra. */
+/* 9,5rem e não 11: o seletor vive dentro do cartão de um dia de treino,
+   que é estreito. Com 11rem o nome do exercício ao lado quebrava em duas
+   linhas em qualquer nome de três palavras. */
 .ex-grande {
-  width: 8rem;
-  height: 8rem;
+  width: 9.5rem;
+  height: 7.125rem;
 }
 
 .seletor-item {
@@ -3069,28 +3075,10 @@
 /* O input de arquivo real fica escondido atrás do rótulo: o controle
    nativo do navegador ("Escolher arquivo | Nenhum arquivo") é feio,
    traduzido de forma inconsistente e não aceita estilo. */
-.ex-envio {
-  margin: var(--e-3) 0 0;
-  display: grid;
-  gap: var(--e-2);
-  justify-items: start;
-}
-.ex-envio label {
-  cursor: pointer;
-}
-.ex-envio input[type='file'] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  overflow: hidden;
-}
-.ex-envio input[type='file']:focus-visible + * ,
-.ex-envio label:focus-within {
-  outline: 2px solid var(--teal-vivo);
-  outline-offset: 2px;
-  border-radius: var(--raio);
-}
+/* As regras de `.ex-envio` foram removidas: o link de texto solto ao
+   lado do quadro virou o próprio quadro (ver "A IMAGEM DO EXERCÍCIO", no
+   fim do arquivo). CSS de classe que não existe mais no TSX é peso morto
+   que a próxima pessoa lê como intenção. */
 
 /* =====================================================================
    MEDIDAS CORPORAIS
@@ -3248,120 +3236,16 @@
 }
 
 /* ---- o cartão -------------------------------------------------------
-   Proporção de cartão de crédito (85,6 × 54 mm). Não é capricho: é o
-   tamanho que cabe na carteira, e carteirinha que não cabe na carteira
-   fica na gaveta.
+   AS REGRAS ANTIGAS DESTE BLOCO FORAM REMOVIDAS, e não sobrescritas.
+   O desenho anterior era escuro, com um `::after` de brilho radial no
+   canto; o novo é claro, com guilhoché e campo de cor. Deixar as duas
+   versões no arquivo faria a antiga vencer em tudo que a nova não
+   redeclarasse — foi exatamente assim que uma margem esquecida de
+   `.ag-filtros` abriu uma fresta entre dois cartões da agenda.
+
+   O desenho novo mora na seção "A CARTEIRINHA — redesenho", no fim do
+   arquivo.
    ------------------------------------------------------------------ */
-.cart-cartao {
-  width: 100%;
-  max-width: 21.4rem;
-  aspect-ratio: 85.6 / 54;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  padding: var(--e-4);
-  border-radius: var(--raio-md);
-  /* Escuro nos DOIS temas, como a marca pede: o traço do símbolo é
-     claro, e sobre fundo branco a carteirinha perderia a identidade que
-     é justamente o motivo de ela existir em papel. */
-  background: linear-gradient(150deg, #10282b 0%, #0a1a1c 60%, #123033 100%);
-  color: #eaf7f8;
-  box-shadow: var(--sombra-2, 0 8px 24px rgba(0, 0, 0, 0.25));
-  overflow: hidden;
-  position: relative;
-}
-/* Um brilho diagonal discreto: dá materialidade ao cartão sem virar
-   aquele reflexo plástico de template. */
-.cart-cartao::after {
-  content: '';
-  position: absolute;
-  inset: -40% -10% auto auto;
-  width: 70%;
-  height: 140%;
-  background: radial-gradient(
-    ellipse at top right,
-    color-mix(in srgb, var(--teal-vivo) 16%, transparent),
-    transparent 62%
-  );
-  pointer-events: none;
-}
-
-.cart-cartao-topo {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--e-3);
-}
-.cart-cartao-topo .marca {
-  color: #eaf7f8;
-}
-.cart-cartao-tipo {
-  font-size: 0.625rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--teal-vivo);
-}
-
-.cart-cartao-corpo {
-  display: flex;
-  align-items: center;
-  gap: var(--e-3);
-  min-width: 0;
-}
-.cart-retrato {
-  width: 3.6rem;
-  height: 3.6rem;
-  flex-shrink: 0;
-  border-radius: var(--raio);
-  object-fit: cover;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #9fc4c6;
-  font-family: var(--fonte-display);
-  font-size: var(--t-md);
-  font-weight: 500;
-}
-.cart-cartao-dados {
-  display: grid;
-  gap: 1px;
-  min-width: 0;
-}
-.cart-cartao-nome {
-  font-family: var(--fonte-display);
-  font-size: var(--t-md);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cart-cartao-codigo {
-  font-family: var(--fonte-display);
-  font-size: var(--t-sm);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em;
-  color: var(--teal-vivo);
-}
-.cart-cartao-rodape {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.625rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #7fa3a5;
-}
-.cart-cartao-selo {
-  padding: 2px 7px;
-  border-radius: var(--raio-pilula);
-  background: rgba(255, 255, 255, 0.08);
-}
-.cart-cartao.compacto {
-  max-width: 100%;
-}
 
 .cart-acoes {
   display: flex;
@@ -3456,27 +3340,6 @@
 /* IMPRESSÃO: só o cartão vai para o papel.
    Sem isto, "imprimir" produz oito páginas com o menu, a tabela e o
    rodapé — e a carteirinha em algum lugar da segunda. */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  .cart-cartao,
-  .cart-cartao * {
-    visibility: visible;
-  }
-  .cart-cartao {
-    position: absolute;
-    top: 1cm;
-    left: 1cm;
-    width: 85.6mm;
-    box-shadow: none;
-    /* `print-color-adjust` porque o navegador remove fundos escuros por
-       padrão para economizar tinta — e sem o fundo a carteirinha sai
-       com texto claro sobre branco, ilegível. */
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
-}
 
 .troca-pronto {
   margin: var(--e-5) 0 0;
@@ -5014,3 +4877,359 @@
    perde para quem não tem — e a faixa do mezanino cobriria o nome do
    aluno. */
 .ag-bloco { z-index: 2; }
+
+/* ====================================================================
+   A CARTEIRINHA — redesenho
+
+   TESE: esta é a única peça do sistema que SAI DA TELA. Vai para uma
+   carteira, ao lado do RG, e é estendida por cima de um balcão. O
+   desenho anterior era o default de todo cartão gerado por computador —
+   retângulo escuro, cantos arredondados, brilho radial no canto. Bonito
+   na tela e mentiroso no papel: fundo escuro sai encardido, come tinta e
+   não se parece com o que estava na tela.
+
+   CENA: recepção às seis da manhã, luz fluorescente, a pessoa estende o
+   cartão ou o celular. É a cena que decide CLARO — todo documento que
+   vive numa carteira é claro.
+
+   MUNDO: credencial de atleta. Papel de segurança com guilhoché, um
+   campo de cor cheia carregando o retrato, e os dados em campos
+   rotulados como num documento de identidade.
+
+   TEMA ÚNICO de propósito: o cartão é um objeto físico e não inverte
+   quando o sistema está no escuro, pela mesma razão que uma carteira de
+   motorista não muda de cor à noite.
+   ================================================================== */
+
+.cart-cartao {
+  /* `cqw` mede a largura DESTE elemento, e não da janela: é o que faz o
+     mesmo cartão servir na ficha (22rem), no aplicativo (tela de 390px) e
+     nos 85,6 mm do papel sem três conjuntos de tamanhos. Sem
+     `container-type` a unidade não resolve e o texto sai no tamanho
+     mínimo do clamp. */
+  container-type: inline-size;
+
+  --cart-tinta: #0d1c1f;
+  --cart-tinta-fraca: #4a6266;
+  --cart-papel: #f2f7f7;
+  --cart-campo: #0f4c52;
+
+  width: 100%;
+  max-width: 22rem;
+  aspect-ratio: 85.6 / 54;
+  display: grid;
+  /* O campo de cor ocupa um terço: cor com FUNÇÃO (é o fundo do rosto),
+     e não um filete decorativo na borda. */
+  grid-template-columns: 34% 1fr;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--cart-papel);
+  color: var(--cart-tinta);
+  /* Sombra com deslocamento e desfoque — profundidade de objeto sobre
+     mesa, não halo. */
+  box-shadow: 0 1px 2px rgba(13, 28, 31, 0.16), 0 10px 24px -8px rgba(13, 28, 31, 0.28);
+  position: relative;
+}
+
+/* GUILHOCHÉ. A trama fina que o olho lê como "documento" antes de ler
+   qualquer palavra. Duas hachuras cruzadas em ângulos que não são
+   múltiplos de 45°, para não virar xadrez. Imprime como textura leve. */
+.cart-cartao::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Fina e apertada: a trama tem que ser lida como TEXTURA, não como
+     listra. A primeira tentativa usava 7px e 9px de passo e virava um
+     xadrez visível que competia com o texto. */
+  background-image:
+    repeating-linear-gradient(112deg, rgba(15, 76, 82, 0.042) 0 0.5px, transparent 0.5px 4px),
+    repeating-linear-gradient(-112deg, rgba(15, 76, 82, 0.034) 0 0.5px, transparent 0.5px 5px);
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------------
+   O campo do retrato
+   ----------------------------------------------------------------- */
+
+.cart-retrato-campo {
+  position: relative;
+  background: var(--cart-campo);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.cart-retrato {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* CANTO VIVO, e não círculo. Foto 3×4 de documento é retangular; o
+     círculo é convenção de rede social e corta orelha e queixo, que é
+     justamente por onde se reconhece alguém. */
+  display: block;
+}
+.cart-retrato-vazio {
+  font-family: var(--fonte-display);
+  font-size: clamp(1.6rem, 7cqw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  /* Sobre o campo de cor, o secundário é tingido a partir do próprio
+     tom — nunca cinza. */
+  color: rgba(210, 240, 240, 0.72);
+}
+
+.cart-selo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4px 8px;
+  background: rgba(6, 30, 33, 0.62);
+  color: #cfeeee;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  text-align: center;
+}
+.cart-selo.inativo { background: rgba(96, 30, 26, 0.82); color: #ffd8d3; }
+
+/* -------------------------------------------------------------------
+   A face de dados
+   ----------------------------------------------------------------- */
+
+.cart-face {
+  display: grid;
+  /* O NOME OCUPA A LINHA ELÁSTICA e fica centrado nela. Antes o nome era
+     uma linha `auto` e os campos tinham `margin-top: auto`: as duas
+     coisas empurravam, e sobrava um vão morto no meio do cartão. */
+  grid-template-rows: auto 1fr auto auto;
+  gap: 0;
+  padding: 4% 5%;
+  min-width: 0;
+  position: relative;
+}
+
+.cart-face-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 3%;
+  border-bottom: 1px solid rgba(15, 76, 82, 0.22);
+}
+.cart-face-topo .marca { color: var(--cart-tinta); }
+.cart-classe {
+  font-size: 0.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--cart-tinta-fraca);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.cart-nome {
+  font-family: var(--fonte-display);
+  /* `cqw` para o nome acompanhar o cartão em qualquer tamanho — na ficha,
+     no aplicativo e nos 85,6 mm do papel. */
+  font-size: clamp(0.8rem, 6.2cqw, 1.15rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.12;
+  align-self: center;
+  padding: 4% 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-wrap: balance;
+}
+
+.cart-campos {
+  display: flex;
+  align-items: flex-end;
+  gap: 9%;
+}
+.cart-campos dt {
+  font-size: 0.4688rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--cart-tinta-fraca);
+  margin-bottom: 1px;
+}
+.cart-campos dd {
+  margin: 0;
+  font-family: var(--fonte-display);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--cart-tinta);
+}
+/* A MATRÍCULA É O NÚMERO QUE A RECEPÇÃO PEDE. Ela ganha o tamanho de um
+   número de peito: é o único dado do cartão que se lê a um braço de
+   distância, e o que resolve os dois "Ana Silva" da mesma academia. */
+.cart-numero {
+  font-size: clamp(1.05rem, 8cqw, 1.5rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.cart-rodape {
+  margin-top: 3%;
+  padding-top: 2.5%;
+  border-top: 1px solid rgba(15, 76, 82, 0.16);
+  font-size: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--cart-tinta-fraca);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* O cartão inteiro esmaece quando a matrícula não está ativa — o estado
+   é do documento, não de um selo solto. */
+.cart-cartao.inativo { --cart-campo: #4a5658; }
+
+.cart-cartao.compacto { max-width: 100%; }
+
+/* ---- impressão ------------------------------------------------------
+   ESTE BLOCO PRECISA VIR DEPOIS do desenho do cartão, e não antes.
+
+   Ele estava lá em cima, e o `width: 85.6mm` daqui perdia para o
+   `width: 100%` do desenho novo, que aparecia depois no arquivo — mesma
+   especificidade, ganha o último. O sintoma: a carteirinha imprimia com
+   93 mm de largura em vez de 85,6 mm. Ou seja, saía do tamanho de
+   carteira, que é a única razão de a proporção existir.
+   ------------------------------------------------------------------ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .cart-cartao,
+  .cart-cartao * {
+    visibility: visible;
+  }
+  .cart-cartao {
+    position: absolute;
+    top: 1cm;
+    left: 1cm;
+    /* `max-width` junto do `width`: sem ele o teto de 22rem do desenho
+       de tela continuaria valendo e cortaria a medida em papel. */
+    width: 85.6mm;
+    max-width: 85.6mm;
+    box-shadow: none;
+    /* O navegador remove fundos por padrão para economizar tinta. Sem
+       isto o campo do retrato sai branco e o cartão perde a metade que
+       carrega a cor. */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
+/* ====================================================================
+   A IMAGEM DO EXERCÍCIO
+
+   Antes: um quadrado cinza com três letras do grupo muscular dentro —
+   que se lê como imagem quebrada, não como espaço vazio — e o
+   "Adicionar uma foto" como link de texto ao lado, sem relação visual
+   com o quadrado que ele preenche. Duas peças para uma coisa só, e a
+   que convidava a agir era a menos visível das duas.
+
+   Agora o vazio É o alvo.
+   ================================================================== */
+
+.ex-quadro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  flex: none;
+}
+
+/* A ZONA DE ENVIO. Moldura tracejada — a convenção que todo mundo já lê
+   como "solte ou escolha um arquivo aqui" — e o quadro inteiro é o
+   alvo, não uma palavra ao lado dele. */
+.ex-solta {
+  width: 9.5rem;
+  height: 7.125rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-1);
+  border: 1.5px dashed var(--fio-forte);
+  border-radius: var(--raio-md);
+  background: var(--superficie-baixa);
+  color: var(--texto-apoio);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color var(--rapido, 140ms) ease-out,
+    background var(--rapido, 140ms) ease-out,
+    color var(--rapido, 140ms) ease-out;
+}
+.ex-solta:hover,
+.ex-solta:focus-within {
+  border-color: var(--teal);
+  background: var(--superficie-realce);
+  color: var(--teal);
+}
+.ex-solta strong {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto-corpo);
+}
+.ex-solta:hover strong,
+.ex-solta:focus-within strong { color: var(--teal); }
+/* O secundário é tingido a partir do próprio tom da superfície, e não
+   um cinza solto. */
+.ex-solta span { font-size: var(--t-xs); color: var(--texto-apoio); }
+.ex-solta input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+/* O pé do quadro: o grupo muscular à esquerda, a troca à direita. A ação
+   fica AQUI e não sobreposta na imagem no hover — ação que só aparece
+   com o mouse em cima não existe para quem usa num tablet, e o balcão da
+   academia é um tablet. */
+.ex-quadro-pe {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  width: 9.5rem;
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+}
+.ex-quadro-pe label { cursor: pointer; position: relative; }
+.ex-quadro-pe input[type='file'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* O vazio das miniaturas também vira ícone, e não três letras. */
+.ex-foto.ex-vazia {
+  border: 1px dashed var(--fio-forte);
+  background: var(--superficie-baixa);
+  color: var(--texto-apoio);
+}
+.ex-foto.ex-vazia svg { width: 60%; height: 60%; max-width: 26px; max-height: 26px; }
+
+@media (max-width: 620px) {
+  .ex-solta,
+  .ex-grande,
+  .ex-quadro-pe { width: 100%; }
+  .ex-grande { height: auto; aspect-ratio: 4 / 3; }
+  .ex-solta { height: auto; aspect-ratio: 4 / 3; }
+}

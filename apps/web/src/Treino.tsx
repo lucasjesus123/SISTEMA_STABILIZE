@@ -687,7 +687,7 @@ function SeletorExercicio({
       ) : (
         <>
           <div className="seletor-escolhido">
-            <FotoDoExercicio exercicio={escolhido} tamanho="grande" versao={versaoDaFoto} />
+            <QuadroDaFoto exercicio={escolhido} aoEnviar={aoTrocarFoto} versao={versaoDaFoto} />
             <div className="seletor-escolhido-texto">
               <p className="seletor-escolhido-nome">
                 <strong>{escolhido.nome}</strong>
@@ -704,7 +704,6 @@ function SeletorExercicio({
                   imagem; obrigar a sair, achar a biblioteca e procurar o
                   mesmo exercício é o que faz a biblioteca ficar sem foto
                   nenhuma para sempre. */}
-              <EnvioDeFoto exercicio={escolhido} aoEnviar={aoTrocarFoto} />
             </div>
           </div>
 
@@ -808,8 +807,12 @@ function FotoDoExercicio({
 
   if (!exercicio.temFoto || falhou || endereco === null) {
     return (
-      <span className={`ex-foto ex-${tamanho} ex-vazia`} aria-hidden="true">
-        {rotuloGrupo(exercicio.grupo).slice(0, 3)}
+      <span
+        className={`ex-foto ex-${tamanho} ex-vazia`}
+        title={rotuloGrupo(exercicio.grupo)}
+        aria-hidden="true"
+      >
+        <IconeImagem />
       </span>
     );
   }
@@ -824,13 +827,36 @@ function FotoDoExercicio({
   );
 }
 
-/** Envia (ou troca) a foto de um exercício. */
-function EnvioDeFoto({
+/**
+ * O quadro da imagem do exercício.
+ *
+ * O PROBLEMA QUE ISTO CONSERTA: o lugar da imagem era um quadrado cinza
+ * com três letras do grupo muscular dentro — que se lê como imagem
+ * quebrada, não como espaço vazio — e o "Adicionar uma foto" era um link
+ * de texto ao lado, sem relação visual com o quadrado que ele preenche.
+ * Duas peças para uma coisa só, e a que convida a agir era a menos
+ * visível das duas.
+ *
+ * AGORA O VAZIO É O PRÓPRIO ALVO. O quadro inteiro é o botão de envio,
+ * com moldura tracejada — a convenção que todo mundo já leu como "solte
+ * ou escolha um arquivo aqui".
+ *
+ * A PROPORÇÃO É 4:3 E NÃO QUADRADA. A imagem de um exercício é a foto de
+ * alguém executando um movimento, e movimento acontece na horizontal:
+ * num quadrado, o corte come o braço estendido ou a barra.
+ *
+ * A AÇÃO DE TROCAR FICA EMBAIXO, e não sobreposta na imagem no hover.
+ * Ação que só aparece com o mouse em cima não existe para quem usa o
+ * sistema num tablet — e o balcão da academia é um tablet.
+ */
+function QuadroDaFoto({
   exercicio,
   aoEnviar,
+  versao = 0,
 }: {
   exercicio: Exercicio;
   aoEnviar: () => void;
+  versao?: number;
 }): ReactNode {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -855,22 +881,63 @@ function EnvioDeFoto({
     }
   };
 
+  const campo = (
+    <input
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      onChange={(e) => void escolher(e)}
+      disabled={enviando}
+    />
+  );
+
   return (
-    <p className="ex-envio">
-      <label className="botao-texto">
-        {enviando ? 'Enviando…' : exercicio.temFoto ? 'Trocar a foto' : 'Adicionar uma foto'}
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => void escolher(e)}
-          disabled={enviando}
-        />
-      </label>
-      {erro !== null && (
-        <span className="mensagem-erro" role="alert">
-          {erro}
-        </span>
+    <div className="ex-quadro">
+      {exercicio.temFoto ? (
+        <>
+          <FotoDoExercicio exercicio={exercicio} tamanho="grande" versao={versao} />
+          <p className="ex-quadro-pe">
+            <span>{rotuloGrupo(exercicio.grupo)}</span>
+            <label className="botao-texto">
+              {enviando ? 'Enviando…' : 'Trocar imagem'}
+              {campo}
+            </label>
+          </p>
+        </>
+      ) : (
+        <label className="ex-solta">
+          <IconeImagem />
+          <strong>{enviando ? 'Enviando…' : 'Adicionar imagem'}</strong>
+          <span>JPG, PNG ou WEBP</span>
+          {campo}
+        </label>
       )}
-    </p>
+      {erro !== null && (
+        <p className="mensagem-erro" role="alert">
+          {erro}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* Ícone desenhado, e não as três primeiras letras do grupo muscular —
+   que era o que ocupava o vazio antes e se lia como imagem quebrada. */
+function IconeImagem(): ReactNode {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="26"
+      height="26"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4.5" width="18" height="15" rx="2" />
+      <circle cx="8.5" cy="10" r="1.6" />
+      <path d="M3.5 16.5 8 12.5l3.2 2.8L15.5 11l5 5.5" />
+    </svg>
   );
 }

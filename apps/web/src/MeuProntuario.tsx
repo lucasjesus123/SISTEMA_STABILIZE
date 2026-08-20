@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import * as api from './api.js';
 import { FormularioDaTriagem } from './Triagem.jsx';
+import { Cartao } from './Carteirinha.jsx';
 
 /**
  * A aba "Eu" do aplicativo do aluno: carteirinha, anamneses e exames.
@@ -90,6 +91,15 @@ export function MeuProntuario(): ReactNode {
 
 /* ==================================================================== */
 
+/**
+ * A carteirinha no aplicativo.
+ *
+ * É O MESMO COMPONENTE DO SISTEMA, e não uma segunda versão. Antes eram
+ * dois desenhos com as mesmas informações — um em `.app-cart-*` e outro
+ * em `.cart-*` — e nada garantia que continuassem parecidos. Um cartão
+ * que muda de cara conforme onde é aberto não é um documento; e o aluno
+ * mostra o celular para a mesma recepcionista que vê o cartão impresso.
+ */
 function MinhaCarteirinha({
   dados,
   foto,
@@ -98,33 +108,15 @@ function MinhaCarteirinha({
   foto: string | null;
 }): ReactNode {
   return (
-    <section className="app-carteirinha">
-      <div className="app-cart-topo">
-        <span className="app-cart-academia">{dados.academia}</span>
-        <span className="app-cart-tipo">Carteirinha</span>
-      </div>
-      <div className="app-cart-corpo">
-        {foto === null ? (
-          <span className="app-cart-retrato vazio" aria-hidden="true">
-            {dados.nome.trim().charAt(0).toUpperCase()}
-          </span>
-        ) : (
-          <img className="app-cart-retrato" src={foto} alt="" />
-        )}
-        <div>
-          <span className="app-cart-nome">{dados.nome}</span>
-          {/* O CÓDIGO GRANDE. É o número que a recepção pede na catraca,
-              e o aluno mostra a tela — não decora. */}
-          <span className="app-cart-codigo">
-            {dados.codigo === null ? '—' : `Nº ${dados.codigo}`}
-          </span>
-        </div>
-      </div>
-      <div className="app-cart-rodape">
-        <span>{dados.status === 'ACTIVE' ? 'Matrícula ativa' : 'Matrícula inativa'}</span>
-        {dados.desde !== null && <span>desde {dados.desde.slice(0, 7).split('-').reverse().join('/')}</span>}
-      </div>
-    </section>
+    <div className="app-carteirinha">
+      <Cartao
+        ficha={{ id: '', nome: dados.nome, codigo: dados.codigo, status: dados.status }}
+        foto={foto}
+        academia={dados.academia}
+        desde={dados.desde}
+        compacto
+      />
+    </div>
   );
 }
 
