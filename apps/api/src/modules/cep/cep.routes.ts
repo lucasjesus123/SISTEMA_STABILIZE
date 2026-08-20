@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { notFound } from '../../http/errors.js';
+import { notFound, unavailable } from '../../http/errors.js';
 
 /**
  * Consulta de CEP.
@@ -77,6 +77,26 @@ export async function cepRoutes(app: FastifyInstance): Promise<void> {
 
       const endereco = await consultar(cep, request.log);
 
+      /* NÃO CONSEGUIR CONSULTAR NÃO É "NÃO EXISTE", e esta distinção não
+         é preciosismo — era um defeito com duas consequências.
+
+         A primeira: a pessoa digitava um CEP correto, o serviço externo
+         piscava, e o sistema respondia "CEP não encontrado". Ela então
+         duvidava do próprio dado e redigitava, sempre com o mesmo
+         resultado.
+
+         A segunda é pior: o "não encontrado" era GUARDADO POR DEZ
+         MINUTOS. Uma instabilidade de três segundos fazia um CEP válido
+         ser declarado inexistente para todo mundo até o cache expirar.
+
+         Agora a indisponibilidade não entra no cache e tem resposta
+         própria, que diz o que fazer. */
+      if (endereco === 'indisponivel') {
+        throw unavailable(
+          'Não consegui consultar o CEP agora. Digite o endereço à mão — depois dá para corrigir.',
+        );
+      }
+
       if (cache.size >= TETO_CACHE) cache.clear();
       cache.set(cep, {
         valor: endereco,
@@ -98,10 +118,15 @@ interface RespostaViaCep {
   uf?: string;
 }
 
+/**
+ * `null` = o serviço respondeu e disse que este CEP não existe.
+ * `'indisponivel'` = não deu para perguntar. São coisas diferentes, e
+ * misturá-las fazia o sistema afirmar que um CEP válido não existia.
+ */
 async function consultar(
   cep: string,
   log: { warn: (obj: unknown, msg: string) => void },
-): Promise<EnderecoDeCep | null> {
+): Promise<EnderecoDeCep | null | 'indisponivel'> {
   let resposta: Response;
   try {
     resposta = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {
@@ -114,16 +139,16 @@ async function consultar(
       headers: { Accept: 'application/json' },
     });
   } catch (erro) {
-    /* Serviço externo fora do ar não é erro DESTE sistema. Devolvemos
-       "não encontrei" e a pessoa digita o endereço à mão, que é o que
-       ela faria de qualquer forma. Derrubar o cadastro inteiro porque os
-       Correios estão instáveis seria transformar a comodidade em
-       dependência. */
+    /* Serviço externo fora do ar não é erro DESTE sistema, e também não
+       é "CEP inexistente". O cadastro segue sem ele — a pessoa digita o
+       endereço à mão, que é o que faria de qualquer forma. */
     log.warn({ erro: String(erro) }, 'consulta de CEP falhou');
-    return null;
+    return 'indisponivel';
   }
 
-  if (!resposta.ok) return null;
+  /* 5xx é problema deles; 404 no host inteiro também. Nenhum dos dois
+     autoriza afirmar que o CEP não existe. */
+  if (!resposta.ok) return 'indisponivel';
 
   const corpo = (await resposta.json().catch(() => null)) as unknown;
   return interpretarViaCep(cep, corpo);

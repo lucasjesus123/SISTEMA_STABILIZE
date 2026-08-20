@@ -97,7 +97,7 @@ export function Perfil({ principal }: { principal: Principal }): ReactNode {
 
   /* O endereço chega sozinho no oitavo dígito do CEP e só preenche o que
      está em branco — ver `useBuscaDeCep`. */
-  const { buscando, naoEncontrado } = useBuscaDeCep(form.cep, (achado) => {
+  const { buscando, naoEncontrado, indisponivel } = useBuscaDeCep(form.cep, (achado) => {
     setForm((f) =>
       mesclarEndereco(f, achado, {
         logradouro: 'logradouro',
@@ -247,7 +247,9 @@ export function Perfil({ principal }: { principal: Principal }): ReactNode {
               ? 'Buscando o endereço…'
               : naoEncontrado
                 ? 'CEP não encontrado. Preencha o endereço abaixo.'
-                : 'Preencha o CEP e o endereço vem sozinho.'}
+                : indisponivel
+                  ? 'Não consegui consultar o CEP agora. Preencha o endereço à mão.'
+                  : 'Preencha o CEP e o endereço vem sozinho.'}
           </span>
         </label>
 

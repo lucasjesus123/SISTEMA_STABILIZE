@@ -917,12 +917,25 @@ export interface EnderecoDeCep {
  * do ar — os dois casos terminam do mesmo jeito na tela: a pessoa
  * preenche à mão, sem mensagem de erro atravessada.
  */
-export async function buscarCep(oitoDigitos: string): Promise<EnderecoDeCep | null> {
+/**
+ * "Não existe" e "não consegui perguntar" são respostas diferentes.
+ *
+ * Antes as duas viravam `null`, e a tela dizia "CEP não encontrado" nas
+ * duas — fazendo quem digitou um CEP correto duvidar do próprio dado
+ * quando o serviço externo apenas piscou.
+ */
+export type ResultadoDeCep = EnderecoDeCep | 'nao-encontrado' | 'indisponivel';
+
+export async function buscarCep(oitoDigitos: string): Promise<ResultadoDeCep> {
   try {
     const { data } = await api<{ data: EnderecoDeCep }>(`/api/cep/${oitoDigitos}`);
     return data;
-  } catch {
-    return null;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return 'nao-encontrado';
+    /* Rede caída, servidor fora, 503 do proxy de CEP: tudo isto é
+       "não consegui", e nenhum deles autoriza dizer que o CEP não
+       existe. */
+    return 'indisponivel';
   }
 }
 

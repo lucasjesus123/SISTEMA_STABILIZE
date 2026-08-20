@@ -15,7 +15,8 @@ export type ErrorCode =
   | 'CONFLICT'
   | 'UNPROCESSABLE'
   | 'RATE_LIMITED'
-  | 'INTERNAL';
+  | 'INTERNAL'
+  | 'UNAVAILABLE';
 
 const STATUS: Record<ErrorCode, number> = {
   BAD_REQUEST: 400,
@@ -26,6 +27,9 @@ const STATUS: Record<ErrorCode, number> = {
   UNPROCESSABLE: 422,
   RATE_LIMITED: 429,
   INTERNAL: 500,
+  /* Dependência externa fora do ar. NÃO é 500: o sistema está de pé, e
+     quem recebe isto sabe que pode tentar de novo daqui a pouco. */
+  UNAVAILABLE: 503,
 };
 
 export class AppError extends Error {
@@ -57,6 +61,8 @@ export const forbidden = (m = 'Acesso negado') => new AppError('FORBIDDEN', m);
 export const conflict = (m: string) => new AppError('CONFLICT', m);
 export const unprocessable = (m: string, details?: unknown) =>
   new AppError('UNPROCESSABLE', m, { details });
+/** Serviço de terceiro indisponível. Diferente de "não encontrei". */
+export const unavailable = (m: string) => new AppError('UNAVAILABLE', m);
 
 /**
  * Recurso não encontrado.

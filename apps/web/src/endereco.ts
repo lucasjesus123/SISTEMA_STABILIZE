@@ -26,9 +26,12 @@ import { buscarCep, type EnderecoDeCep } from './api.js';
 export function useBuscaDeCep(
   cepDigitado: string,
   aoEncontrar: (endereco: EnderecoDeCep) => void,
-): { buscando: boolean; naoEncontrado: boolean } {
+): { buscando: boolean; naoEncontrado: boolean; indisponivel: boolean } {
   const [buscando, setBuscando] = useState(false);
   const [naoEncontrado, setNaoEncontrado] = useState(false);
+  /* Separado de `naoEncontrado` de propósito: um manda conferir o CEP, o
+     outro manda digitar o endereço e seguir a vida. */
+  const [indisponivel, setIndisponivel] = useState(false);
 
   /* Em ref, e não em estado: mudar de identidade não pode reexecutar a
      busca. Quem chama passa uma função nova a cada renderização — é o
@@ -47,6 +50,7 @@ export function useBuscaDeCep(
   useEffect(() => {
     if (oitoDigitos === null) {
       setNaoEncontrado(false);
+      setIndisponivel(false);
       /* Apagou um dígito: o próximo CEP completo deve buscar de novo,
          mesmo que seja o mesmo de antes. */
       jaBuscado.current = null;
@@ -58,18 +62,20 @@ export function useBuscaDeCep(
     const daVez = ++ultimaBusca.current;
     setBuscando(true);
     setNaoEncontrado(false);
+    setIndisponivel(false);
 
     void (async () => {
       const endereco = await buscarCep(oitoDigitos);
       // Chegou tarde: já existe uma busca mais nova. Descarta.
       if (daVez !== ultimaBusca.current) return;
       setBuscando(false);
-      if (endereco === null) setNaoEncontrado(true);
+      if (endereco === 'nao-encontrado') setNaoEncontrado(true);
+      else if (endereco === 'indisponivel') setIndisponivel(true);
       else callback.current(endereco);
     })();
   }, [oitoDigitos]);
 
-  return { buscando, naoEncontrado };
+  return { buscando, naoEncontrado, indisponivel };
 }
 
 /**

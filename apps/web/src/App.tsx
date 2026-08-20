@@ -1735,7 +1735,11 @@ function FormularioAluno({
   /* Assim que o CEP fica completo, o endereço chega sozinho — e só
      preenche o que está em branco, para não apagar a rua que alguém
      corrigiu à mão. Ver `useBuscaDeCep`. */
-  const { buscando: buscandoCep, naoEncontrado: cepNaoEncontrado } = useBuscaDeCep(
+  const {
+    buscando: buscandoCep,
+    naoEncontrado: cepNaoEncontrado,
+    indisponivel: cepIndisponivel,
+  } = useBuscaDeCep(
     dados['cep'] ?? '',
     (achado) => {
       setDados((d) =>
@@ -1793,7 +1797,9 @@ function FormularioAluno({
                       ? 'Buscando o endereço…'
                       : cepNaoEncontrado
                         ? 'CEP não encontrado. Preencha o endereço abaixo.'
-                        : 'Preencha o CEP e o endereço vem sozinho.'}
+                        : cepIndisponivel
+                          ? 'Não consegui consultar o CEP agora. Preencha o endereço à mão.'
+                          : 'Preencha o CEP e o endereço vem sozinho.'}
                   </span>
                 ) : (
                   c.dica !== undefined && <span className="campo-dica">{c.dica}</span>
