@@ -299,6 +299,57 @@ novo — ele mora dentro daquela imagem.
 > aplicativo em tela cheia poderia ficar preso na versão anterior sem
 > nenhum botão de "atualizar" para o aluno apertar.
 
+### Atualizar sozinho (opcional)
+
+```bash
+./deploy/agendar-atualizacao.sh
+```
+
+Põe no cron uma verificação a cada 10 minutos: o servidor pergunta ao
+GitHub se o ramo andou e, se andou, roda o `atualizar.sh` sozinho.
+Intervalo pelo ambiente — `STABILIZE_ATUALIZACAO_MINUTOS=5`.
+
+Para desligar:
+
+```bash
+crontab -l | grep -v '# stabilize-atualizacao' | crontab -
+```
+
+**Por que o servidor puxa em vez de o GitHub empurrar.** O caminho comum
+seria uma action que entra na VPS por SSH, e para isso a chave privada
+da máquina teria de morar nos secrets do repositório. Quem tem escrita
+no repositório — ou uma action de terceiro comprometida — passaria a ter
+a VPS inteira, **inclusive as pastas dos outros sistemas que moram
+nela**. Nenhuma chave que abre esta pasta para de abrir na porta ao
+lado. Invertendo o sentido, nenhuma credencial sai da máquina: é uma
+leitura, e a decisão é local.
+
+O que o `verificar-atualizacao.sh` faz e um `git pull` no cron não faz:
+
+- **Fica calado quando não há nada.** Cron manda e-mail a cada linha
+  impressa, e um log que fala a cada dez minutos é um log que ninguém
+  lê mais — justamente no dia em que ele tem algo a dizer.
+- **Não deixa dois deploys se cruzarem** (`flock`). A atualização passa
+  do intervalo do cron quando as imagens são reconstruídas.
+- **Recusa história reescrita.** Se o ramo remoto não descende do que
+  está na VPS, houve force-push. Pode ser legítimo, mas não é rotina — e
+  rotina é a única coisa que uma máquina deve fazer sozinha de
+  madrugada. Ela para e chama você.
+- **Confere que o HEAD andou depois do deploy.** Quem faz o `git pull` é
+  o `atualizar.sh`; se ele terminasse bem sem avançar, a passada
+  seguinte recomeçaria tudo — a cada dez minutos, para sempre. E como a
+  primeira coisa que ele faz é um **backup completo**, o laço encheria o
+  disco de dumps, derrubando junto os outros sistemas da VPS. Descoberto
+  testando o script contra um `atualizar.sh` falso que saía com 0 sem
+  puxar nada.
+
+**O que isto tira de você, e o que tira junto.** Todo commit que chegar
+no ramo entra no ar sem ninguém olhando. O `atualizar.sh` faz backup
+antes de tocar no banco e para antes de subir a API quando a imagem de
+migration não confere — mas **o cron não lê a CI**: um commit que quebra
+os testes chega na VPS do mesmo jeito. Se isso te incomoda, o comando à
+mão continua valendo, e é a opção mais conservadora.
+
 ---
 
 ## 7. Vigiar
