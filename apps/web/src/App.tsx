@@ -34,6 +34,7 @@ import { Aplicativo } from './Aplicativo.jsx';
 import { BotaoTema, useTema } from './tema.jsx';
 import { Perfil } from './Perfil.jsx';
 import { Academia } from './Academia.jsx';
+import { Crm } from './Crm.jsx';
 import { Financeiro } from './Financeiro.jsx';
 import { Agenda } from './Agenda.jsx';
 import { Equipe } from './Equipe.jsx';
@@ -100,6 +101,7 @@ type Aba =
   | 'equipe'
   | 'whatsapp'
   | 'academia'
+  | 'interessados'
   | 'perfil';
 
 export default function App(): ReactNode {
@@ -435,6 +437,13 @@ function Sistema({
        permissão porque são dados da empresa; o perfil é a própria
        pessoa, e não existe papel que não possa editar o próprio nome. */
     {
+      id: 'interessados',
+      nome: 'Interessados',
+      icone: <IconeInteressados />,
+      visivel: pode('student:write'),
+      grupo: 'Operação',
+    },
+    {
       id: 'academia',
       nome: 'A academia',
       icone: <IconeAcademia />,
@@ -559,6 +568,7 @@ function Sistema({
         {aba === 'financeiro' && <Financeiro principal={principal} />}
         {aba === 'equipe' && <Equipe principal={principal} />}
         {aba === 'whatsapp' && <Whatsapp />}
+        {aba === 'interessados' && <Crm podeConverter={pode('student:write')} />}
         {aba === 'academia' && <Academia />}
         {aba === 'perfil' && <Perfil principal={principal} />}
         </div>
@@ -655,6 +665,16 @@ function IconePerfil(): ReactNode {
 /* O prédio da academia — a casa, não a pessoa. É o par visual do
    IconePerfil, que fica logo abaixo no menu: um diz "a empresa", o
    outro diz "você". */
+/* Um funil — a forma do CRM, e o que distingue esta seção de "Alunos":
+   aqui entra muita gente e sai pouca, e a estreita é o ponto. */
+function IconeInteressados(): ReactNode {
+  return (
+    <svg {...svg}>
+      <path d="M4 5h16l-6 7v6l-4 2v-8z" />
+    </svg>
+  );
+}
+
 function IconeAcademia(): ReactNode {
   return (
     <svg {...svg}>

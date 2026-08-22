@@ -5550,3 +5550,81 @@
 .rel-pdf-item p { margin: 0; font-size: 0.8rem; color: var(--tinta-3); line-height: 1.45; flex: 1; }
 .rel-pdf-acoes { display: flex; gap: var(--e-2); align-items: center; margin-top: var(--e-2); }
 .rel-pdf-acoes select { flex: 1; min-width: 0; }
+
+/* =====================================================================
+   CRM — INTERESSADOS
+   ================================================================== */
+.crm-topo { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--e-4); margin-bottom: var(--e-5); }
+.crm-topo .acad-abas { margin-bottom: 0; flex: 1; }
+.crm-filtros { display: flex; gap: var(--e-3); margin-bottom: var(--e-4); }
+.crm-filtros input { flex: 1; max-width: 320px; }
+.crm-form { margin: 0 0 var(--e-5); padding: var(--e-4); border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--superficie-2); }
+
+.crm-tabela tr.clicavel { cursor: pointer; }
+.crm-tabela tr.clicavel:hover { background: var(--superficie-2); }
+.crm-zap { display: block; font-size: 0.74rem; color: var(--tinta-3); }
+
+.crm-selo {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  background: var(--superficie-3); color: var(--tinta-2);
+}
+.crm-selo.novo        { background: color-mix(in srgb, var(--acento) 16%, transparent); color: var(--acento); }
+.crm-selo.contatado   { background: color-mix(in srgb, #f0b429 20%, transparent); color: #a06d05; }
+.crm-selo.visitou     { background: color-mix(in srgb, #7b61ff 18%, transparent); color: #5a43cc; }
+.crm-selo.matriculou  { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.crm-selo.perdido     { background: var(--superficie-3); color: var(--tinta-3); }
+
+/* O PRAZO É A INFORMAÇÃO MAIS IMPORTANTE DA LINHA, e a cor diz o estado
+   sem obrigar a ler: atrasado puxa o olho, futuro recua. */
+.crm-prazo { font-size: 0.8rem; font-weight: 600; }
+.crm-prazo.atrasado { color: var(--perigo); }
+.crm-prazo.hoje     { color: var(--acento); }
+.crm-prazo.futuro   { color: var(--tinta-3); font-weight: 500; }
+.crm-prazo.sem-data { color: var(--tinta-3); font-weight: 400; font-style: italic; }
+
+/* --- funil --- */
+.crm-funil-topo { margin-bottom: var(--e-4); }
+.crm-indicadores { display: flex; gap: var(--e-6); margin-bottom: var(--e-4); }
+.crm-indicadores div { display: flex; flex-direction: column; gap: 2px; }
+.crm-ind-rotulo { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--tinta-3); }
+.crm-indicadores strong { font-size: 1.6rem; font-weight: 700; }
+.crm-etapas { display: flex; flex-direction: column; gap: var(--e-2); margin-top: var(--e-5); }
+.crm-etapa { display: grid; grid-template-columns: 120px 1fr 40px; align-items: center; gap: var(--e-3); }
+.crm-etapa-nome { font-size: 0.82rem; color: var(--tinta-2); }
+.crm-etapa-barra { height: 14px; border-radius: 3px; background: var(--acento); min-width: 2px; }
+.crm-etapa-barra.matriculou { background: var(--ok); }
+.crm-etapa-barra.perdido { background: var(--linha); }
+.crm-etapa-num { font-size: 0.86rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* --- a ficha --- */
+.crm-painel {
+  position: fixed; inset: 0 0 0 auto; width: min(520px, 100%);
+  background: var(--superficie); border-left: 1px solid var(--linha);
+  padding: var(--e-6); overflow-y: auto; z-index: 40;
+  box-shadow: -8px 0 32px rgb(0 0 0 / 0.12);
+}
+.crm-painel-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--e-3); margin-bottom: var(--e-4); }
+.crm-painel-topo h2 { margin: 0 0 var(--e-2); font-size: 1.15rem; }
+.crm-dados { display: grid; grid-template-columns: 1fr 1fr; gap: var(--e-3); margin: 0 0 var(--e-4); }
+.crm-dados dt { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--tinta-3); }
+.crm-dados dd { margin: 2px 0 0; font-size: 0.88rem; }
+.crm-acoes { display: flex; gap: var(--e-2); margin-bottom: var(--e-5); }
+.crm-convertido { padding: var(--e-3); border-radius: var(--r-2); background: color-mix(in srgb, var(--ok) 10%, transparent); font-size: 0.84rem; line-height: 1.5; }
+
+.crm-registrar { border-top: 1px solid var(--linha); padding-top: var(--e-4); }
+.crm-registrar h3, .crm-historico h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--tinta-3); margin: 0 0 var(--e-2); }
+.crm-registrar textarea { width: 100%; }
+.crm-registrar-linha { display: flex; gap: var(--e-3); align-items: flex-end; margin-top: var(--e-3); flex-wrap: wrap; }
+.crm-registrar-linha .campo { flex: 1; min-width: 130px; }
+
+.crm-historico { border-top: 1px solid var(--linha); margin-top: var(--e-5); padding-top: var(--e-4); }
+.crm-historico ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--e-3); }
+.crm-historico li { padding-left: var(--e-3); border-left: 2px solid var(--linha); }
+.crm-historico li p { margin: 0; font-size: 0.86rem; line-height: 1.5; }
+.crm-historico li span { font-size: 0.72rem; color: var(--tinta-3); }
+
+@media (max-width: 720px) {
+  .crm-painel { width: 100%; border-left: 0; }
+  .crm-dados { grid-template-columns: 1fr; }
+}

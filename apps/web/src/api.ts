@@ -1927,3 +1927,90 @@ export const baixarOcupacao = (de: Date, ate: Date) =>
 
 export const baixarInadimplencia = () =>
   baixarRelatorio('/api/relatorios/inadimplencia', 'inadimplencia.pdf');
+
+/* ====================================================================
+ * CRM — QUEM AINDA NÃO É ALUNO
+ * ================================================================== */
+
+export interface Lead {
+  id: string;
+  nome: string;
+  whatsapp: string | null;
+  email: string | null;
+  origem: string;
+  status: string;
+  interesse: string | null;
+  observacoes: string | null;
+  responsavelId: string | null;
+  responsavel: string | null;
+  proximoContato: string | null;
+  virouAlunoId: string | null;
+  convertidoEm: string | null;
+  perdidoMotivo: string | null;
+  criadoEm: string;
+  contatos: number;
+  /** Dias de atraso. Negativo ainda vai vencer. Calculado no servidor. */
+  atrasoDias: number | null;
+}
+
+export interface LeadDetalhe extends Lead {
+  historico: { id: string; texto: string; autor: string | null; em: string }[];
+}
+
+export interface Funil {
+  dias: number;
+  total: number;
+  etapas: { status: string; quantos: number }[];
+  decididos: number;
+  conversao: number | null;
+}
+
+export interface LeadParaGravar {
+  nome: string;
+  whatsapp: string | null;
+  email: string | null;
+  origem: string;
+  status?: string;
+  interesse: string | null;
+  observacoes: string | null;
+  responsavelId: string | null;
+  proximoContato: string | null;
+  perdidoMotivo?: string | null;
+}
+
+export const listarFila = (responsavelId?: string) =>
+  api<{ data: Lead[] }>(
+    `/api/crm/fila${responsavelId === undefined || responsavelId === '' ? '' : `?responsavelId=${responsavelId}`}`,
+  );
+
+export const listarLeads = (status?: string, busca?: string) => {
+  const q = new URLSearchParams();
+  if (status !== undefined && status !== '') q.set('status', status);
+  if (busca !== undefined && busca !== '') q.set('busca', busca);
+  const s = q.toString();
+  return api<{ data: Lead[] }>(`/api/crm${s === '' ? '' : `?${s}`}`);
+};
+
+export const buscarLead = (id: string) => api<{ data: LeadDetalhe }>(`/api/crm/${id}`);
+export const buscarFunil = (dias = 90) => api<{ data: Funil }>(`/api/crm/funil?dias=${dias}`);
+
+export const criarLead = (dados: LeadParaGravar) =>
+  api<{ data: { id: string } }>('/api/crm', { method: 'POST', body: JSON.stringify(dados) });
+
+export const salvarLead = (id: string, dados: LeadParaGravar) =>
+  api<{ data: { ok: boolean } }>(`/api/crm/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
+
+export const registrarContato = (
+  id: string,
+  dados: { texto: string; proximoContato?: string | null; status?: string },
+) =>
+  api<{ data: { ok: boolean } }>(`/api/crm/${id}/contato`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const converterLead = (id: string, cpf?: string) =>
+  api<{ data: { alunoId: string } }>(`/api/crm/${id}/converter`, {
+    method: 'POST',
+    body: JSON.stringify(cpf === undefined || cpf === '' ? {} : { cpf }),
+  });
