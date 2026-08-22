@@ -866,6 +866,57 @@ export function enviarFotoAluno(alunoId: string, arquivo: File) {
 export const removerFotoAluno = (alunoId: string) =>
   api<{ ok: boolean }>(`/api/students/${alunoId}/foto`, { method: 'DELETE' });
 
+/* ====================================================================
+ * A IDENTIDADE DA ACADEMIA
+ *
+ * Fonte única do que sai com a marca: papel timbrado dos relatórios,
+ * carteirinha, termo e WhatsApp. Nenhum deles guarda cópia — quem
+ * precisa da marca lê daqui.
+ * ================================================================== */
+
+export interface Academia {
+  nome: string;
+  documento: string | null;
+  telefone: string | null;
+  temLogo: boolean;
+  endereco: {
+    cep: string | null;
+    logradouro: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    uf: string | null;
+  };
+}
+
+export const lerAcademia = () => api<{ data: Academia }>('/api/academia');
+
+export const salvarAcademia = (dados: {
+  nome: string;
+  documento: string | null;
+  telefone: string | null;
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+}) => api<{ data: Academia }>('/api/academia', { method: 'PUT', body: JSON.stringify(dados) });
+
+export function enviarLogoDaAcademia(arquivo: File) {
+  const corpo = new FormData();
+  corpo.append('arquivo', arquivo);
+  return api<{ data: { ok: boolean } }>('/api/academia/logo', { method: 'POST', body: corpo });
+}
+
+export const removerLogoDaAcademia = () =>
+  api<{ ok: boolean }>('/api/academia/logo', { method: 'DELETE' });
+
+/** O logo como endereço temporário para `<img>`. Mesmas regras de `buscarFoto`. */
+export const buscarLogoDaAcademia = () => buscarFoto('/api/academia/logo');
+
 /**
  * Busca uma foto e devolve um endereço temporário para usar em `<img>`.
  *

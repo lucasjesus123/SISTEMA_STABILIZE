@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { MARCA_STABILIZE } from './marca-padrao.js';
 
 /**
  * A folha em que todo relatório do sistema é impresso.
@@ -108,10 +109,15 @@ export function abrirDocumento(info: Cabecalho): Documento {
 const MARCA_LARGURA = 0.52;
 /* Tinta quase transparente. Acima disto o texto por cima perde
    contraste, e o piso de legibilidade vale no papel como vale na tela. */
-const MARCA_OPACIDADE = 0.05;
+const MARCA_OPACIDADE = 0.13;
 
 function desenharMarcaDagua(doc: Documento, timbre: Timbre | undefined): void {
-  if (timbre?.logo === undefined) return;
+  /* A ACADEMIA QUE NÃO SUBIU LOGO RECEBE A MARCA DA STABILIZE.
+     É a marca do fornecedor no papel do cliente, e some no instante em
+     que ela sobe a própria — decisão de produto, não recuo técnico.
+     Vale só aqui, na marca d'água: o cabeçalho continua levando o NOME
+     da academia, porque ali é a identidade de quem assina o documento. */
+  const imagem = timbre?.logo ?? MARCA_STABILIZE;
 
   const largura = doc.page.width * MARCA_LARGURA;
   const x = (doc.page.width - largura) / 2;
@@ -121,7 +127,7 @@ function desenharMarcaDagua(doc: Documento, timbre: Timbre | undefined): void {
      documento inteiro sairia a 5% de tinta. */
   doc.save().opacity(MARCA_OPACIDADE);
   try {
-    doc.image(timbre.logo, x, y, {
+    doc.image(imagem, x, y, {
       fit: [largura, largura],
       align: 'center',
       valign: 'center',

@@ -358,11 +358,23 @@ suite('Identidade da academia e papel timbrado', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
-    expect(desenhosDeImagem(res.rawPayload)).toBe(0);
   });
 
-  /* AC-16 — com logo, a imagem é desenhada: uma no cabeçalho e uma
-     marca d'água por página. */
+  /* Quem não subiu logo recebe a marca d'água da Stabilize — decisão de
+     produto: é a marca do fornecedor, e some quando a academia sobe a
+     própria. Uma imagem por página, e NENHUMA no cabeçalho: ali vai a
+     identidade de quem assina, que é a academia. */
+  it('sem logo, sai a marca d’água padrão — e o cabeçalho fica sem imagem', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/relatorios/alunos',
+      headers: como(await tokenDe(beta.dono, beta.slug)),
+    });
+    expect(desenhosDeImagem(res.rawPayload)).toBe(1);
+  });
+
+  /* AC-16 — com logo próprio, a imagem é desenhada duas vezes: uma no
+     cabeçalho e uma como marca d'água. */
   it('com logo, o PDF desenha a imagem no cabeçalho e na marca d’água', async () => {
     const res = await app.inject({
       method: 'GET',
@@ -370,8 +382,7 @@ suite('Identidade da academia e papel timbrado', () => {
       headers: como(await tokenDe(alfa.dono, alfa.slug)),
     });
     expect(res.statusCode).toBe(200);
-    /* Documento de uma página: marca d'água + logo do cabeçalho = 2. */
-    expect(desenhosDeImagem(res.rawPayload)).toBeGreaterThanOrEqual(2);
+    expect(desenhosDeImagem(res.rawPayload)).toBe(2);
   });
 
   /* AC-17 — o defeito silencioso. Se a marca d'água fosse desenhada no

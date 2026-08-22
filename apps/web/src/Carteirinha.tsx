@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import * as api from './api.js';
-import { Marca } from './Marca.jsx';
 import type { FichaAluno } from './api.js';
 
 /**
@@ -283,6 +282,7 @@ export function Cartao({
   ficha,
   foto,
   academia,
+  logo,
   desde,
   compacto = false,
 }: {
@@ -292,6 +292,15 @@ export function Cartao({
   foto: string | null;
   /** O nome da academia, quando quem chama souber. */
   academia?: string | undefined;
+  /**
+   * O logo da academia — endereço de blob, como a foto.
+   *
+   * QUANDO NÃO EXISTE, O CARTÃO NÃO CAI NA MARCA DA STABILIZE. Cair
+   * nela era o comportamento anterior, e num sistema multi-empresa isso
+   * significa a carteirinha de uma academia carimbada com a marca de
+   * outra. O recuo é o NOME da academia, escrito.
+   */
+  logo?: string | null | undefined;
   /** Data de entrada em ISO; vira o ano do campo "membro desde". */
   desde?: string | null | undefined;
   compacto?: boolean;
@@ -317,8 +326,18 @@ export function Cartao({
       </div>
 
       <div className="cart-face">
+        {/* A MARCA DO ALTO É A DA ACADEMIA, e não a do sistema.
+            Antes era `<Marca>` — o logotipo da Stabilize, fixo. Num
+            sistema de uma academia só, correto. Neste, a carteirinha de
+            toda empresa saía carimbada com a marca da primeira: o mesmo
+            defeito que estava nos relatórios, num cartão que o aluno
+            leva na carteira. */}
         <div className="cart-face-topo">
-          <Marca variante="horizontal" altura={24} />
+          {logo === null || logo === undefined ? (
+            <span className="cart-marca-nome">{academia ?? ''}</span>
+          ) : (
+            <img className="cart-marca" src={logo} alt={academia ?? 'Logo da academia'} />
+          )}
           <span className="cart-classe">Carteirinha de aluno</span>
         </div>
 
@@ -340,12 +359,11 @@ export function Cartao({
           </div>
         </dl>
 
-        {/* O RODAPÉ É O NOME DA ACADEMIA, e some quando não se sabe qual
-            é. A primeira versão caía em "Stabilize" — que é justamente o
-            que a marca no alto já diz, e repetir a mesma palavra duas
-            vezes num cartão de 85 mm é desperdiçar a única linha que
-            sobrou. */}
-        {academia !== undefined && academia !== '' && (
+        {/* O RODAPÉ REPETE O NOME SÓ QUANDO O ALTO MOSTRA UMA IMAGEM.
+            Sem logo, o nome já está lá em cima escrito — e repetir a
+            mesma palavra duas vezes num cartão de 85 mm desperdiça a
+            única linha que sobrou. */}
+        {logo !== null && logo !== undefined && academia !== undefined && academia !== '' && (
           <span className="cart-rodape">{academia}</span>
         )}
       </div>

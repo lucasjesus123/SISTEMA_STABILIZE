@@ -5018,6 +5018,35 @@
   border-bottom: 1px solid rgba(15, 76, 82, 0.22);
 }
 .cart-face-topo .marca { color: var(--cart-tinta); }
+
+/* A MARCA DA ACADEMIA NO CARTÃO.
+   `max-height` em vez de `height`: o logo de cada academia tem proporção
+   própria, e fixar a altura de um logotipo quadrado o faria transbordar
+   a largura do cartão. O `object-fit: contain` garante que nada seja
+   cortado — um logo cortado é pior que um logo pequeno. */
+.cart-marca {
+  max-height: 7cqw;
+  max-width: 46%;
+  width: auto;
+  object-fit: contain;
+  object-position: left center;
+}
+/* O recuo quando a academia não subiu logo: o nome dela, escrito. Não
+   cai na marca do sistema — a carteirinha é da academia, não nossa. */
+.cart-marca-nome {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--cart-tinta);
+  text-transform: uppercase;
+  line-height: 1.15;
+  max-width: 60%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 .cart-classe {
   font-size: 0.5rem;
   font-weight: 700;
