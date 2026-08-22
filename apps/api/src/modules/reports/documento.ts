@@ -31,12 +31,32 @@ const FIO = '#d9e0e2';
 const MARGEM = 48;
 const LARGURA_UTIL = 595.28 - MARGEM * 2; // A4 retrato
 
+/**
+ * A marca da academia no papel.
+ *
+ * Vem do módulo `academia`, que é a fonte única. Este arquivo só
+ * DESENHA — não sabe de banco, não sabe de arquivo em disco, e recebe o
+ * logo já em memória. É o que permite testar o timbre sem subir
+ * infraestrutura, e o que impede o gerador de PDF virar mais um lugar
+ * que consulta o tenant.
+ */
+export interface Timbre {
+  /** PNG ou JPEG já lido. `undefined` = academia sem logo. */
+  logo?: Buffer | undefined;
+  /** Já formatado para leitura humana: `(51) 99999-9999`. */
+  telefone?: string | undefined;
+  /** Endereço em uma linha, montado por quem chama. */
+  endereco?: string | undefined;
+}
+
 export interface Cabecalho {
   titulo: string;
   subtitulo?: string | undefined;
   academia: string;
   /** Identificação que se repete no rodapé de todas as páginas. */
   rodape: string;
+  /** Ausente = documento sem marca, e ele sai assim mesmo. */
+  timbre?: Timbre | undefined;
 }
 
 export type Documento = InstanceType<typeof PDFDocument>;
@@ -54,10 +74,70 @@ export function abrirDocumento(info: Cabecalho): Documento {
        numerá-las. Sem isso não dá para escrever "3 de 7": na hora de
        desenhar a página 3 ainda não se sabe que existirão sete. */
     bufferPages: true,
+    /* A PRIMEIRA PÁGINA NÃO NASCE COM O DOCUMENTO, e isso é o que faz a
+       marca d'água funcionar.
+
+       O pdfkit cria a página 1 dentro do construtor. Um
+       `doc.on('pageAdded')` registrado depois nunca ouviria essa
+       primeira — a marca apareceria da página 2 em diante, e o defeito
+       passaria em qualquer relatório de uma folha só, que é a maioria.
+
+       Desligando a página automática, o ouvinte é registrado antes de
+       existir página alguma e todas passam pelo mesmo caminho. */
+    autoFirstPage: false,
   });
 
+  /* A MARCA D'ÁGUA É DESENHADA QUANDO A PÁGINA NASCE, e não no
+     fechamento junto com a numeração.
+
+     A tentação é óbvia: o `fecharDocumento` já percorre as páginas para
+     numerá-las, e desenhar a marca ali seria uma linha no laço que já
+     existe. Estaria errado. O pdfkit pinta na ordem em que se chama, e
+     a marca cairia POR CIMA do texto — um relatório bonito com os
+     valores atrás de uma imagem. */
+  doc.on('pageAdded', () => desenharMarcaDagua(doc, info.timbre));
+
+  doc.addPage();
   desenharCabecalho(doc, info);
   return doc;
+}
+
+/* Quanto da largura da folha a marca ocupa. Grande o bastante para ser
+   marca d'água e não selo perdido; pequena o bastante para não encostar
+   nas margens do texto. */
+const MARCA_LARGURA = 0.52;
+/* Tinta quase transparente. Acima disto o texto por cima perde
+   contraste, e o piso de legibilidade vale no papel como vale na tela. */
+const MARCA_OPACIDADE = 0.05;
+
+function desenharMarcaDagua(doc: Documento, timbre: Timbre | undefined): void {
+  if (timbre?.logo === undefined) return;
+
+  const largura = doc.page.width * MARCA_LARGURA;
+  const x = (doc.page.width - largura) / 2;
+  const y = (doc.page.height - largura) / 2;
+
+  /* `save`/`restore` em volta da opacidade: sem isso o resto do
+     documento inteiro sairia a 5% de tinta. */
+  doc.save().opacity(MARCA_OPACIDADE);
+  try {
+    doc.image(timbre.logo, x, y, {
+      fit: [largura, largura],
+      align: 'center',
+      valign: 'center',
+    });
+  } catch {
+    /* PNG que o pdfkit não decodifica — entrelaçado, por exemplo. O
+       relatório não pode morrer por causa de um enfeite: sai sem marca.
+       O upload já recusa formato errado; isto cobre o exótico que passa
+       na assinatura e falha no decodificador. */
+  }
+  doc.restore();
+
+  /* O `image` move o cursor. Sem devolver o `y` ao topo, o conteúdo da
+     página começaria no meio da folha, logo abaixo da marca. */
+  doc.y = MARGEM;
+  doc.x = MARGEM;
 }
 
 function desenharCabecalho(doc: Documento, info: Cabecalho): void {
@@ -69,6 +149,29 @@ function desenharCabecalho(doc: Documento, info: Cabecalho): void {
      seguinte (os indicadores) era então desenhado por cima do título.
      Os testes não pegaram: o PDF era válido e continha todo o texto.
      Só apareceu ao abrir o arquivo. */
+  /* O LOGO À ESQUERDA, O NOME À DIREITA — a divisão de um papel
+     timbrado de verdade: quem assina de um lado, como falar com quem
+     assina do outro.
+
+     A altura é fixa e a largura livre (`fit` preserva a proporção).
+     Fixar a largura em vez da altura faria um logo horizontal e um
+     quadrado ocuparem faixas de alturas diferentes, e a linha do nome
+     dançaria de academia para academia. */
+  const alturaDoLogo = 34;
+  let temLogo = false;
+
+  if (info.timbre?.logo !== undefined) {
+    try {
+      /* Sem `align`/`valign`: esquerda e topo são o padrão do pdfkit, e
+         o tipo dele só aceita os valores que mudam alguma coisa. */
+      doc.image(info.timbre.logo, MARGEM, MARGEM - 4, { fit: [150, alturaDoLogo] });
+      temLogo = true;
+    } catch {
+      /* Mesmo raciocínio da marca d'água: enfeite não derruba
+         relatório. Cai no cabeçalho de texto, que sempre funciona. */
+    }
+  }
+
   doc
     .font('Helvetica')
     .fontSize(8)
@@ -79,7 +182,23 @@ function desenharCabecalho(doc: Documento, info: Cabecalho): void {
       characterSpacing: 1.2,
     });
 
-  doc.y = MARGEM + 14;
+  /* O telefone acompanha o nome, à direita, como no papel impresso.
+     Só quando existe: um rótulo "Telefone" sem número é pior que a
+     ausência dele. */
+  if (info.timbre?.telefone !== undefined) {
+    doc
+      .font('Helvetica')
+      .fontSize(8)
+      .fillColor(APOIO)
+      .text(info.timbre.telefone, MARGEM, MARGEM + 11, {
+        width: LARGURA_UTIL,
+        align: 'right',
+      });
+  }
+
+  /* Com logo o cabeçalho é mais alto, e o título precisa descer — senão
+     encosta na imagem. Sem logo, a geometria é a de sempre. */
+  doc.y = temLogo ? MARGEM + alturaDoLogo + 8 : MARGEM + 14;
 
   doc
     .font('Helvetica-Bold')
@@ -264,7 +383,15 @@ export function fecharDocumento(doc: Documento, info: Cabecalho): void {
     const margemOriginal = doc.page.margins.bottom;
     doc.page.margins.bottom = 0;
 
-    const y = doc.page.height - 42;
+    /* O CONTATO DA ACADEMIA GANHA UMA SEGUNDA LINHA, e o fio sobe para
+       abrir espaço. Sem contato, a geometria continua exatamente a de
+       antes: uma academia que ainda não preencheu o endereço não pode
+       ver o rodapé dos relatórios dela mudar de lugar. */
+    const contato = [info.timbre?.telefone, info.timbre?.endereco]
+      .filter((p): p is string => p !== undefined && p !== '')
+      .join('  ·  ');
+
+    const y = doc.page.height - (contato === '' ? 42 : 52);
     doc.save().strokeColor(FIO).lineWidth(0.5).moveTo(MARGEM, y).lineTo(MARGEM + LARGURA_UTIL, y).stroke().restore();
 
     doc
@@ -281,6 +408,14 @@ export function fecharDocumento(doc: Documento, info: Cabecalho): void {
       align: 'right',
       lineBreak: false,
     });
+
+    if (contato !== '') {
+      doc
+        .font('Helvetica')
+        .fontSize(6.8)
+        .fillColor(APOIO)
+        .text(contato, MARGEM, y + 16, { width: LARGURA_UTIL, lineBreak: false });
+    }
 
     doc.page.margins.bottom = margemOriginal;
   }

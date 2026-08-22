@@ -18,6 +18,7 @@ import {
   tabela,
   type Cabecalho,
 } from './documento.js';
+import { montarTimbre } from './timbre.js';
 
 /**
  * Relatórios em PDF.
@@ -118,11 +119,14 @@ export async function reportsRoutes(app: FastifyInstance): Promise<void> {
         const treino =
           treinoAtivo === undefined ? null : await buscarTreino(client, scope, id, treinoAtivo.id);
 
+        const { academia, timbre } = await montarTimbre(client, principal.tenantId, request.log);
+
         const info: Cabecalho = {
           titulo: ficha.nome,
           subtitulo: 'Ficha do aluno',
-          academia: 'Stabilize — Clínica do Músculo',
+          academia,
           rodape: `${ficha.nome} · ficha do aluno`,
+          timbre,
         };
 
         const doc = abrirDocumento(info);
@@ -273,11 +277,14 @@ export async function reportsRoutes(app: FastifyInstance): Promise<void> {
       const { listStudents } = await import('../students/students.repository.js');
       const { rows, total } = await listStudents(client, { scope, limit: 100, offset: 0 });
 
+      const { academia, timbre } = await montarTimbre(client, principal.tenantId, request.log);
+
       const info: Cabecalho = {
         titulo: 'Relação de alunos',
         subtitulo: `${total} aluno(s)`,
-        academia: 'Stabilize — Clínica do Músculo',
+        academia,
         rodape: 'Relação de alunos',
+        timbre,
       };
 
       const doc = abrirDocumento(info);
@@ -375,11 +382,14 @@ export async function reportsRoutes(app: FastifyInstance): Promise<void> {
           }
         }
 
+        const { academia, timbre } = await montarTimbre(client, principal.tenantId, request.log);
+
         const info: Cabecalho = {
           titulo: 'Financeiro',
           subtitulo: `${formatarData(de)} a ${formatarData(ate)}`,
-          academia: 'Stabilize — Clínica do Músculo',
+          academia,
           rodape: `Financeiro ${formatarData(de)}–${formatarData(ate)}`,
+          timbre,
         };
 
         const doc = abrirDocumento(info);
@@ -474,11 +484,14 @@ export async function reportsRoutes(app: FastifyInstance): Promise<void> {
         const faltas = rows.filter((l) => l.status === 'NO_SHOW').length;
         const realizados = presencas + faltas;
 
+        const { academia, timbre } = await montarTimbre(client, principal.tenantId, request.log);
+
         const info: Cabecalho = {
           titulo: 'Frequência',
           subtitulo: nomeAluno,
-          academia: 'Stabilize — Clínica do Músculo',
+          academia,
           rodape: `${nomeAluno} · frequência`,
+          timbre,
         };
 
         const doc = abrirDocumento(info);

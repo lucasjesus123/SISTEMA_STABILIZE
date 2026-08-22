@@ -20,6 +20,7 @@ import { portalRoutes } from './modules/portal/portal.routes.js';
 import { prontuarioDoAlunoRoutes } from './modules/portal/prontuario.routes.js';
 import { diarioDoAlunoRoutes } from './modules/portal/diario.routes.js';
 import { perfilRoutes } from './modules/perfil/perfil.routes.js';
+import { academiaRoutes } from './modules/academia/academia.routes.js';
 import { cepRoutes } from './modules/cep/cep.routes.js';
 import { plataformaRoutes } from './modules/plataforma/plataforma.routes.js';
 import { cadastrosRoutes, contratoRoutes } from './modules/cadastros/cadastros.routes.js';
@@ -212,6 +213,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   /* O perfil da própria pessoa, seja ela dona, recepcionista ou aluno.
      Como o portal, não carrega id na URL: o id vem do token. */
   await app.register(perfilRoutes, { prefix: '/api/perfil' });
+
+  /* A identidade da empresa: fonte única do que o sistema imprime com a
+     marca — papel timbrado, carteirinha, termo e WhatsApp leem daqui. */
+  await app.register(academiaRoutes, { prefix: '/api/academia' });
   /* Consulta de CEP. Sai para a internet, então é autenticada e o que
      entra são oito dígitos validados — ver o cabeçalho do arquivo. */
   await app.register(cepRoutes, { prefix: '/api/cep' });

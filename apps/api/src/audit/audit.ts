@@ -72,6 +72,13 @@ export type AuditAction =
   | 'availability.write'
   | 'contract.write'
   | 'contract.end'
+  // identidade da academia — o que sai impresso no papel timbrado e na
+  // carteirinha. Trocar o telefone do rodapé desvia a ligação do aluno
+  // para outro número, e é o tipo de alteração que precisa de dono e
+  // data quando alguém perguntar por que o relatório de março traz um
+  // contato diferente do de abril.
+  | 'academia.update'
+  | 'academia.logo'
   // administração
   | 'user.create'
   | 'user.update'

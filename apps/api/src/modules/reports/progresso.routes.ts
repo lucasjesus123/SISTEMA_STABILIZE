@@ -16,6 +16,7 @@ import {
   secao,
   tabela,
 } from './documento.js';
+import { montarTimbre } from './timbre.js';
 
 /**
  * O PDF de progresso do aluno.
@@ -134,14 +135,22 @@ export async function progressoRoutes(app: FastifyInstance): Promise<void> {
         );
         const t = totais.rows[0]!;
 
+        /* Este relatório já lia o nome do banco — era o único dos cinco
+           que não tinha "Stabilize" escrito à mão. O timbre entra pelo
+           mesmo caminho dos outros, e o nome passa a vir da mesma fonte
+           para que não existam duas maneiras de descobrir a mesma
+           coisa. */
+        const { academia, timbre } = await montarTimbre(client, principal.tenantId, request.log);
+
         const cabecalho = {
-          academia: a.academia,
+          academia,
           titulo: 'Relatório de progresso',
           subtitulo: a.codigo === null ? a.nome : `${a.nome} · aluno nº ${a.codigo}`,
           /* O rodapé repete a identificação em toda página: uma folha
              solta de um relatório de dez páginas precisa dizer de quem
              é sem depender da primeira. */
           rodape: a.codigo === null ? a.nome : `${a.nome} — nº ${a.codigo}`,
+          timbre,
         };
         const doc = abrirDocumento(cabecalho);
 
