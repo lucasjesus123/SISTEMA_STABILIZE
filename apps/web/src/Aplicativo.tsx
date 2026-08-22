@@ -86,6 +86,23 @@ export function Aplicativo({ nome, aoSair }: { nome: string; aoSair: () => void 
     void carregar();
   }, [carregar]);
 
+  /* O CHÃO ESCURO ENQUANTO O APLICATIVO ESTIVER NA TELA.
+
+     `.app` já é `height:100dvh; overflow:hidden` e a rolagem é só do
+     miolo — mas na aba "Eu" a PÁGINA rolava mesmo assim, 256 px, e ao
+     rolar aparecia o fundo do documento: quase branco. Num aplicativo
+     escuro isso é um terço da tela do celular virando branco, com a
+     barra de abas subindo junto. Medido em tela de 390x844.
+
+     A marca vai no `html` e não só no `body` porque é o `html` que
+     pinta a área de overscroll — a "esticada" do dedo no fim da lista.
+     E sai no desmonte: o sistema da equipe é claro e rola a página. */
+  useEffect(() => {
+    const raiz = document.documentElement;
+    raiz.classList.add('com-aplicativo');
+    return () => raiz.classList.remove('com-aplicativo');
+  }, []);
+
   if (emSessao !== null && treino !== null) {
     return (
       <ModoSessao
@@ -281,7 +298,13 @@ function Hoje({
             </div>
             <div>
               <strong className="tabular">{feitos}</strong>
-              <span>treinos marcados</span>
+              {/* "FEITOS", e não "marcados". O número vem de
+                  `workout_logs` — treino que o aluno REGISTROU que fez.
+                  "Marcado" em português é agendado, e a mesma tela
+                  mostrava logo acima "seu próximo treino, em 3 dias" ao
+                  lado de "0 treinos marcados". O dado estava certo; a
+                  palavra é que dizia outra coisa. */}
+              <span>{feitos === 1 ? 'treino feito' : 'treinos feitos'}</span>
             </div>
           </div>
         </div>

@@ -11,6 +11,28 @@
    nits na cara de quem acabou de fazer agachamento é agressão.
    ===================================================================== */
 
+/* O DOCUMENTO NÃO ROLA ENQUANTO O APLICATIVO ESTÁ NA TELA.
+
+   `.app` mede a tela e esconde o que passa — e ainda assim, na aba
+   "Eu", o documento media 1100 numa janela de 844 e a página deslizava
+   256 px. O que aparecia embaixo era o chão do documento, quase branco,
+   num aplicativo que é escuro por decisão (sala de musculação, pouca
+   luz). Um terço da tela em branco, com a barra de abas subindo junto.
+
+   Travar aqui, e não em `.app`, porque quem rola nesse caso é o
+   documento, não o container. A classe entra e sai com o aplicativo:
+   o sistema da equipe é claro e a página dele PRECISA rolar. */
+html.com-aplicativo,
+html.com-aplicativo body {
+  height: 100%;
+  overflow: hidden;
+  background: #080f11;
+  /* Sem isto, o "elástico" do fim da lista mostra o branco do
+     navegador — no iPhone é o detalhe que denuncia site aberto no
+     celular. */
+  overscroll-behavior: none;
+}
+
 .app {
   /* ALTURA FIXA, não `min-height`.
      Com `min-height`, a linha do meio (1fr) cresce junto com o conteúdo,
