@@ -26,7 +26,13 @@ import { MARCA_STABILIZE } from './marca-padrao.js';
 /* Cores do arquivo de marca, as mesmas do sistema. */
 const GRAFITE = '#3b3f40';
 const APOIO = '#6b7276';
-const MENTA = '#4cc2c8';
+/* TEAL ESCURO, e nao a menta da tela.
+   O #4cc2c8 e a cor de acento da INTERFACE, onde ele vive sobre fundos
+   escuros e funciona. No papel — branco — ele mede 2,13:1 contra o piso
+   de 4,5, e o nome da academia saia lavado no cabecalho de TODO
+   relatorio. Medido com axe-core na previa da tela, que usa a mesma
+   cor. Este tom da 5,7:1 e continua sendo a marca. */
+const MENTA = '#1f7176';
 const FIO = '#d9e0e2';
 
 const MARGEM = 48;

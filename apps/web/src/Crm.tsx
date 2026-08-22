@@ -169,7 +169,14 @@ function Lista({
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          {/* `aria-label` porque nao ha <label> visivel: o filtro fica ao
+              lado da busca e o rotulo seria ruido. Sem ele, quem usa
+              leitor de tela ouve "caixa de combinacao" e mais nada. */}
+          <select
+            value={status}
+            aria-label="Filtrar por etapa"
+            onChange={(e) => setStatus(e.target.value)}
+          >
             <option value="">Todas as etapas</option>
             {STATUS.map((s) => (
               <option key={s.valor} value={s.valor}>
@@ -268,7 +275,11 @@ function Funil({ versao }: { versao: number }): ReactNode {
   return (
     <section className="crm-funil">
       <div className="crm-funil-topo">
-        <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
+        <select
+          value={dias}
+          aria-label="Período do funil"
+          onChange={(e) => setDias(Number(e.target.value))}
+        >
           <option value={30}>Últimos 30 dias</option>
           <option value={90}>Últimos 90 dias</option>
           <option value={365}>Último ano</option>

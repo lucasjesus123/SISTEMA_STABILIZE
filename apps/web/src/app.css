@@ -1356,7 +1356,11 @@
 .aniversario-dia {
   font-size: var(--t-sm);
   font-weight: 600;
-  color: var(--menta);
+  /* --teal-fundo, e nao --menta. A menta e cor DECORATIVA: media 2,37:1
+     sobre a superficie, contra o piso de 4,5. A data do aniversario e
+     justamente o dado que se le nesta lista, e ela era o texto menos
+     legivel da tela inteira. Agora 5,5:1. */
+  color: var(--teal-fundo);
   min-width: 3.2rem;
 }
 
@@ -1399,7 +1403,10 @@
 }
 .ficha-topo h1 { font-size: var(--t-xl); margin-bottom: var(--e-3); }
 .ficha-selos { display: flex; gap: var(--e-2); flex-wrap: wrap; }
-.selo-plano { background: color-mix(in srgb, var(--teal-vivo) 14%, transparent); color: var(--teal); }
+/* --teal-fundo e nao --teal: sobre o fundo claro do selo, o teal medio
+   ficava abaixo do piso. E o selo que diz o PLANO do aluno, no alto da
+   ficha — dado que se le de relance. */
+.selo-plano { background: color-mix(in srgb, var(--teal-vivo) 14%, transparent); color: var(--teal-fundo); }
 .selo-alerta { background: var(--atencao-fundo); color: var(--atencao-texto); }
 
 .ficha-resumo {
@@ -2536,10 +2543,17 @@
      translúcido. A diferença é lida sem legenda. */
   background: color-mix(in srgb, var(--ag-cor) 34%, var(--superficie));
 }
+/* --texto-corpo e nao --texto-apoio.
+   O bloco do atendimento e uma SUPERFICIE COLORIDA — a cor do
+   profissional —, e nao a superficie da pagina. O token de apoio e
+   calibrado contra o fundo da pagina, entao dentro do bloco ele cai:
+   4,01:1 no tema claro e 3,24:1 no escuro, contra o piso de 4,5.
+   Com --texto-corpo: 6,0 e 5,6. E a HORA do atendimento — o dado que
+   mais se le nesta tela. */
 .ag-bloco-hora {
   font-size: var(--t-xs);
   font-variant-numeric: tabular-nums;
-  color: var(--texto-apoio);
+  color: var(--texto-corpo);
 }
 .ag-bloco-aluno {
   font-size: var(--t-sm);
@@ -2551,7 +2565,7 @@
 }
 .ag-bloco-sala {
   font-size: var(--t-xs);
-  color: var(--texto-apoio);
+  color: var(--texto-corpo);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3426,8 +3440,11 @@
   display: grid;
   place-items: center;
   border-radius: var(--raio-pilula);
-  background: var(--teal);
-  color: #fff;
+  /* Par proprio: --teal media 3,35:1 com branco por cima, e o cracha
+     aparece em TODA tela — o defeito estava nas 27. Agora 5,7:1 no
+     claro e 11,6:1 no escuro. */
+  background: var(--cracha-fundo);
+  color: var(--cracha-tinta);
   font-family: var(--fonte-display);
   font-size: var(--t-xs);
   font-weight: 600;
@@ -5477,7 +5494,7 @@
 .acad-folha-logo { max-height: 22px; max-width: 45%; object-fit: contain; object-position: left top; }
 .acad-folha-semlogo { display: block; }
 .acad-folha-contato { text-align: right; display: flex; flex-direction: column; gap: 1px; margin-left: auto; }
-.acad-folha-contato strong { color: #4cc2c8; font-size: 0.44rem; letter-spacing: 0.08em; font-weight: 600; }
+.acad-folha-contato strong { color: #1f7176; font-size: 0.44rem; letter-spacing: 0.08em; font-weight: 600; }
 .acad-folha-contato span { color: #6b7276; font-size: 0.44rem; }
 .acad-folha-titulo { font-weight: 700; font-size: 0.8rem; margin-top: 10px; }
 .acad-folha-corpo { flex: 1; display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
@@ -5627,4 +5644,40 @@
 @media (max-width: 720px) {
   .crm-painel { width: 100%; border-left: 0; }
   .crm-dados { grid-template-columns: 1fr; }
+}
+
+/* =====================================================================
+   OS SELECTS FORA DE FORMULÁRIO — os três que entraram nesta rodada
+
+   O projeto já sabia disto e resolvia caso a caso: existe até um
+   comentário em `.fin-selecao` dizendo que o <select> fora de um
+   `.formulario` "aparece como o controle cru do navegador". Os três
+   controles novos — o filtro de professor dos relatórios, o filtro de
+   etapa e o período do funil — nasceram sem regra e herdaram o cru.
+
+   NO TEMA CLARO ISSO PASSA DESPERCEBIDO, porque o padrão do navegador é
+   texto escuro sobre cinza claro. No ESCURO ele reprova: o axe-core
+   mediu os três abaixo do piso de contraste. Foi assim que apareceram —
+   varrendo o tema que eu não tinha medido.
+
+   Uma regra só para os três, em vez de uma quarta, quinta e sexta
+   variante do mesmo bloco.
+   ================================================================== */
+.rel-pdf-acoes select,
+.crm-filtros select,
+.crm-funil-topo select {
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-alta);
+  color: var(--texto);
+  font-size: var(--t-base);
+  font-family: inherit;
+}
+.rel-pdf-acoes select:focus,
+.crm-filtros select:focus,
+.crm-funil-topo select:focus {
+  outline: none;
+  border-color: var(--teal-vivo);
+  box-shadow: 0 0 0 3px var(--realce-teclado);
 }

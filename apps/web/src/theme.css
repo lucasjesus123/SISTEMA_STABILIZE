@@ -30,6 +30,15 @@
   --teal: #2e9aa1;
   --teal-vivo: #4bc1c8;
   --teal-fundo: #1f7176;
+
+  /* O CRACHÁ DO TOPO tem par PRÓPRIO de fundo e tinta, e não reusa
+     --teal-fundo. Aquele token é de PRIMEIRO PLANO: significa "o teal
+     que se lê sobre o fundo deste tema", e por isso é escuro no claro e
+     brilhante no escuro. Usá-lo como FUNDO funciona por coincidência no
+     tema claro e produz branco sobre ciano no escuro — foi exatamente o
+     que aconteceu, e o axe-core pegou em 27 telas. */
+  --cracha-fundo: #1f7176;
+  --cracha-tinta: #ffffff;
   --menta: #5fb3a0;
   --menta-vivo: #85cebd;
 
@@ -43,13 +52,28 @@
   --fio: #dde6e6;
   --fio-forte: #c3d2d2;
 
-  /* Contraste medido sobre --superficie:
-       texto        14,2:1
-       texto-corpo   7,1:1
-       texto-apoio   4,6:1   (piso AA de corpo é 4,5:1)  */
+  /* CONTRASTE MEDIDO SOBRE TODAS AS SUPERFÍCIES ONDE O TOKEN CAI — e
+     não só sobre --superficie, que era o erro da versão anterior.
+
+     O comentário antigo dizia "texto-apoio 4,6:1" e estava certo: sobre
+     #f7fafa ele dava 4,6. Só que o token é usado também dentro dos
+     blocos da agenda, na linha de cobrança vencida e na superfície
+     baixa — fundos mais escuros, onde os mesmos #677273 caíam para
+     4,43, 4,25, 4,01 e 3,59. Medido com axe-core em 27 telas: a hora e
+     a sala de CADA atendimento da agenda estavam abaixo do piso.
+
+     Calibrar um token de texto contra uma superfície só é o jeito
+     silencioso de reprovar em todas as outras.
+
+       sobre --superficie      #f7fafa   →  6,5:1
+       sobre --superficie-baixa #eef3f3  →  6,0:1
+       sobre o bloco bege       #f0e6d5  →  5,6:1
+       sobre o bloco de presença #c3e2db →  5,0:1
+       sobre --erro-fundo       #faeae9  →  5,7:1
+     O pior caso passou de 3,59 para 5,0. Piso AA de corpo: 4,5:1. */
   --texto: #101617;
   --texto-corpo: #465051;
-  --texto-apoio: #677273;
+  --texto-apoio: #4f5c5e;
 
   --ok: #17795a;
   --atencao: #9a6407;
@@ -110,6 +134,10 @@
   --teal: #4bc1c8;
   --teal-vivo: #5ce1e6;
   --teal-fundo: #7af0f2;
+  /* No escuro o crachá inverte: fundo ciano vivo, tinta quase preta.
+     11,6:1 — e visualmente é o que um tema escuro pede. */
+  --cracha-fundo: #7af0f2;
+  --cracha-tinta: #08282a;
   --menta: #85cebd;
   --menta-vivo: #9ff0d8;
 
@@ -182,6 +210,12 @@
     --teal: #4bc1c8;
     --teal-vivo: #5ce1e6;
     --teal-fundo: #7af0f2;
+    --cracha-fundo: #7af0f2;
+    --cracha-tinta: #08282a;
+  /* No escuro o crachá inverte: fundo ciano vivo, tinta quase preta.
+     11,6:1 — e visualmente é o que um tema escuro pede. */
+  --cracha-fundo: #7af0f2;
+  --cracha-tinta: #08282a;
     --menta: #85cebd;
     --menta-vivo: #9ff0d8;
 
