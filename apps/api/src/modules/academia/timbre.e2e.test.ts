@@ -360,17 +360,26 @@ suite('Identidade da academia e papel timbrado', () => {
     expect(res.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
   });
 
-  /* Quem não subiu logo recebe a marca d'água da Stabilize — decisão de
-     produto: é a marca do fornecedor, e some quando a academia sobe a
-     própria. Uma imagem por página, e NENHUMA no cabeçalho: ali vai a
-     identidade de quem assina, que é a academia. */
-  it('sem logo, sai a marca d’água padrão — e o cabeçalho fica sem imagem', async () => {
+  /* Quem não subiu logo recebe a marca da Stabilize na folha inteira —
+     marca d'água E cabeçalho. Decisão de produto do dono do sistema: é
+     a marca do fornecedor, e ela some por completo no instante em que a
+     academia sobe a própria.
+
+     Duas imagens desenhadas, como numa academia com logo — a diferença
+     é QUAL imagem, não quantas. O nome ao lado do logo continua sendo o
+     da academia, então o documento nunca deixa de dizer quem assina. */
+  it('sem logo, a marca da Stabilize entra no cabeçalho e na marca d’água', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/relatorios/alunos',
       headers: como(await tokenDe(beta.dono, beta.slug)),
     });
-    expect(desenhosDeImagem(res.rawPayload)).toBe(1);
+    expect(desenhosDeImagem(res.rawPayload)).toBe(2);
+
+    /* O que NÃO pode mudar: o nome impresso continua o da academia. */
+    const t = textoDoPdf(res.rawPayload);
+    expect(t).toContain('ACADEMIA BETA OUTRA MARCA');
+    expect(t).not.toContain('Stabilize');
   });
 
   /* AC-16 — com logo próprio, a imagem é desenhada duas vezes: uma no

@@ -162,20 +162,26 @@ function desenharCabecalho(doc: Documento, info: Cabecalho): void {
      A altura é fixa e a largura livre (`fit` preserva a proporção).
      Fixar a largura em vez da altura faria um logo horizontal e um
      quadrado ocuparem faixas de alturas diferentes, e a linha do nome
-     dançaria de academia para academia. */
+     dançaria de academia para academia.
+
+     SEM LOGO PRÓPRIO, ENTRA A MARCA DA STABILIZE — a mesma da marca
+     d'água. Decisão de produto do dono do sistema, e ela vale enquanto
+     a academia não subir a dela: no instante em que subir, a marca do
+     fornecedor some da folha inteira. O nome ao lado continua sendo
+     sempre o da academia, então o documento nunca deixa de dizer quem
+     assina. */
   const alturaDoLogo = 34;
+  const marca = info.timbre?.logo ?? MARCA_STABILIZE;
   let temLogo = false;
 
-  if (info.timbre?.logo !== undefined) {
-    try {
-      /* Sem `align`/`valign`: esquerda e topo são o padrão do pdfkit, e
-         o tipo dele só aceita os valores que mudam alguma coisa. */
-      doc.image(info.timbre.logo, MARGEM, MARGEM - 4, { fit: [150, alturaDoLogo] });
-      temLogo = true;
-    } catch {
-      /* Mesmo raciocínio da marca d'água: enfeite não derruba
-         relatório. Cai no cabeçalho de texto, que sempre funciona. */
-    }
+  try {
+    /* Sem `align`/`valign`: esquerda e topo são o padrão do pdfkit, e
+       o tipo dele só aceita os valores que mudam alguma coisa. */
+    doc.image(marca, MARGEM, MARGEM - 4, { fit: [150, alturaDoLogo] });
+    temLogo = true;
+  } catch {
+    /* Mesmo raciocínio da marca d'água: enfeite não derruba
+       relatório. Cai no cabeçalho de texto, que sempre funciona. */
   }
 
   doc

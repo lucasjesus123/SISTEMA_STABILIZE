@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import * as api from './api.js';
 import type { FichaAluno } from './api.js';
+import { Marca } from './Marca.jsx';
 
 /**
  * A carteirinha do aluno, a foto e o acesso ao aplicativo.
@@ -61,6 +62,36 @@ export function AbaCarteirinha({
 
   useEffect(carregarAcesso, [carregarAcesso]);
 
+  /* A IDENTIDADE DA ACADEMIA — nome e logo.
+     O aplicativo do aluno já mostrava as duas coisas no cartão; esta
+     tela, não: ela montava o `<Cartao>` sem passar nenhuma delas. O
+     efeito era um cartão sem o nome da academia no rodapé e — pior —
+     um logo que a academia subisse e nunca aparecesse AQUI, que é
+     justamente onde a recepção imprime. */
+  const [academia, setAcademia] = useState<string | undefined>(undefined);
+  const [logo, setLogo] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    let atual: string | null = null;
+    void api
+      .lerAcademia()
+      .then((r) => vivo && setAcademia(r.data.nome))
+      .catch(() => undefined);
+    void api.buscarLogoDaAcademia().then((url) => {
+      if (!vivo) {
+        if (url !== null) URL.revokeObjectURL(url);
+        return;
+      }
+      atual = url;
+      setLogo(url);
+    });
+    return () => {
+      vivo = false;
+      if (atual !== null) URL.revokeObjectURL(atual);
+    };
+  }, []);
+
   const enviarFoto = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const arquivo = e.target.files?.[0];
     e.target.value = '';
@@ -99,7 +130,13 @@ export function AbaCarteirinha({
   return (
     <div className="cart-tela">
       <div className="cart-coluna">
-        <Cartao ficha={ficha} foto={foto} desde={ficha.inicioEm ?? ficha.criadoEm} />
+        <Cartao
+          ficha={ficha}
+          foto={foto}
+          academia={academia}
+          logo={logo}
+          desde={ficha.inicioEm ?? ficha.criadoEm}
+        />
 
         <div className="cart-acoes">
           {/* IMPRIMIR, e não "baixar PNG". O navegador já sabe gerar PDF
@@ -326,15 +363,23 @@ export function Cartao({
       </div>
 
       <div className="cart-face">
-        {/* A MARCA DO ALTO É A DA ACADEMIA, e não a do sistema.
-            Antes era `<Marca>` — o logotipo da Stabilize, fixo. Num
-            sistema de uma academia só, correto. Neste, a carteirinha de
-            toda empresa saía carimbada com a marca da primeira: o mesmo
-            defeito que estava nos relatórios, num cartão que o aluno
-            leva na carteira. */}
+        {/* A MARCA DO ALTO É A DA ACADEMIA — e, enquanto ela não subir a
+            dela, a da Stabilize.
+
+            Este trecho já foi das duas formas, e vale registrar por quê.
+            Nasceu com `<Marca>` fixa, o que num sistema multi-empresa
+            carimbaria a carteirinha de toda academia com a marca da
+            primeira. Passou a mostrar só o NOME quando não houvesse logo
+            — correto em teoria, e um cartão pobre na prática, porque
+            hoje a única academia é a Stabilize.
+
+            Ficou assim: o logo da academia quando existe, a marca da
+            Stabilize quando não. É a mesma regra da marca d'água do
+            relatório, e some no instante em que a academia subir o
+            próprio logo. */}
         <div className="cart-face-topo">
           {logo === null || logo === undefined ? (
-            <span className="cart-marca-nome">{academia ?? ''}</span>
+            <Marca variante="horizontal" altura={24} decorativa />
           ) : (
             <img className="cart-marca" src={logo} alt={academia ?? 'Logo da academia'} />
           )}
@@ -359,11 +404,12 @@ export function Cartao({
           </div>
         </dl>
 
-        {/* O RODAPÉ REPETE O NOME SÓ QUANDO O ALTO MOSTRA UMA IMAGEM.
-            Sem logo, o nome já está lá em cima escrito — e repetir a
-            mesma palavra duas vezes num cartão de 85 mm desperdiça a
-            única linha que sobrou. */}
-        {logo !== null && logo !== undefined && academia !== undefined && academia !== '' && (
+        {/* O RODAPÉ TRAZ O NOME DA ACADEMIA. Agora o alto é sempre uma
+            imagem — a da academia ou a da Stabilize —, então esta linha
+            é o único lugar do cartão que diz por escrito de quem o aluno
+            é aluno. Ela deixou de ser repetição e passou a ser a
+            informação. */}
+        {academia !== undefined && academia !== '' && (
           <span className="cart-rodape">{academia}</span>
         )}
       </div>
