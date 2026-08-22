@@ -468,13 +468,13 @@ export async function reportsRoutes(app: FastifyInstance): Promise<void> {
           status: string;
           profissional: string;
         }>(
-          `SELECT s.full_name AS nome, a.starts_at AS inicio, a.status::text AS status,
+          `SELECT s.full_name AS nome, lower(a.period) AS inicio, a.status::text AS status,
                   u.full_name AS profissional
              FROM appointments a
              JOIN students s ON s.id = a.student_id
              JOIN users u ON u.id = a.professional_id
             WHERE a.student_id = $1
-            ORDER BY a.starts_at DESC
+            ORDER BY lower(a.period) DESC
             LIMIT 200`,
           [id],
         );

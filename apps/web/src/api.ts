@@ -1901,3 +1901,29 @@ export const apagarPlano = (id: string) =>
   api<{ data: { desativado: boolean; contratosMantidos: number } }>(`/api/planos/${id}`, {
     method: 'DELETE',
   });
+
+/* ====================================================================
+ * OS RELATÓRIOS DE GESTÃO
+ *
+ * Os que olham a academia inteira e não um aluno. Todos saem em PDF
+ * timbrado, e todos recebem o período de fora — um relatório que decide
+ * sozinho o mês corrente não serve para fechar o mês anterior, que é
+ * justamente quando ele é pedido.
+ * ================================================================== */
+
+export const baixarPresenca = (de: Date, ate: Date, profissionalId?: string) =>
+  baixarRelatorio(
+    `/api/relatorios/presenca?de=${iso(de)}&ate=${iso(ate)}${
+      profissionalId === undefined || profissionalId === '' ? '' : `&profissionalId=${profissionalId}`
+    }`,
+    `presenca-${iso(de)}.pdf`,
+  );
+
+export const baixarOcupacao = (de: Date, ate: Date) =>
+  baixarRelatorio(
+    `/api/relatorios/ocupacao?de=${iso(de)}&ate=${iso(ate)}`,
+    `ocupacao-${iso(de)}.pdf`,
+  );
+
+export const baixarInadimplencia = () =>
+  baixarRelatorio('/api/relatorios/inadimplencia', 'inadimplencia.pdf');

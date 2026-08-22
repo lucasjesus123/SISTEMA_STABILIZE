@@ -5528,3 +5528,25 @@
   background: var(--superficie-3); color: var(--tinta-3);
 }
 .plano-inativos { display: flex; align-items: center; gap: var(--e-2); margin-top: var(--e-4); font-size: 0.8rem; color: var(--tinta-3); cursor: pointer; }
+
+/* --- relatórios em PDF, dentro do Financeiro --- */
+.rel-pdf { margin-top: var(--e-7); }
+.rel-pdf-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--e-4);
+  margin-top: var(--e-4);
+}
+.rel-pdf-item {
+  padding: var(--e-4);
+  border: 1px solid var(--linha);
+  border-radius: var(--r-3);
+  background: var(--superficie);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+.rel-pdf-item h3 { margin: 0; font-size: 0.9rem; }
+.rel-pdf-item p { margin: 0; font-size: 0.8rem; color: var(--tinta-3); line-height: 1.45; flex: 1; }
+.rel-pdf-acoes { display: flex; gap: var(--e-2); align-items: center; margin-top: var(--e-2); }
+.rel-pdf-acoes select { flex: 1; min-width: 0; }

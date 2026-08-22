@@ -16,6 +16,7 @@ import { exercisesRoutes, workoutsRoutes } from './modules/workouts/workouts.rou
 import { whatsappRoutes } from './modules/whatsapp/whatsapp.routes.js';
 import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { progressoRoutes } from './modules/reports/progresso.routes.js';
+import { gestaoRoutes } from './modules/reports/gestao.routes.js';
 import { portalRoutes } from './modules/portal/portal.routes.js';
 import { prontuarioDoAlunoRoutes } from './modules/portal/prontuario.routes.js';
 import { diarioDoAlunoRoutes } from './modules/portal/diario.routes.js';
@@ -201,6 +202,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   /* O PDF de progresso, com as séries em gráfico. Separado porque é o
      único relatório que desenha, e desenhar tem regras próprias. */
   await app.register(progressoRoutes, { prefix: '/api/relatorios' });
+
+  /* Os relatorios de GESTAO: presenca do periodo (geral ou por
+     professor), ocupacao em horas e inadimplencia. Olham a academia
+     inteira, e nao um aluno. */
+  await app.register(gestaoRoutes, { prefix: '/api/relatorios' });
   /* O portal do aluno. A URL não tem id de aluno em lugar nenhum: ele
      vem do token, e o que não é parâmetro não é adulterável. */
   await app.register(portalRoutes, { prefix: '/api/eu' });

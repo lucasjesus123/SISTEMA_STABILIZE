@@ -1174,6 +1174,8 @@ function Relatorios({ de, ate }: { de: Date; ate: Date }): ReactNode {
         </button>
       </div>
 
+      <PapelTimbrado de={de} ate={ate} />
+
       {/* ---- 1. estou melhorando? ---- */}
       <h2 className="plt-titulo">Entrou e saiu, mês a mês</h2>
       <div className="rel-barras" role="img" aria-label="Entradas e saídas dos últimos meses">
@@ -1276,5 +1278,121 @@ function Relatorios({ de, ate }: { de: Date; ate: Date }): ReactNode {
         </div>
       )}
     </>
+  );
+}
+
+
+/**
+ * Os relatórios em PDF timbrado.
+ *
+ * FICAM AQUI, e não numa aba própria, porque é aqui que a pergunta
+ * nasce: quem está olhando o fechamento do mês é quem precisa levar o
+ * papel para a reunião. Uma aba "Relatórios" separada seria mais
+ * arrumada e menos usada.
+ *
+ * O PERÍODO É O MESMO da tela — os botões herdam o filtro que já está
+ * na barra de cima. Repetir dois campos de data aqui abriria a
+ * possibilidade de emitir um relatório de um mês diferente do que se
+ * está olhando, sem perceber.
+ *
+ * A inadimplência é a exceção e não tem período: ela é uma FOTOGRAFIA
+ * de agora. "Quem estava devendo em março" é outra pergunta, e uma que
+ * o sistema não sabe responder — o saldo de uma cobrança é o de hoje,
+ * não o daquele dia.
+ */
+function PapelTimbrado({ de, ate }: { de: Date; ate: Date }): ReactNode {
+  const [equipe, setEquipe] = useState<api.Profissional[]>([]);
+  const [profissional, setProfissional] = useState('');
+  const [baixando, setBaixando] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    void api
+      .buscarProfissionais()
+      .then((r) => vivo && setEquipe(r.data.filter((p) => p.ativo)))
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const baixar = async (qual: string, fn: () => Promise<void>): Promise<void> => {
+    setBaixando(qual);
+    try {
+      await fn();
+    } finally {
+      setBaixando(null);
+    }
+  };
+
+  return (
+    <section className="rel-pdf">
+      <h2 className="plt-titulo">Relatórios em PDF</h2>
+      <p className="rel-apoio">
+        Saem timbrados com a marca e o endereço da academia — o que estiver preenchido em{' '}
+        <strong>A academia</strong>.
+      </p>
+
+      <div className="rel-pdf-grade">
+        <div className="rel-pdf-item">
+          <h3>Presença no período</h3>
+          <p>Quem veio e quem faltou, com a taxa de comparecimento de cada aluno.</p>
+          <div className="rel-pdf-acoes">
+            <select
+              value={profissional}
+              onChange={(e) => setProfissional(e.target.value)}
+              aria-label="Filtrar por professor"
+            >
+              <option value="">Toda a academia</option>
+              {equipe.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="botao-secundario"
+              disabled={baixando !== null}
+              onClick={() =>
+                void baixar('presenca', () => api.baixarPresenca(de, ate, profissional))
+              }
+            >
+              {baixando === 'presenca' ? 'Gerando…' : 'Baixar'}
+            </button>
+          </div>
+        </div>
+
+        <div className="rel-pdf-item">
+          <h3>Ocupação por professor</h3>
+          <p>Quantas horas cada um atendeu de fato, pela duração real de cada sessão.</p>
+          <div className="rel-pdf-acoes">
+            <button
+              type="button"
+              className="botao-secundario"
+              disabled={baixando !== null}
+              onClick={() => void baixar('ocupacao', () => api.baixarOcupacao(de, ate))}
+            >
+              {baixando === 'ocupacao' ? 'Gerando…' : 'Baixar'}
+            </button>
+          </div>
+        </div>
+
+        <div className="rel-pdf-item">
+          <h3>Inadimplência</h3>
+          <p>Quem está devendo e há quantos dias. Posição de agora, não do período.</p>
+          <div className="rel-pdf-acoes">
+            <button
+              type="button"
+              className="botao-secundario"
+              disabled={baixando !== null}
+              onClick={() => void baixar('inadimplencia', () => api.baixarInadimplencia())}
+            >
+              {baixando === 'inadimplencia' ? 'Gerando…' : 'Baixar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
