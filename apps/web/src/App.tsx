@@ -33,6 +33,7 @@ import { Whatsapp } from './Whatsapp.jsx';
 import { Aplicativo } from './Aplicativo.jsx';
 import { BotaoTema, useTema } from './tema.jsx';
 import { Perfil } from './Perfil.jsx';
+import { Academia } from './Academia.jsx';
 import { Financeiro } from './Financeiro.jsx';
 import { Agenda } from './Agenda.jsx';
 import { Equipe } from './Equipe.jsx';
@@ -98,6 +99,7 @@ type Aba =
   | 'financeiro'
   | 'equipe'
   | 'whatsapp'
+  | 'academia'
   | 'perfil';
 
 export default function App(): ReactNode {
@@ -432,6 +434,13 @@ function Sistema({
     /* SEMPRE VISÍVEL, e é a única assim. As outras seções dependem de
        permissão porque são dados da empresa; o perfil é a própria
        pessoa, e não existe papel que não possa editar o próprio nome. */
+    {
+      id: 'academia',
+      nome: 'A academia',
+      icone: <IconeAcademia />,
+      visivel: pode('user:write'),
+      grupo: 'Administração',
+    },
     { id: 'perfil', nome: 'Perfil', icone: <IconePerfil />, visivel: true, grupo: 'Administração' },
   ];
   const visiveis = abas.filter((a) => a.visivel);
@@ -550,6 +559,7 @@ function Sistema({
         {aba === 'financeiro' && <Financeiro principal={principal} />}
         {aba === 'equipe' && <Equipe principal={principal} />}
         {aba === 'whatsapp' && <Whatsapp />}
+        {aba === 'academia' && <Academia />}
         {aba === 'perfil' && <Perfil principal={principal} />}
         </div>
       </main>
@@ -638,6 +648,19 @@ function IconePerfil(): ReactNode {
     <svg {...svg}>
       <circle cx="12" cy="8" r="3.6" />
       <path d="M5 20a7 7 0 0 1 14 0" />
+    </svg>
+  );
+}
+
+/* O prédio da academia — a casa, não a pessoa. É o par visual do
+   IconePerfil, que fica logo abaixo no menu: um diz "a empresa", o
+   outro diz "você". */
+function IconeAcademia(): ReactNode {
+  return (
+    <svg {...svg}>
+      <path d="M4 20V8.5L12 4l8 4.5V20" />
+      <path d="M4 20h16" />
+      <path d="M9.5 20v-5h5v5" />
     </svg>
   );
 }
