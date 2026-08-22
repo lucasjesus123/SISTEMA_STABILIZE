@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import argon2 from 'argon2';
+import { textoDoPdf } from '../../testes/texto-do-pdf.js';
 
 /**
  * Relatórios em PDF.
@@ -63,38 +64,6 @@ async function tokenDe(email: string): Promise<string> {
 }
 const como = (t: string) => ({ authorization: `Bearer ${t}` });
 
-/**
- * Texto legível de dentro do PDF.
- *
- * O pdfkit não grava o texto como string simples: ele escreve HEXADECIMAL
- * dentro de um array TJ — `[<54455854> 40 <4f2d...>] TJ` — e comprime o
- * fluxo. Procurar a palavra crua no arquivo não acha nada, e foi
- * exatamente assim que a primeira versão deste teste passou a impressão
- * de que o conteúdo não estava lá.
- *
- * Então: inflar cada fluxo e decodificar os blocos hexadecimais.
- */
-function textoDoPdf(pdf: Buffer): string {
-  const zlib = require('node:zlib') as typeof import('node:zlib');
-  const bruto = pdf.toString('latin1');
-  let conteudo = '';
-
-  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(bruto)) !== null) {
-    try {
-      conteudo += zlib.inflateSync(Buffer.from(m[1]!, 'latin1')).toString('latin1');
-    } catch {
-      /* Fontes e imagens não são texto comprimido; ignorar é o certo. */
-    }
-  }
-
-  let saida = '';
-  for (const bloco of conteudo.matchAll(/<([0-9A-Fa-f]+)>/g)) {
-    saida += Buffer.from(bloco[1]!, 'hex').toString('latin1');
-  }
-  return saida;
-}
 
 suite('Relatórios', () => {
   beforeAll(async () => {

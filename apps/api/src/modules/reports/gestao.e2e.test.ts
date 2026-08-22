@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import argon2 from 'argon2';
-import zlib from 'node:zlib';
+import { textoDoPdf } from '../../testes/texto-do-pdf.js';
 
 /**
  * Os relatórios de gestão.
@@ -60,24 +60,6 @@ async function tokenDe(email: string): Promise<string> {
 }
 const como = (t: string) => ({ authorization: `Bearer ${t}` });
 
-function textoDoPdf(pdf: Buffer): string {
-  const bruto = pdf.toString('latin1');
-  let conteudo = '';
-  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(bruto)) !== null) {
-    try {
-      conteudo += zlib.inflateSync(Buffer.from(m[1]!, 'latin1')).toString('latin1');
-    } catch {
-      /* fonte ou imagem */
-    }
-  }
-  let saida = '';
-  for (const bloco of conteudo.matchAll(/<([0-9A-Fa-f]+)>/g)) {
-    saida += Buffer.from(bloco[1]!, 'hex').toString('latin1');
-  }
-  return saida;
-}
 
 /* O período do teste: um mês fixo, para não depender de "hoje". */
 const DE = '2026-03-01';

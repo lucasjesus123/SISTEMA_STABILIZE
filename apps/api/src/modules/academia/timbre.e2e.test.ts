@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import argon2 from 'argon2';
-import zlib from 'node:zlib';
+import { desenhosDeImagem, textoDoPdf } from '../../testes/texto-do-pdf.js';
 
 /**
  * Identidade da academia e papel timbrado.
@@ -85,41 +85,6 @@ async function tokenDe(email: string, slug: string): Promise<string> {
 const como = (t: string) => ({ authorization: `Bearer ${t}` });
 
 /** Texto legível de dentro do PDF — o pdfkit grava hexadecimal comprimido. */
-function textoDoPdf(pdf: Buffer): string {
-  const bruto = pdf.toString('latin1');
-  let conteudo = '';
-  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(bruto)) !== null) {
-    try {
-      conteudo += zlib.inflateSync(Buffer.from(m[1]!, 'latin1')).toString('latin1');
-    } catch {
-      /* fonte ou imagem — não é texto comprimido */
-    }
-  }
-  let saida = '';
-  for (const bloco of conteudo.matchAll(/<([0-9A-Fa-f]+)>/g)) {
-    saida += Buffer.from(bloco[1]!, 'hex').toString('latin1');
-  }
-  return saida;
-}
-
-/** Quantas vezes uma imagem é DESENHADA (operador `Do`) no documento. */
-function desenhosDeImagem(pdf: Buffer): number {
-  const bruto = pdf.toString('latin1');
-  let total = 0;
-  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(bruto)) !== null) {
-    try {
-      const inflado = zlib.inflateSync(Buffer.from(m[1]!, 'latin1')).toString('latin1');
-      total += [...inflado.matchAll(/\/I\d+\s+Do/g)].length;
-    } catch {
-      /* idem */
-    }
-  }
-  return total;
-}
 
 async function criarEmpresa(e: Empresa, marca: string, hash: string): Promise<void> {
   const sufixo = crypto.randomUUID().slice(0, 8);
