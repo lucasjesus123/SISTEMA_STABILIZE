@@ -1855,3 +1855,49 @@ export const restaurarPerguntasDaTriagem = () =>
   api<{ data: { perguntas: PerguntaDoParq[] } }>('/api/students/triagem/perguntas', {
     method: 'DELETE',
   });
+
+/* ====================================================================
+ * A TABELA DE VALORES
+ *
+ * A tabela `price_plans` existia no banco desde o primeiro dia, com RLS
+ * e tudo, e nenhum código a lia. Toda mensalidade era digitada aluno a
+ * aluno. Estas funções são o que faltava para ligá-la.
+ * ================================================================== */
+
+export interface Plano {
+  id: string;
+  nome: string;
+  ciclo: string;
+  valorCentavos: number;
+  sessoesIncluidas: number | null;
+  comissaoBp: number;
+  ativo: boolean;
+  /** Contratos ATIVOS que usam este plano. Torna desativar uma decisão informada. */
+  emUso: number;
+}
+
+export interface PlanoParaGravar {
+  nome: string;
+  ciclo: string;
+  valorCentavos: number;
+  sessoesIncluidas: number | null;
+  comissaoBp: number;
+}
+
+export const listarPlanos = (incluirInativos = false) =>
+  api<{ data: Plano[] }>(`/api/planos${incluirInativos ? '?incluirInativos=true' : ''}`);
+
+export const criarPlano = (dados: PlanoParaGravar) =>
+  api<{ data: { id: string } }>('/api/planos', { method: 'POST', body: JSON.stringify(dados) });
+
+export const salvarPlano = (id: string, dados: PlanoParaGravar) =>
+  api<{ data: { ok: boolean } }>(`/api/planos/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dados),
+  });
+
+/** DESATIVA. Apagar deixaria contratos apontando para o nada. */
+export const apagarPlano = (id: string) =>
+  api<{ data: { desativado: boolean; contratosMantidos: number } }>(`/api/planos/${id}`, {
+    method: 'DELETE',
+  });

@@ -21,6 +21,7 @@ import { prontuarioDoAlunoRoutes } from './modules/portal/prontuario.routes.js';
 import { diarioDoAlunoRoutes } from './modules/portal/diario.routes.js';
 import { perfilRoutes } from './modules/perfil/perfil.routes.js';
 import { academiaRoutes } from './modules/academia/academia.routes.js';
+import { planosRoutes } from './modules/cadastros/planos.routes.js';
 import { cepRoutes } from './modules/cep/cep.routes.js';
 import { plataformaRoutes } from './modules/plataforma/plataforma.routes.js';
 import { cadastrosRoutes, contratoRoutes } from './modules/cadastros/cadastros.routes.js';
@@ -217,6 +218,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   /* A identidade da empresa: fonte única do que o sistema imprime com a
      marca — papel timbrado, carteirinha, termo e WhatsApp leem daqui. */
   await app.register(academiaRoutes, { prefix: '/api/academia' });
+
+  /* A tabela de valores: o contrato do aluno puxa daqui em vez de
+     digitar o preco um a um. */
+  await app.register(planosRoutes, { prefix: '/api/planos' });
   /* Consulta de CEP. Sai para a internet, então é autenticada e o que
      entra são oito dígitos validados — ver o cabeçalho do arquivo. */
   await app.register(cepRoutes, { prefix: '/api/cep' });

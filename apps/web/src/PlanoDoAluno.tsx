@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import * as api from './api.js';
+import { formatCents } from '@stabilize/shared';
 import { Erro } from './ui.jsx';
 import { JanelaDeAtendimento } from './JanelaDeAtendimento.jsx';
 import type { Principal } from './api.js';
@@ -64,6 +65,41 @@ export function SecaoDoPlano({
   const mexer = (m: Partial<DadosDoPlano>): void => aoMudar({ ...plano, ...m });
   const porSessao = plano.ciclo === 'SESSION';
 
+  /* A TABELA DE VALORES DA ACADEMIA.
+     Carregada aqui e não recebida por prop: esta seção já é usada em
+     dois lugares (cadastro novo e edição da ficha), e passar a lista
+     por prop obrigaria os dois a saber de uma coisa que é problema só
+     daqui. Falha em silêncio — sem tabela, o formulário funciona
+     exatamente como antes. */
+  const [tabela, setTabela] = useState<api.Plano[]>([]);
+  useEffect(() => {
+    if (bloqueado) return;
+    let vivo = true;
+    void api
+      .listarPlanos()
+      .then((r) => {
+        if (vivo) setTabela(r.data);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [bloqueado]);
+
+  /* PREENCHE E SAI DO CAMINHO. Escolher um plano escreve valor, ciclo e
+     comissão nos campos — que continuam editáveis. O contrato guarda o
+     valor NEGOCIADO, e é isso que permite fechar por outro preço sem
+     precisar de um plano novo na tabela para cada exceção. */
+  const aplicar = (id: string): void => {
+    const p = tabela.find((x) => x.id === id);
+    if (p === undefined) return;
+    mexer({
+      ciclo: p.ciclo as api.CicloCobranca,
+      valor: (p.valorCentavos / 100).toFixed(2).replace('.', ','),
+      comissaoPercentual: p.comissaoBp === 0 ? '' : String(p.comissaoBp / 100),
+    });
+  };
+
   return (
     <>
       <h2 className="formulario-secao campo-cheia">Plano e cobrança</h2>
@@ -72,6 +108,30 @@ export function SecaoDoPlano({
           ? 'Só quem administra a academia define valor e comissão.'
           : 'Deixe o valor em branco se o aluno ainda não tem plano fechado. Dá para definir depois.'}
       </p>
+
+      {!bloqueado && tabela.length > 0 && (
+        <label className="campo campo-cheia">
+          <span className="campo-rotulo">Usar um plano da tabela</span>
+          <select
+            value=""
+            onChange={(e) => {
+              aplicar(e.target.value);
+              e.target.value = '';
+            }}
+          >
+            <option value="">escolha para preencher os campos abaixo…</option>
+            {tabela.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nome} — {formatCents(p.valorCentavos)}
+                {p.ciclo === 'SESSION' ? ' por sessão' : ''}
+              </option>
+            ))}
+          </select>
+          <span className="campo-dica">
+            Preenche os campos e some do caminho — o valor continua editável.
+          </span>
+        </label>
+      )}
 
       <label className="campo campo-terco">
         <span className="campo-rotulo">Valor</span>

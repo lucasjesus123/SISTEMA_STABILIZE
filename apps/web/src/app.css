@@ -5500,3 +5500,31 @@
   .acad-tela { grid-template-columns: minmax(0, 1fr); }
   .acad-previa { position: static; max-width: 320px; }
 }
+
+/* --- as abas internas da academia --- */
+.acad-abas { display: flex; gap: var(--e-1); margin-bottom: var(--e-5); border-bottom: 1px solid var(--linha); }
+.acad-aba {
+  appearance: none; background: none; border: 0; cursor: pointer;
+  padding: var(--e-2) var(--e-3);
+  font: inherit; font-size: 0.86rem; font-weight: 600;
+  color: var(--tinta-3);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.acad-aba:hover { color: var(--tinta); }
+.acad-aba.ativa { color: var(--acento); border-bottom-color: var(--acento); }
+.acad-aba:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; border-radius: var(--r-1); }
+
+/* --- tabela de valores --- */
+.plano-cabecalho { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--e-4); margin-bottom: var(--e-4); }
+.plano-cabecalho h2 { margin: 0 0 var(--e-1); font-size: 1rem; }
+.plano-cabecalho p { margin: 0; font-size: 0.82rem; color: var(--tinta-3); max-width: 56ch; line-height: 1.45; }
+.plano-form { margin: 0 0 var(--e-5); padding: var(--e-4); border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--superficie-2); }
+.plano-tabela td { vertical-align: middle; }
+.plano-inativo td { opacity: 0.55; }
+.plano-selo {
+  margin-left: var(--e-2); padding: 1px 6px; border-radius: 999px;
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  background: var(--superficie-3); color: var(--tinta-3);
+}
+.plano-inativos { display: flex; align-items: center; gap: var(--e-2); margin-top: var(--e-4); font-size: 0.8rem; color: var(--tinta-3); cursor: pointer; }

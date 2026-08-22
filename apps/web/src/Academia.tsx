@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ApiError,
+  apagarPlano,
   buscarLogoDaAcademia,
+  criarPlano,
+  listarPlanos,
+  salvarPlano,
+  type Plano,
   enviarLogoDaAcademia,
   lerAcademia,
   removerLogoDaAcademia,
@@ -9,7 +14,13 @@ import {
   type Academia as AcademiaDados,
 } from './api.js';
 import { Carregando, Erro } from './ui.jsx';
-import { e164ParaMascara, mascararCep, mascararTelefone, telefoneParaE164 } from '@stabilize/shared';
+import {
+  e164ParaMascara,
+  formatCents,
+  mascararCep,
+  mascararTelefone,
+  telefoneParaE164,
+} from '@stabilize/shared';
 import { mesclarEndereco, useBuscaDeCep } from './endereco.js';
 
 /**
@@ -56,7 +67,55 @@ const VAZIO: Formulario = {
   uf: '',
 };
 
+/**
+ * As duas metades da configuração da empresa.
+ *
+ * ELAS MORAM JUNTAS DE PROPÓSITO. As configurações do tenant nasceram
+ * espalhadas — o bloqueio de entrada dentro do check-in, as perguntas da
+ * triagem dentro da ficha, o WhatsApp na aba dele —, cada uma no módulo
+ * que precisou dela primeiro. É por isso que ninguém acha nenhuma. Esta
+ * tela é o começo do endereço único; o que vier depois entra aqui.
+ */
+type Secao = 'identidade' | 'valores';
+
 export function Academia(): ReactNode {
+  const [secao, setSecao] = useState<Secao>('identidade');
+
+  return (
+    <>
+      <div className="secao-cabecalho">
+        <h1>A academia</h1>
+        <p>
+          O que está aqui sai impresso no papel timbrado dos relatórios, na carteirinha do aluno e
+          na cobrança.
+        </p>
+      </div>
+
+      <nav className="acad-abas" aria-label="Seções da academia">
+        <button
+          type="button"
+          className={`acad-aba ${secao === 'identidade' ? 'ativa' : ''}`}
+          aria-current={secao === 'identidade' ? 'true' : undefined}
+          onClick={() => setSecao('identidade')}
+        >
+          Identidade
+        </button>
+        <button
+          type="button"
+          className={`acad-aba ${secao === 'valores' ? 'ativa' : ''}`}
+          aria-current={secao === 'valores' ? 'true' : undefined}
+          onClick={() => setSecao('valores')}
+        >
+          Tabela de valores
+        </button>
+      </nav>
+
+      {secao === 'identidade' ? <Identidade /> : <TabelaDeValores />}
+    </>
+  );
+}
+
+function Identidade(): ReactNode {
   const [dados, setDados] = useState<AcademiaDados | null>(null);
   const [form, setForm] = useState<Formulario>(VAZIO);
   const [logo, setLogo] = useState<string | null>(null);
@@ -170,13 +229,6 @@ export function Academia(): ReactNode {
 
   return (
     <>
-      <div className="secao-cabecalho">
-        <h1>A academia</h1>
-        <p>
-          O que está aqui sai impresso no papel timbrado dos relatórios e na carteirinha do aluno.
-        </p>
-      </div>
-
       <div className="acad-tela">
         <form className="formulario acad-form" onSubmit={(e) => void enviar(e)} noValidate>
           <h2 className="formulario-secao campo-cheia">Marca</h2>
@@ -479,4 +531,307 @@ function PreviaDoTimbre({ form, logo }: { form: Formulario; logo: string | null 
 function vazioParaNulo(v: string): string | null {
   const t = v.trim();
   return t === '' ? null : t;
+}
+
+/* ====================================================================
+ * A TABELA DE VALORES
+ * ================================================================== */
+
+/**
+ * Os ciclos de cobrança do sistema, com nome de gente.
+ *
+ * A ORDEM É A DA DURAÇÃO, e não a alfabética: quem monta uma tabela de
+ * preços pensa "da sessão avulsa até o anual", e uma lista que começa
+ * em "Anual" obriga a procurar.
+ */
+const CICLOS: { valor: string; rotulo: string }[] = [
+  { valor: 'SESSION', rotulo: 'Por sessão' },
+  { valor: 'WEEKLY', rotulo: 'Semanal' },
+  { valor: 'BIWEEKLY', rotulo: 'Quinzenal' },
+  { valor: 'MONTHLY', rotulo: 'Mensal' },
+  { valor: 'QUARTERLY', rotulo: 'Trimestral' },
+  { valor: 'SEMIANNUAL', rotulo: 'Semestral' },
+  { valor: 'ANNUAL', rotulo: 'Anual' },
+];
+const rotuloDoCiclo = (v: string): string =>
+  CICLOS.find((c) => c.valor === v)?.rotulo ?? v;
+
+interface FormPlano {
+  id: string | null;
+  nome: string;
+  ciclo: string;
+  valor: string;
+  sessoes: string;
+  comissao: string;
+}
+
+const PLANO_VAZIO: FormPlano = {
+  id: null,
+  nome: '',
+  ciclo: 'MONTHLY',
+  valor: '',
+  sessoes: '',
+  comissao: '',
+};
+
+function TabelaDeValores(): ReactNode {
+  const [planos, setPlanos] = useState<Plano[] | null>(null);
+  const [inativos, setInativos] = useState(false);
+  const [form, setForm] = useState<FormPlano | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  const carregar = useCallback(async (): Promise<void> => {
+    try {
+      const { data } = await listarPlanos(inativos);
+      setPlanos(data);
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Não foi possível carregar a tabela.');
+    }
+  }, [inativos]);
+
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
+
+  const gravar = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    if (form === null) return;
+    setErro(null);
+    setOcupado(true);
+    try {
+      const dados = {
+        nome: form.nome.trim(),
+        ciclo: form.ciclo,
+        /* O valor entra em reais e sai em centavos. A conversão é aqui e
+           não no servidor porque a tela é a única que sabe que o campo
+           está em reais — mandar "390,00" para a API obrigaria o
+           servidor a adivinhar a vírgula. */
+        valorCentavos: reaisParaCentavos(form.valor),
+        sessoesIncluidas: form.sessoes.trim() === '' ? null : Number(form.sessoes),
+        comissaoBp: form.comissao.trim() === '' ? 0 : Math.round(Number(form.comissao) * 100),
+      };
+      if (form.id === null) await criarPlano(dados);
+      else await salvarPlano(form.id, dados);
+      setForm(null);
+      await carregar();
+    } catch (x) {
+      setErro(x instanceof ApiError ? x.message : 'Não foi possível salvar o plano.');
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const desativar = async (p: Plano): Promise<void> => {
+    const aviso =
+      p.emUso === 0
+        ? `Tirar "${p.nome}" da tabela?`
+        : `Tirar "${p.nome}" da tabela?\n\n${p.emUso} contrato(s) usam este plano hoje. Eles CONTINUAM cobrando normalmente — o plano só deixa de aparecer para novos contratos.`;
+    if (!window.confirm(aviso)) return;
+    setOcupado(true);
+    try {
+      await apagarPlano(p.id);
+      await carregar();
+    } catch {
+      setErro('Não foi possível tirar o plano da tabela.');
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  if (planos === null) return <Carregando rotulo="Carregando a tabela de valores" />;
+
+  return (
+    <section className="plano-tela">
+      <div className="plano-cabecalho">
+        <div>
+          <h2>Tabela de valores</h2>
+          <p>
+            O contrato do aluno puxa daqui. O valor continua editável em cada contrato — a tabela é
+            a sugestão, não a trava.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="botao-acao"
+          onClick={() => setForm({ ...PLANO_VAZIO })}
+          disabled={ocupado}
+        >
+          Novo plano
+        </button>
+      </div>
+
+      {erro !== null && (
+        <div className="mensagem-erro" role="alert">
+          <p>{erro}</p>
+        </div>
+      )}
+
+      {form !== null && (
+        <form className="formulario plano-form" onSubmit={(e) => void gravar(e)} noValidate>
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Nome do plano</span>
+            <input
+              value={form.nome}
+              autoFocus
+              required
+              placeholder="Mensal 3× por semana"
+              onChange={(e) => setForm({ ...form, nome: e.target.value })}
+            />
+          </label>
+
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Cobrança</span>
+            <select
+              value={form.ciclo}
+              onChange={(e) => setForm({ ...form, ciclo: e.target.value })}
+            >
+              {CICLOS.map((c) => (
+                <option key={c.valor} value={c.valor}>
+                  {c.rotulo}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Valor (R$)</span>
+            <input
+              inputMode="decimal"
+              required
+              placeholder="390,00"
+              value={form.valor}
+              onChange={(e) => setForm({ ...form, valor: e.target.value })}
+            />
+          </label>
+
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Sessões incluídas</span>
+            <input
+              inputMode="numeric"
+              placeholder="deixe vazio se for ilimitado"
+              value={form.sessoes}
+              onChange={(e) => setForm({ ...form, sessoes: e.target.value })}
+            />
+          </label>
+
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Comissão do profissional (%)</span>
+            <input
+              inputMode="decimal"
+              placeholder="0"
+              value={form.comissao}
+              onChange={(e) => setForm({ ...form, comissao: e.target.value })}
+            />
+            <span className="campo-dica">Sobre o valor recebido. Zero se não houver.</span>
+          </label>
+
+          <div className="formulario-acoes campo-cheia">
+            <button type="submit" className="botao-acao" disabled={ocupado}>
+              {ocupado ? 'Salvando…' : form.id === null ? 'Criar plano' : 'Salvar'}
+            </button>
+            <button type="button" className="botao-texto" onClick={() => setForm(null)}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+
+      {planos.length === 0 ? (
+        <div className="estado-vazio">
+          <p>
+            <strong>A tabela está vazia.</strong> Sem ela, o valor de cada aluno é digitado à mão,
+            um a um — e é assim que dois alunos do mesmo plano acabam pagando diferente.
+          </p>
+        </div>
+      ) : (
+        <table className="tabela plano-tabela">
+          <thead>
+            <tr>
+              <th>Plano</th>
+              <th>Cobrança</th>
+              <th>Sessões</th>
+              <th>Comissão</th>
+              <th className="direita">Valor</th>
+              <th className="direita">Em uso</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {planos.map((p) => (
+              <tr key={p.id} className={p.ativo ? '' : 'plano-inativo'}>
+                <td>
+                  {p.nome}
+                  {!p.ativo && <span className="plano-selo">fora da tabela</span>}
+                </td>
+                <td>{rotuloDoCiclo(p.ciclo)}</td>
+                <td>{p.sessoesIncluidas === null ? '—' : p.sessoesIncluidas}</td>
+                <td>{p.comissaoBp === 0 ? '—' : `${(p.comissaoBp / 100).toFixed(0)}%`}</td>
+                <td className="direita dinheiro">{formatCents(p.valorCentavos)}</td>
+                <td className="direita">{p.emUso === 0 ? '—' : p.emUso}</td>
+                <td className="direita">
+                  {p.ativo && (
+                    <>
+                      <button
+                        type="button"
+                        className="botao-texto"
+                        disabled={ocupado}
+                        onClick={() =>
+                          setForm({
+                            id: p.id,
+                            nome: p.nome,
+                            ciclo: p.ciclo,
+                            valor: (p.valorCentavos / 100).toFixed(2).replace('.', ','),
+                            sessoes: p.sessoesIncluidas === null ? '' : String(p.sessoesIncluidas),
+                            comissao: p.comissaoBp === 0 ? '' : String(p.comissaoBp / 100),
+                          })
+                        }
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="botao-texto-perigo"
+                        disabled={ocupado}
+                        onClick={() => void desativar(p)}
+                      >
+                        Tirar
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <label className="plano-inativos">
+        <input
+          type="checkbox"
+          checked={inativos}
+          onChange={(e) => setInativos(e.target.checked)}
+        />
+        Mostrar planos que saíram da tabela
+      </label>
+    </section>
+  );
+}
+
+/**
+ * "390,00" e "390.00" e "1.390,50" viram centavos.
+ *
+ * ACEITA AS DUAS PONTUAÇÕES porque as duas são digitadas: quem usa
+ * teclado numérico do celular põe ponto, quem usa o teclado do
+ * computador põe vírgula. Recusar uma delas transforma um plano de
+ * R$ 1.390,50 em R$ 139.050,00 ou num erro de validação sem explicação.
+ */
+function reaisParaCentavos(v: string): number {
+  const limpo = v.trim().replace(/\s/g, '');
+  /* Se tem vírgula, ela é o separador decimal e o ponto é de milhar. */
+  const normalizado = limpo.includes(',')
+    ? limpo.replace(/\./g, '').replace(',', '.')
+    : limpo;
+  const numero = Number(normalizado);
+  return Number.isFinite(numero) ? Math.round(numero * 100) : 0;
 }
