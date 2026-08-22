@@ -99,8 +99,40 @@ function situacaoReal(l: api.Lancamento): api.StatusLancamento {
   return l.status;
 }
 
+/**
+ * As abas que ESTE papel pode abrir.
+ *
+ * O profissional entra no Financeiro para ver o PRÓPRIO fechamento —
+ * `commission:read` é dele; `finance:*` não é. A tela abria em "A
+ * receber" assim mesmo, pedia ao servidor o que ele nega, e o resultado
+ * era "Seu perfil não tem acesso a esta funcionalidade" DUAS vezes em
+ * vermelho, com as cinco abas no lugar, um botão "Nova cobrança" que
+ * falharia, e um "Nada neste mês" logo abaixo dizendo que o mês estava
+ * vazio — quando o mês nem tinha sido consultado.
+ *
+ * O servidor estava certo o tempo todo: negou, e a negativa ficou
+ * auditada. Quem mentia era a tela. Oferecer a porta e depois dizer que
+ * ela não abre é pior do que não oferecer.
+ */
+const ABAS: readonly (readonly [Painel, string, string])[] = [
+  ['receber', 'A receber', 'finance:receivable:read'],
+  ['pagar', 'A pagar', 'finance:payable:read'],
+  /* RECORRÊNCIAS antes de RELATÓRIOS: é operação (o que vai nascer
+     sozinho mês que vem), e relatório é leitura. */
+  ['recorrencias', 'Recorrências', 'finance:receivable:read'],
+  ['relatorios', 'Relatórios', 'finance:report:read'],
+  ['comissoes', 'Comissões', 'commission:read'],
+];
+
 export function Financeiro({ principal }: { principal: Principal }): ReactNode {
-  const [painel, setPainel] = useState<Painel>('receber');
+  const abas = useMemo(
+    () => ABAS.filter(([, , p]) => principal.permissions.includes(p)),
+    [principal.permissions],
+  );
+  /* Começa na primeira aba que este papel REALMENTE abre — para o dono
+     continua sendo "A receber", que é a primeira da lista. */
+  const [painel, setPainel] = useState<Painel>(() => abas[0]?.[0] ?? 'comissoes');
+  const podeVerResumo = principal.permissions.includes('finance:report:read');
   /* Um contador em vez de um booleano: clicar em "Vencido" duas vezes
      precisa reaplicar o filtro, e um booleano já `true` não dispara
      efeito nenhum. */
@@ -112,6 +144,9 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
   const { de, ate } = useMemo(() => limitesDoMes(mes), [mes]);
 
   const carregarResumo = useCallback(() => {
+    /* Não pedir o que o papel não pode ver: a resposta seria 403 e o
+       403 virava faixa vermelha no alto da tela. */
+    if (!podeVerResumo) return;
     api
       .buscarResumo(de, ate)
       .then((r) => {
@@ -119,7 +154,7 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
         setErro(null);
       })
       .catch((e: unknown) => setErro(e instanceof api.ApiError ? e.message : 'Falha ao carregar.'));
-  }, [de, ate]);
+  }, [de, ate, podeVerResumo]);
 
   useEffect(carregarResumo, [carregarResumo]);
 
@@ -131,7 +166,14 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
       <div className="secao-cabecalho fin-cabecalho">
         <div>
           <h1>Financeiro</h1>
-          <p>Contas a receber e a pagar, baixas e o fechamento de cada profissional.</p>
+          {/* A chamada descreve o que ESTA pessoa vê. Prometer "contas a
+              receber e a pagar" para quem só abre o próprio fechamento
+              é a mesma mentira das abas, escrita menor. */}
+          <p>
+            {podeVerResumo
+              ? 'Contas a receber e a pagar, baixas e o fechamento de cada profissional.'
+              : 'O seu fechamento do mês.'}
+          </p>
         </div>
         <div className="fin-mes">
           <button type="button" className="botao-secundario" onClick={() => andar(-1)}>
@@ -156,18 +198,15 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
         />
       )}
 
-      <div className="fin-abas" role="tablist" aria-label="Áreas do financeiro">
-        {(
-          [
-            ['receber', 'A receber'],
-            ['pagar', 'A pagar'],
-            /* RECORRÊNCIAS antes de RELATÓRIOS: é operação (o que vai
-               nascer sozinho mês que vem), e relatório é leitura. */
-            ['recorrencias', 'Recorrências'],
-            ['relatorios', 'Relatórios'],
-            ['comissoes', 'Comissões'],
-          ] as [Painel, string][]
-        ).map(([id, nome]) => (
+      {/* Uma aba só não é barra de abas: para o profissional, que só
+          abre "Comissões", a fileira vira ruído. */}
+      <div
+        className="fin-abas"
+        role="tablist"
+        aria-label="Áreas do financeiro"
+        hidden={abas.length < 2}
+      >
+        {abas.map(([id, nome]) => (
           <button
             key={id}
             type="button"
@@ -870,11 +909,21 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
 
+  /* SÓ QUEM LÊ A EQUIPE ESCOLHE ALGUÉM DA EQUIPE.
+     A intenção abaixo sempre foi "o profissional cai direto no próprio
+     fechamento" — mas a lista vinha com a academia inteira, e ele podia
+     escolher um colega. O servidor negava (404, escopo OWN_PROFESSIONAL,
+     medido), então nunca vazou centavo nenhum; o que sobrava era um beco
+     sem saída com o nome do colega na porta. */
+  const soEuMesmo = !principal.permissions.includes('user:read');
+
   useEffect(() => {
     api
       .buscarProfissionais()
       .then((r) => {
-        const ativos = r.data.filter((p) => p.ativo);
+        const ativos = r.data
+          .filter((p) => p.ativo)
+          .filter((p) => !soEuMesmo || p.id === principal.id);
         setEquipe(ativos);
         /* O profissional cai direto no PRÓPRIO fechamento: é o único que
            ele pode ver, e obrigá-lo a escolher a si mesmo numa lista de
@@ -884,7 +933,7 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
       .catch((e: unknown) =>
         setErro(e instanceof api.ApiError ? e.message : 'Falha ao carregar a equipe.'),
       );
-  }, [principal.id]);
+  }, [principal.id, soEuMesmo]);
 
   useEffect(() => {
     if (quem === '') return;
@@ -910,16 +959,27 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
 
   return (
     <>
-      <label className="campo fin-selecao">
-        <span className="campo-rotulo">Profissional</span>
-        <select value={quem} onChange={(e) => setQuem(e.target.value)}>
-          {equipe.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nome}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* Uma pessoa só não é escolha: quem vê apenas o próprio
+          fechamento lê o nome, não opera um seletor de um item. */}
+      {equipe.length > 1 ? (
+        <label className="campo fin-selecao">
+          <span className="campo-rotulo">Profissional</span>
+          <select value={quem} onChange={(e) => setQuem(e.target.value)}>
+            {equipe.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        equipe[0] !== undefined && (
+          <p className="campo fin-selecao">
+            <span className="campo-rotulo">Profissional</span>
+            <strong>{equipe[0].nome}</strong>
+          </p>
+        )
+      )}
 
       {erro !== null && <Erro mensagem={erro} />}
       {carregando ? (
