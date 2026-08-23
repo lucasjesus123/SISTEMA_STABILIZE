@@ -27,6 +27,8 @@
 set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=deploy/_crontab.sh
+. "$(dirname "${BASH_SOURCE[0]}")/_crontab.sh"
 BACKUP="$RAIZ/deploy/backup.sh"
 LOG="${STABILIZE_BACKUP_LOG:-/var/log/stabilize-backup.log}"
 HORA="${STABILIZE_BACKUP_HORA:-3}"
@@ -69,9 +71,10 @@ azul "==> 3/3  agendando para todo dia às ${HORA}h"
 
 linha="0 ${HORA} * * * ${BACKUP} >> ${LOG} 2>&1 ${MARCA}"
 
-# `crontab -l` sai com erro quando não há crontab nenhum — o `|| true`
-# evita que o `set -e` mate o script na primeira instalação.
-atual="$(crontab -l 2>/dev/null || true)"
+# A leitura passa por `ler_crontab`: só "ainda não há crontab" vira
+# vazio. Qualquer outra falha para o script ANTES de escrever — este
+# crontab é do root e é compartilhado com as outras gavetas da VPS.
+atual="$(ler_crontab)"
 novo="$(printf '%s\n' "$atual" | grep -v -- "$MARCA" || true)"
 printf '%s\n%s\n' "$novo" "$linha" | grep -v '^$' | crontab -
 

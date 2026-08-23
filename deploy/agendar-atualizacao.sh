@@ -25,6 +25,8 @@
 set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=deploy/_crontab.sh
+. "$(dirname "${BASH_SOURCE[0]}")/_crontab.sh"
 VERIFICAR="$RAIZ/deploy/verificar-atualizacao.sh"
 LOG="${STABILIZE_ATUALIZACAO_LOG:-/var/log/stabilize-atualizacao.log}"
 MINUTOS="${STABILIZE_ATUALIZACAO_MINUTOS:-10}"
@@ -82,7 +84,10 @@ azul "==> 3/3  agendando a cada ${MINUTOS} min"
 
 linha="*/${MINUTOS} * * * * ${VERIFICAR} >> ${LOG} 2>&1 ${MARCA}"
 
-atual="$(crontab -l 2>/dev/null || true)"
+# A leitura passa por `ler_crontab`: só "ainda não há crontab" vira
+# vazio. Qualquer outra falha para o script ANTES de escrever — este
+# crontab é do root e é compartilhado com as outras gavetas da VPS.
+atual="$(ler_crontab)"
 novo="$(printf '%s\n' "$atual" | grep -v -- "$MARCA" || true)"
 printf '%s\n%s\n' "$novo" "$linha" | grep -v '^$' | crontab -
 
