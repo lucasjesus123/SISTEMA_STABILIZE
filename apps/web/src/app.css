@@ -572,6 +572,13 @@
   .lateral-rodape .conta-nome {
     display: none;
   }
+  /* No celular o rodapé é uma FILEIRA de uma linha só, ao lado do menu.
+     O crédito não cabe ali sem espremer o botão de sair — e espremer o
+     que a pessoa usa para creditar quem fez seria a troca errada. Ele
+     reaparece na tela de entrada, que todo mundo vê. */
+  .lateral-credito {
+    display: none;
+  }
 
   .lateral-nav {
     grid-area: nav;
@@ -3511,6 +3518,64 @@
   letter-spacing: 0.09em;
   color: #7d9497;
 }
+/* A ASSINATURA DE QUEM FEZ O SISTEMA.
+   Discreta de propósito: é crédito, não chamada. Mas o contraste é
+   medido como o de qualquer outro texto — sobre o #0b1618 da lateral,
+   este cinza dá 6,64:1 e o link 13,95:1, contra o piso de 4,5. Crédito
+   ilegível não credita ninguém. */
+/* O mesmo crédito na tela de entrada.
+   Com TOKEN e não cor fixa, para não repetir o defeito do crachá que
+   sumia ao trocar de tema.
+   MEDIDO NA COR RENDERIZADA, e não na que eu supus: esta cena é escura
+   nos DOIS temas (o fundo resolve para rgb(5,9,10) tanto em claro
+   quanto em escuro), então os tokens caem na paleta escura e dão
+   11,27:1 no texto e 14,83:1 no link. A primeira conta que fiz aqui
+   partiu de um fundo claro que não existe — por isso a medição passou
+   a ser lida do navegador, e não calculada de cabeça. */
+.entrada-credito {
+  position: relative;
+  z-index: 1;
+  margin: var(--e-5) 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--texto-corpo);
+}
+.entrada-credito a {
+  color: var(--teal-fundo);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--teal-fundo) 40%, transparent);
+}
+.entrada-credito a:hover {
+  border-bottom-color: var(--teal-fundo);
+}
+.entrada-credito a:focus-visible {
+  outline: 2px solid var(--teal-fundo);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.lateral-credito {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #8c9fa1;
+}
+.lateral-credito a {
+  color: #b9e9ec;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(185, 233, 236, 0.35);
+}
+.lateral-credito a:hover {
+  border-bottom-color: #b9e9ec;
+}
+/* O foco de teclado precisa aparecer sobre fundo escuro — o anel
+   padrão do navegador some contra a lateral. */
+.lateral-credito a:focus-visible {
+  outline: 2px solid #7af0f2;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .lateral-ponto {
   width: 7px;
   height: 7px;

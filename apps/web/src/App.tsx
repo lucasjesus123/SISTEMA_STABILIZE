@@ -320,6 +320,16 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
           </button>
         </form>
       </div>
+
+      {/* A assinatura também AQUI porque a lateral esconde o crédito no
+          celular, onde o rodapé é uma fileira de uma linha só. Esta é a
+          tela que todo mundo vê, em qualquer tamanho. */}
+      <p className="entrada-credito">
+        desenvolvido por{' '}
+        <a href="https://conexaomkt.com.br" target="_blank" rel="noopener noreferrer">
+          Grupo Conexão
+        </a>
+      </p>
     </main>
   );
 }
@@ -527,6 +537,19 @@ function Sistema({
           <button type="button" className="lateral-sair" onClick={() => void sair().then(aoSair)}>
             Sair
           </button>
+          {/* A ASSINATURA DE QUEM FEZ.
+              Fica na lateral e não numa faixa própria: a lateral é o
+              único elemento presente em TODAS as telas do sistema, e uma
+              faixa no fim do conteúdo só apareceria depois de rolar.
+              `rel="noopener noreferrer"`: sem isto a página aberta ganha
+              referência ao `window` desta aba e pode trocá-la de
+              endereço — é a regra para todo link que sai do sistema. */}
+          <p className="lateral-credito">
+            desenvolvido por{' '}
+            <a href="https://conexaomkt.com.br" target="_blank" rel="noopener noreferrer">
+              Grupo Conexão
+            </a>
+          </p>
         </div>
       </aside>
 
