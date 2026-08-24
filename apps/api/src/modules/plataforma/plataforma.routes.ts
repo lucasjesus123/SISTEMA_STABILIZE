@@ -13,6 +13,12 @@ import { getDummyHash, hashPassword, verifyPassword } from '../../auth/password.
 import { badRequest, conflict, forbidden, notFound, unauthorized } from '../../http/errors.js';
 import { cifrar } from '../whatsapp/segredo.js';
 import * as repo from './plataforma.repository.js';
+import {
+  COOKIE_PLATAFORMA,
+  entrarComoOperador,
+  opcoesDoCookiePlataforma,
+  tempoDeRespostaDeContaInexistente,
+} from './plataforma.entrada.js';
 import type { Role } from '@stabilize/shared';
 
 /**
@@ -31,25 +37,9 @@ import type { Role } from '@stabilize/shared';
  * cliente na mesma aba.
  */
 
-const COOKIE_PLATAFORMA = 'stz_plt';
-
-function opcoesDoCookie(): {
-  httpOnly: true;
-  secure: boolean;
-  sameSite: 'strict';
-  path: string;
-  maxAge: number;
-} {
-  return {
-    httpOnly: true,
-    secure: process.env['NODE_ENV'] === 'production',
-    sameSite: 'strict',
-    /* Escopo estreito: o cookie do painel não acompanha requisição
-       nenhuma das rotas de academia. */
-    path: '/api/plataforma',
-    maxAge: 60 * 60 * 12,
-  };
-}
+/* O cookie e suas opções moram em `plataforma.entrada.ts`: duas rotas
+   o emitem agora, e ele precisa de uma definição só. */
+const opcoesDoCookie = opcoesDoCookiePlataforma;
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email('E-mail inválido.'),
@@ -126,45 +116,27 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
     { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } },
     async (request, reply) => {
       const { email, senha } = loginSchema.parse(request.body);
-      const admin = await repo.buscarAdmin(email);
 
-      /* Compara contra um hash de mentira quando a conta não existe: sem
-         isso, "e-mail inexistente" responde em 1 ms e "senha errada" em
-         100 ms, e a diferença enumera as contas do painel. */
-      if (admin === null) {
-        await verifyPassword(await getDummyHash(), senha);
+      /* A LÓGICA MORA EM `plataforma.entrada.ts` para o login da
+         academia poder tentar esta porta também — ver o cabeçalho de
+         lá. Aqui o comportamento é o mesmo de sempre: e-mail que não é
+         de operador responde 401 com o MESMO tempo de um e-mail que é,
+         porque senão a diferença enumera as contas do painel. */
+      const sessao = await entrarComoOperador(email, senha, {
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+      });
+
+      if (sessao === null) {
+        await tempoDeRespostaDeContaInexistente(senha);
         throw unauthorized('E-mail ou senha incorretos.');
       }
 
-      if (admin.bloqueadoAte !== null && admin.bloqueadoAte > new Date()) {
-        throw unauthorized('Conta temporariamente bloqueada. Tente mais tarde.');
-      }
-
-      const confere = await verifyPassword(admin.passwordHash, senha);
-      if (!confere || !admin.ativo) {
-        await repo.registrarTentativa(admin.id, false);
-        throw unauthorized('E-mail ou senha incorretos.');
-      }
-
-      await repo.registrarTentativa(admin.id, true);
-
-      const acesso = await assinarTokenPlataforma(admin.id);
-      const refresh = createRefreshToken();
-      await repo.criarSessao(
-        admin.id,
-        refresh.tokenHash,
-        refresh.familyId,
-        refresh.expiresAt,
-        request.headers['user-agent'] ?? null,
-        request.ip,
-      );
-      await repo.registrar(admin.id, 'plataforma.login', null, null, request.ip);
-
-      void reply.setCookie(COOKIE_PLATAFORMA, refresh.token, opcoesDoCookie());
+      void reply.setCookie(COOKIE_PLATAFORMA, sessao.refreshToken, opcoesDoCookie());
       return {
-        accessToken: acesso.token,
-        expiresIn: acesso.expiresIn,
-        admin: { id: admin.id, nome: admin.nome, precisaTrocarSenha: admin.precisaTrocarSenha },
+        accessToken: sessao.accessToken,
+        expiresIn: sessao.expiresIn,
+        admin: sessao.admin,
       };
     },
   );

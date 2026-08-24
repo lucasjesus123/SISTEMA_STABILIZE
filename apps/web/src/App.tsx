@@ -230,7 +230,18 @@ function Login({ aoEntrar }: { aoEntrar: (p: Principal) => void }): ReactNode {
     setErro(null);
     setEnviando(true);
     try {
-      await entrar(email.trim(), senha);
+      const quem = await entrar(email.trim(), senha);
+
+      /* DONO DO SERVIÇO: o painel é outra aplicação, servida em
+         `/plataforma`, com sessão e tema próprios. O servidor já gravou
+         o cookie dele no login; ir para lá faz o painel se levantar
+         sozinho. Não dá para montá-lo aqui dentro: ele não compartilha
+         menu, cabeçalho nem estado com o sistema da academia. */
+      if (quem.tipo === 'plataforma') {
+        window.location.assign('/plataforma');
+        return;
+      }
+
       /* O `/me` logo depois do login, e não o `user` que o login
          devolve. São duas formas quase iguais do mesmo objeto, e a do
          login não traz o fuso da academia — que a agenda precisa para

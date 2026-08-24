@@ -168,19 +168,41 @@ export async function api<T>(caminho: string, init: RequestInit = {}): Promise<T
 
 /* -------------------------------------------------------------------- */
 
+/**
+ * O login, para as duas portas.
+ *
+ * A MESMA tela serve quem opera uma academia e quem opera o serviço. É o
+ * servidor que decide qual das duas o e-mail abre — ver o comentário em
+ * `auth.routes.ts`. Quando é o dono do serviço, a resposta traz
+ * `plataforma` no lugar de `user`, e aí não há `Principal` nenhum para
+ * guardar: o painel é outra aplicação, com sessão própria.
+ */
 export async function entrar(
   email: string,
   senha: string,
-): Promise<{ accessToken: string; user: Principal & { mustChangePassword: boolean } }> {
+): Promise<
+  | { tipo: 'academia'; user: Principal & { mustChangePassword: boolean } }
+  | { tipo: 'plataforma' }
+> {
   const r = await bruto<{
     accessToken: string;
-    user: Principal & { mustChangePassword: boolean };
+    user?: Principal & { mustChangePassword: boolean };
+    plataforma?: { id: string; nome: string; precisaTrocarSenha: boolean };
   }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password: senha }),
   });
+
+  if (r.plataforma !== undefined) {
+    /* O token do painel NÃO entra no `accessToken` deste módulo: ele tem
+       audiência de plataforma e seria recusado por toda rota daqui. O
+       painel se levanta sozinho pelo cookie que o servidor acabou de
+       gravar. */
+    return { tipo: 'plataforma' };
+  }
+
   accessToken = r.accessToken;
-  return r;
+  return { tipo: 'academia', user: r.user! };
 }
 
 export async function sair(): Promise<void> {

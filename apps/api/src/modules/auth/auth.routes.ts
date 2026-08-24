@@ -8,6 +8,11 @@ import { env } from '../../config/env.js';
 import { withTenant } from '../../db/pool.js';
 import { AppError, unauthorized } from '../../http/errors.js';
 import { LoginGuard } from '../../http/login-guard.js';
+import {
+  COOKIE_PLATAFORMA,
+  entrarComoOperador,
+  opcoesDoCookiePlataforma,
+} from '../plataforma/plataforma.entrada.js';
 
 /**
  * O identificador de quem entra: e-mail OU CPF.
@@ -119,6 +124,47 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const body = loginSchema.parse(request.body);
+
+      /* UMA TELA DE LOGIN SÓ, PARA AS DUAS PORTAS.
+
+         O dono do serviço entra pelo mesmo endereço que a recepcionista
+         e o sistema descobre quem ele é. Antes eram dois endereços, e
+         decorar `/plataforma` era problema NOSSO empurrado para quem
+         usa.
+         POR QUE O SERVIDOR DECIDE, e não a tela tentando as duas rotas:
+           · tentar a academia primeiro gastaria uma tentativa ERRADA na
+             conta de academia do operador a cada login dele no painel —
+             e conta de academia tem bloqueio por tentativas;
+           · tentar a plataforma primeiro estouraria o limite daquela
+             rota (10 por 15 min) numa academia inteira atrás do mesmo
+             IP: recepção e professores trancados por um limite que não
+             era para eles.
+         Aqui é uma requisição, um limite, e um `verifyPassword` só.
+         O QUE NÃO MUDA: o token devolvido continua com AUDIÊNCIA de
+         plataforma, que não abre rota de academia; o cookie continua
+         sendo outro, com caminho próprio; e a tentativa fica registrada
+         em `platform_admins`, longe do contador das contas de academia. */
+      const comoOperador = await entrarComoOperador(body.email, body.password, {
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+      });
+
+      if (comoOperador !== null) {
+        guardaIp.liberar(request.ip);
+        void reply.setCookie(
+          COOKIE_PLATAFORMA,
+          comoOperador.refreshToken,
+          opcoesDoCookiePlataforma(),
+        );
+        return {
+          accessToken: comoOperador.accessToken,
+          expiresIn: comoOperador.expiresIn,
+          /* A tela usa ESTA chave para saber que deve abrir o painel, e
+             não o sistema. Um campo presente é mais difícil de ler
+             errado do que um `tipo: 'academia' | 'plataforma'`. */
+          plataforma: comoOperador.admin,
+        };
+      }
 
       const resultado = await login({
         email: body.email,
