@@ -82,6 +82,46 @@ export const notFound = (recurso = 'Recurso') =>
   new AppError('NOT_FOUND', `${recurso} não encontrado`);
 
 /**
+ * O que a regra do banco quer dizer, em português de gente.
+ *
+ * As restrições `CHECK` são as regras que o sistema não abre mão de
+ * cumprir — e são justamente as que o usuário esbarra fazendo algo
+ * legítimo pela porta errada. Devolver o nome cru seria vazar detalhe
+ * interno; devolver só "os dados não atendem às regras" é pior, porque
+ * deixa a pessoa sem próximo passo.
+ *
+ * A lista cobre as restrições que uma tela pode encostar. O que não
+ * estiver aqui cai no texto genérico — que continua existindo como
+ * último recurso, e não como resposta padrão.
+ */
+function explicarCheck(constraint: string | undefined): string {
+  switch (constraint) {
+    case 'entry_counterparty':
+      return 'Diga de quem é esta cobrança: escolha o aluno ou informe quem vai pagar.';
+    case 'entry_not_overpaid':
+      return 'O pagamento é maior que o valor em aberto desta cobrança.';
+    case 'entry_installment_coherent':
+      return 'Parcelamento incompleto: informe o número da parcela e o total.';
+    case 'finance_entries_amount_cents_check':
+      return 'O valor precisa ser maior que zero.';
+    case 'appt_cancel_coherent':
+      return 'Atendimento cancelado precisa da data do cancelamento — e só ele pode tê-la.';
+    case 'tenants_logo_completo':
+      return 'O logo precisa do arquivo e do tipo juntos.';
+    case 'tenants_cep_oito_digitos':
+      return 'O CEP precisa ter oito dígitos.';
+    case 'tenants_uf_valida':
+      return 'UF inválida: use a sigla de duas letras do estado.';
+    case 'tenants_telefone_e164':
+      return 'Telefone fora do formato esperado.';
+    case 'lead_conversao_coerente':
+      return 'Interessado marcado como matriculado precisa do aluno que ele virou.';
+    default:
+      return 'Os dados enviados não atendem às regras do sistema.';
+  }
+}
+
+/**
  * Traduz erro do PostgreSQL para erro de API, sem vazar detalhe interno.
  * O texto original do driver vai só para o log.
  */
@@ -112,7 +152,14 @@ export function fromDatabaseError(error: unknown): AppError {
       });
 
     case '23514': // check_violation
-      return new AppError('UNPROCESSABLE', 'Os dados enviados não atendem às regras do sistema.', {
+      /* O TEXTO GENÉRICO É O ÚLTIMO RECURSO, não o primeiro.
+         "Os dados enviados não atendem às regras do sistema" descreve o
+         que aconteceu e não diz o que fazer: quem lê não sabe qual dado
+         nem qual regra. Foi assim que a primeira cobrança de uma
+         academia nova virou uma parede — a tela oferecia "sem aluno
+         vinculado" e o banco exigia devedor.
+         O nome da restrição É a explicação, e o banco já o entrega. */
+      return new AppError('UNPROCESSABLE', explicarCheck(e.constraint), {
         logContext: { pgCode: e.code, constraint: e.constraint },
       });
 

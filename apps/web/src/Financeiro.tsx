@@ -66,6 +66,36 @@ const MES_ANO = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric
  */
 const capitalizar = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 
+/**
+ * A data por extenso, do jeito que o sistema ENTENDEU.
+ *
+ * O campo nativo de data mostra o formato do NAVEGADOR, não o da página:
+ * medido com `navigator.language` e `Intl` resolvendo em pt-BR, o campo
+ * ainda exibia 08/24/2026. O idioma da interface do navegador manda, e
+ * ele não é nosso — muita gente no Brasil usa o Chrome em inglês.
+ *
+ * Para dia maior que 12 não há dúvida. Para 08/05 há: oito de maio ou
+ * cinco de agosto? Num vencimento, essa dúvida é três meses de
+ * diferença no fluxo de caixa.
+ *
+ * Então o sistema escreve o que entendeu, embaixo do campo. Não conserta
+ * o formato do navegador — tira a ambiguidade, que é o que importa.
+ */
+const POR_EXTENSO = new Intl.DateTimeFormat('pt-BR', {
+  weekday: 'long',
+  day: '2-digit',
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+function dataPorExtenso(iso: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const d = new Date(`${iso}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return capitalizar(POR_EXTENSO.format(d));
+}
+
 /** `date` vindo do servidor é "2026-08-18": formatar sem passar por Date
     evita o deslocamento de fuso que transforma dia 1 em dia 31. */
 function diaMes(iso: string): string {
@@ -774,6 +804,15 @@ function NovoLancamento({
   });
   const [categoria, setCategoria] = useState('');
   const [quem, setQuem] = useState('');
+  /* QUEM PAGA, quando não é aluno.
+     Uma conta a receber SEM devedor é buraco de contabilidade, e o banco
+     recusa: `entry_counterparty` exige aluno ou nome de quem paga. A
+     tela oferecia "Sem aluno vinculado" — exatamente o que a regra
+     proíbe — e o lançamento voltava com "os dados enviados não atendem
+     às regras do sistema", sem dizer qual dado nem qual regra.
+     Este campo é a saída legítima: produto vendido no balcão para quem
+     ainda não é aluno tem pagador, só não tem matrícula. */
+  const [pagador, setPagador] = useState('');
   const [alunos, setAlunos] = useState<api.Aluno[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -789,6 +828,16 @@ function NovoLancamento({
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setErro(null);
+
+    /* A CONFERÊNCIA ACONTECE AQUI, e não depois da viagem ao servidor.
+       O banco recusaria de qualquer forma — mas recusaria com o texto
+       genérico do CHECK, que não diz o que fazer. Dito antes de enviar,
+       com o nome do campo, vira instrução em vez de parede. */
+    if (receber && quem === '' && pagador.trim() === '') {
+      setErro('Diga de quem é esta cobrança: escolha o aluno ou escreva quem vai pagar.');
+      return;
+    }
+
     setEnviando(true);
     try {
       await api.criarLancamento({
@@ -798,6 +847,9 @@ function NovoLancamento({
         vencimento,
         ...(categoria !== '' ? { categoria } : {}),
         ...(receber && quem !== '' ? { studentId: quem } : {}),
+        ...(receber && quem === '' && pagador.trim() !== ''
+          ? { fornecedor: pagador.trim() }
+          : {}),
         ...(!receber && quem !== '' ? { fornecedor: quem } : {}),
       });
       aoCriar();
@@ -851,13 +903,20 @@ function NovoLancamento({
             onChange={(e) => setVencimento(e.target.value)}
             required
           />
+          {/* O que o sistema ENTENDEU, por extenso — ver dataPorExtenso. */}
+          <span className="campo-dica">{dataPorExtenso(vencimento) ?? 'Escolha a data do vencimento.'}</span>
         </label>
 
         <label className="campo campo-meia">
           <span className="campo-rotulo">{receber ? 'Aluno' : 'Fornecedor'}</span>
           {receber ? (
             <select value={quem} onChange={(e) => setQuem(e.target.value)}>
-              <option value="">Sem aluno vinculado</option>
+              {/* "Não é aluno" e não "sem aluno vinculado": toda conta a
+                  receber tem devedor. O que pode faltar é a MATRÍCULA
+                  dele, não o nome. */}
+              <option value="">
+                {alunos.length === 0 ? 'Nenhum aluno cadastrado ainda' : 'Não é aluno — vou escrever o nome'}
+              </option>
               {alunos.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.nome}
@@ -868,6 +927,20 @@ function NovoLancamento({
             <input value={quem} onChange={(e) => setQuem(e.target.value)} placeholder="Imobiliária" />
           )}
         </label>
+
+        {/* Só aparece quando faz falta — e no primeiro dia da academia,
+            sem nenhum aluno cadastrado, é o único caminho possível. */}
+        {receber && quem === '' && (
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Quem paga</span>
+            <input
+              value={pagador}
+              onChange={(e) => setPagador(e.target.value)}
+              placeholder="Nome de quem vai pagar"
+              maxLength={160}
+            />
+          </label>
+        )}
         <label className="campo campo-meia">
           <span className="campo-rotulo">Categoria</span>
           <input
