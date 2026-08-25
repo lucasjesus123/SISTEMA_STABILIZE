@@ -178,8 +178,13 @@ export function registrarAgendador(app: FastifyInstance): void {
   void tique();
   void giroDaFila();
 
+  /* A LINHA PRECISA LISTAR O QUE O AGENDADOR REALMENTE FAZ. É por ela
+     que se confere, depois de um deploy, se o aluguel vai nascer
+     sozinho no dia 20 — e uma lista desatualizada faz procurar o
+     problema no lugar errado. As contas fixas entraram e a linha não
+     tinha acompanhado. */
   app.log.info(
     { hora: HORA_DO_ENVIO, giroDaFilaMs: GIRO_DA_FILA_MS },
-    'agendador ativo (mensalidades, vencimentos, aniversários e fila de WhatsApp)',
+    'agendador ativo (mensalidades, contas fixas, vencimentos, aniversários e fila de WhatsApp)',
   );
 }

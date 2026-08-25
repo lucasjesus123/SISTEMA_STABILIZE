@@ -32,6 +32,8 @@ const ids = {
   admin: '',
   emailAdmin: '',
   prof: '',
+  emailProf: '',
+  prof2: '',
   aluno: '',
   entry: '',
 };
@@ -54,6 +56,10 @@ async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
 
 let token = '';
 const auth = () => ({ authorization: `Bearer ${token}` });
+
+/** O token do profissional — quem tem `commission:read` de escopo próprio. */
+let tokenProf = '';
+const authProf = () => ({ authorization: `Bearer ${tokenProf}` });
 
 /** O mês de referência: sempre três meses atrás, para o teste não
     depender de que dia do mês ele roda. */
@@ -108,7 +114,11 @@ suite('contas fixas e fechamento do mês', () => {
         return r.rows[0]!.id;
       };
       ids.admin = await mk(ids.emailAdmin, 'Admin', 'ADMIN');
-      ids.prof = await mk(`fix-prof-${sufixo}@t.test`, 'Prof Fixas', 'PROFESSIONAL');
+      ids.emailProf = `fix-prof-${sufixo}@t.test`;
+      ids.prof = await mk(ids.emailProf, 'Prof Fixas', 'PROFESSIONAL');
+      /* O COLEGA. Existe só para ser o alvo: é o fechamento dele que o
+         primeiro profissional vai tentar ler. */
+      ids.prof2 = await mk(`fix-prof2-${sufixo}@t.test`, 'Prof Colega', 'PROFESSIONAL');
 
       const a = await c.query<{ id: string }>(
         `INSERT INTO students (tenant_id,full_name) VALUES ($1,'Aluno Fixas') RETURNING id`,
@@ -148,6 +158,13 @@ suite('contas fixas e fechamento do mês', () => {
       payload: { email: ids.emailAdmin, password: SENHA },
     });
     token = (login.json() as { accessToken: string }).accessToken;
+
+    const loginProf = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: ids.emailProf, password: SENHA },
+    });
+    tokenProf = (loginProf.json() as { accessToken: string }).accessToken;
   }, 60_000);
 
   afterAll(async () => {
@@ -738,5 +755,86 @@ suite('contas fixas e fechamento do mês', () => {
     });
     const ids = (lista.json() as { data: { id: string }[] }).data.map((l) => l.id);
     expect(ids).not.toContain(lancamento);
+  });
+
+  /* ================================================================
+   * O QUE O PROFISSIONAL NÃO ALCANÇA
+   *
+   * `commission:read` do PROFESSIONAL tem escopo OWN_PROFESSIONAL, e o
+   * `authorize()` sozinho NÃO enxerga escopo — ele só verifica que a
+   * permissão existe. Quem prende ao próprio profissional é a checagem
+   * dentro de cada rota. Isso significa que uma rota nova de comissão
+   * nasce ABERTA se alguém esquecer a checagem, e o sintoma seria o
+   * pior possível: um professor lendo quanto o colega ganha, sem erro
+   * nenhum na tela.
+   *
+   * As rotas de fechamento são justamente as novas. Este bloco existe
+   * para que a próxima também nasça fechada.
+   * ============================================================== */
+
+  const mesRef = iso(mesesAtras(3));
+
+  it('o profissional lê o próprio fechamento', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/finance/comissoes/${ids.prof}/fechamento?mes=${mesRef}`,
+      headers: authProf(),
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('o profissional NÃO lê o fechamento do colega', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/finance/comissoes/${ids.prof2}/fechamento?mes=${mesRef}`,
+      headers: authProf(),
+    });
+    /* 404 e não 403: dizer "proibido" confirmaria que o colega existe e
+       que houve movimento. Ver errors.ts. */
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('o profissional NÃO lê a comissão do colega', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/finance/comissoes/${ids.prof2}?mes=${mesRef}`,
+      headers: authProf(),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('o profissional NÃO baixa o PDF de fechamento do colega', async () => {
+    const mes = mesRef.slice(0, 7);
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/relatorios/comissao?profissionalId=${ids.prof2}&mes=${mes}`,
+      headers: authProf(),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['content-type']).not.toContain('application/pdf');
+  });
+
+  it('o profissional NÃO fecha o mês de ninguém — nem o próprio', async () => {
+    /* Fechar é `commission:settle`, que o profissional não tem: quem
+       aprova o próprio pagamento não é conferência, é assinatura em
+       branco. */
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/finance/comissoes/${ids.prof}/fechar`,
+      headers: authProf(),
+      payload: { mes: mesRef },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('o profissional NÃO enxerga o caixa da empresa', async () => {
+    for (const url of [
+      '/api/finance/lancamentos?direcao=PAYABLE',
+      '/api/finance/contas-fixas',
+      `/api/finance/previsao?mes=${mesRef}`,
+    ]) {
+      const res = await app.inject({ method: 'GET', url, headers: authProf() });
+      expect(res.statusCode, `${url} devia ser negado`).toBe(403);
+    }
   });
 });
