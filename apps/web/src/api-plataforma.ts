@@ -145,8 +145,24 @@ export async function sair(): Promise<void> {
   );
 }
 
-export const trocarSenha = (atual: string, nova: string) =>
-  api<{ ok: boolean }>('/senha', { method: 'POST', body: JSON.stringify({ atual, nova }) });
+/**
+ * Troca a senha e JÁ FICA DENTRO.
+ *
+ * A troca revoga todas as sessões do operador, esta inclusive, e por isso
+ * o servidor devolve uma sessão nova na mesma resposta. Guardar o token
+ * daqui é o que evita a tela de login logo depois de escolher a senha —
+ * uma parede que não protegia nada, porque quem chegou até aqui digitou a
+ * senha antiga e a nova na mesma tela.
+ */
+export async function trocarSenha(atual: string, nova: string): Promise<Operador> {
+  const d = await api<{ ok: boolean; accessToken: string; admin: Operador }>('/senha', {
+    method: 'POST',
+    body: JSON.stringify({ atual, nova }),
+  });
+  token = d.accessToken;
+  quem = d.admin;
+  return d.admin;
+}
 
 /* --------------------------------------------------------------------
  * Métricas e diagnóstico

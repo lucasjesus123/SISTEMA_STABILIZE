@@ -95,7 +95,29 @@ export async function entrarComoOperador(
   }
 
   await repo.registrarTentativa(admin.id, true);
+  await repo.registrar(admin.id, 'plataforma.login', null, null, meta.ip);
 
+  return abrirSessaoDeOperador(
+    { id: admin.id, nome: admin.nome, precisaTrocarSenha: admin.precisaTrocarSenha },
+    meta,
+  );
+}
+
+/**
+ * Emite uma sessão para um operador JÁ AUTENTICADO.
+ *
+ * Existe separada do login por causa da troca de senha. Trocar a senha
+ * derruba todas as sessões — inclusive a de quem está trocando, que é o
+ * comportamento certo: se a senha antiga vazou, nenhuma sessão aberta com
+ * ela pode sobreviver. Só que quem acabou de digitar a senha antiga E a
+ * nova provou mais do que prova um login comum, e mandá-lo de volta para
+ * a tela de entrada não acrescenta segurança nenhuma — acrescenta uma
+ * tela. As outras sessões continuam derrubadas; esta nasce depois delas.
+ */
+export async function abrirSessaoDeOperador(
+  admin: { id: string; nome: string; precisaTrocarSenha: boolean },
+  meta: { ip: string; userAgent?: string | undefined },
+): Promise<SessaoDeOperador> {
   const acesso = await assinarTokenPlataforma(admin.id);
   /* O MESMO `createRefreshToken` da rota antiga: o formato do refresh é
      contrato com a tabela de sessões, e reimplementá-lo aqui criaria
@@ -109,13 +131,12 @@ export async function entrarComoOperador(
     meta.userAgent ?? null,
     meta.ip,
   );
-  await repo.registrar(admin.id, 'plataforma.login', null, null, meta.ip);
 
   return {
     accessToken: acesso.token,
     expiresIn: acesso.expiresIn,
     refreshToken: refresh.token,
-    admin: { id: admin.id, nome: admin.nome, precisaTrocarSenha: admin.precisaTrocarSenha },
+    admin,
   };
 }
 

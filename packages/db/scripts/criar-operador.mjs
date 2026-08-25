@@ -92,8 +92,11 @@ try {
   console.log('  ─────────────────────────────────────────────');
   console.log('');
   console.log('  Esta senha aparece UMA VEZ e é provisória: o sistema');
-  console.log('  exige a troca no primeiro acesso. Entre em');
-  console.log('  https://SEU-DOMINIO/plataforma');
+  console.log('  exige a troca no primeiro acesso.');
+  console.log('');
+  console.log('  ENTRE PELA TELA NORMAL DO SISTEMA, a mesma das academias.');
+  console.log('  Ela reconhece o operador pelo e-mail e abre o painel da');
+  console.log('  plataforma sozinha — não há endereço separado para decorar.');
   console.log('');
 } finally {
   await cliente.end();

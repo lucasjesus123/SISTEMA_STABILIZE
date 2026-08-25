@@ -551,8 +551,27 @@ suite('Painel da plataforma', () => {
     });
     expect(res.statusCode).toBe(200);
 
-    /* Trocar a senha tem de encerrar o que estava aberto — é justamente
-       o cenário em que se troca uma senha. */
+    /* A TROCA JÁ DEIXA O OPERADOR DENTRO. Ele digitou a senha antiga e a
+       nova na mesma tela; mandá-lo para o login em seguida era uma parede
+       que não guardava nada. A resposta traz a sessão nova, e ela é uma
+       sessão de verdade: abre rota autenticada e a exigência de troca já
+       consta cumprida. */
+    const depois = res.json() as {
+      accessToken: string;
+      admin: { precisaTrocarSenha: boolean };
+    };
+    expect(depois.admin.precisaTrocarSenha).toBe(false);
+
+    const dentro = await app.inject({
+      method: 'GET',
+      url: '/api/plataforma/metricas',
+      headers: como(depois.accessToken),
+    });
+    expect(dentro.statusCode).toBe(200);
+
+    /* E o que estava aberto ANTES continua encerrado — é justamente o
+       cenário em que se troca uma senha. A sessão nova nasceu depois da
+       revogação; a velha não ressuscita com ela. */
     const refresh = await app.inject({
       method: 'POST',
       url: '/api/plataforma/refresh',

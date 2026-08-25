@@ -15,6 +15,7 @@ import { cifrar } from '../whatsapp/segredo.js';
 import * as repo from './plataforma.repository.js';
 import {
   COOKIE_PLATAFORMA,
+  abrirSessaoDeOperador,
   entrarComoOperador,
   opcoesDoCookiePlataforma,
   tempoDeRespostaDeContaInexistente,
@@ -205,7 +206,7 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * Trocar a própria senha
    * ---------------------------------------------------------------- */
-  app.post('/senha', async (request) => {
+  app.post('/senha', async (request, reply) => {
     const { id } = await operador(request);
     const corpo = z
       .object({
@@ -222,7 +223,24 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
 
     await repo.trocarSenhaDoAdmin(id, await hashPassword(corpo.nova));
     await repo.registrar(id, 'plataforma.senha_trocada', null, null, request.ip);
-    return { ok: true, message: 'Senha alterada. Entre novamente.' };
+
+    /* A troca derruba TODAS as sessões — inclusive esta. Em vez de
+       devolver o operador para a tela de entrada, abrimos uma sessão nova
+       aqui: ele acabou de provar que sabe a senha antiga e escolheu a
+       nova, o que é mais do que um login pede. As sessões que existiam
+       antes seguem revogadas; esta nasce depois da troca. */
+    const sessao = await abrirSessaoDeOperador(
+      { id, nome: admin.nome, precisaTrocarSenha: false },
+      { ip: request.ip, userAgent: request.headers['user-agent'] },
+    );
+    void reply.setCookie(COOKIE_PLATAFORMA, sessao.refreshToken, opcoesDoCookie());
+    return {
+      ok: true,
+      message: 'Senha alterada.',
+      accessToken: sessao.accessToken,
+      expiresIn: sessao.expiresIn,
+      admin: sessao.admin,
+    };
   });
 
   /* ------------------------------------------------------------------

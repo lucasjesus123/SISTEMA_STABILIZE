@@ -48,7 +48,7 @@ export default function Plataforma(): ReactNode {
 
   if (operador === null) return <Entrada aoEntrar={setOperador} />;
   if (operador.precisaTrocarSenha) {
-    return <TrocaObrigatoria aoTrocar={() => setOperador({ ...operador, precisaTrocarSenha: false })} />;
+    return <TrocaObrigatoria aoTrocar={setOperador} />;
   }
   return <Painel operador={operador} aoSair={() => setOperador(null)} />;
 }
@@ -122,7 +122,7 @@ function Entrada({ aoEntrar }: { aoEntrar: (o: plt.Operador) => void }): ReactNo
   );
 }
 
-function TrocaObrigatoria({ aoTrocar }: { aoTrocar: () => void }): ReactNode {
+function TrocaObrigatoria({ aoTrocar }: { aoTrocar: (o: plt.Operador) => void }): ReactNode {
   const [atual, setAtual] = useState('');
   const [nova, setNova] = useState('');
   const [repetida, setRepetida] = useState('');
@@ -138,12 +138,12 @@ function TrocaObrigatoria({ aoTrocar }: { aoTrocar: () => void }): ReactNode {
     }
     setEnviando(true);
     try {
-      await plt.trocarSenha(atual, nova);
-      /* Trocar a senha derruba TODAS as sessões, inclusive esta — é o
-         comportamento certo, e por isso o login vem em seguida. */
-      await plt.sair();
-      window.location.reload();
-      aoTrocar();
+      /* A troca derruba todas as sessões, esta inclusive — e o servidor
+         devolve uma nova na mesma resposta. Antes daqui saía um logout e
+         um reload, e o operador caía numa tela de login logo depois de
+         escolher a senha, sem ter para onde ir a não ser digitar tudo de
+         novo. */
+      aoTrocar(await plt.trocarSenha(atual, nova));
     } catch (x) {
       setErro(x instanceof plt.ErroPlataforma ? x.message : 'Não foi possível trocar a senha.');
     } finally {
