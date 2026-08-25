@@ -14,6 +14,11 @@ import {
   type Cabecalho,
 } from './documento.js';
 import { montarTimbre } from './timbre.js';
+import { buscarFechamento } from '../finance/fechamento.js';
+import { baseDeComissao } from '../finance/finance.repository.js';
+import { calcularComissao } from '../finance/commission.js';
+import { requireScope } from '../../http/plugins/authenticate.js';
+import { notFound } from '../../http/errors.js';
 
 /**
  * Os relatórios de GESTÃO — os que olham a academia inteira, e não um
@@ -449,6 +454,214 @@ export async function gestaoRoutes(app: FastifyInstance): Promise<void> {
       });
 
       return responderPdf(reply, pdf, nomeDeArquivo('inadimplencia'));
+    },
+  );
+
+  /* ==================================================================
+   * FECHAMENTO DO PROFISSIONAL — o papel que vai junto com o pagamento
+   *
+   * É O RELATÓRIO MAIS PEDIDO E O QUE NÃO EXISTIA. A academia fecha o
+   * mês, paga o professor e precisa entregar a ele o que sustenta o
+   * número: quanto entrou pelos alunos dele, qual o percentual, quanto
+   * fica para a academia e quanto ele recebe. Sem esse papel, a
+   * conversa do dia 5 é a palavra de um contra a do outro.
+   *
+   * SAI FECHADO OU PRÉVIA, e o documento DIZ QUAL DOS DOIS É. Se o mês
+   * já foi fechado, os números vêm da tabela — congelados no dia em que
+   * se fechou. Se não foi, vêm do cálculo de agora, e o relatório traz
+   * "prévia" no subtítulo: entregar uma prévia com cara de documento
+   * final é como o valor muda entre o papel e o pagamento.
+   * ================================================================ */
+  app.get(
+    '/comissao',
+    { preHandler: [app.authorize('commission:read')] },
+    async (request, reply) => {
+      const { profissionalId, mes } = z
+        .object({
+          profissionalId: z.string().uuid(),
+          mes: z.string().regex(/^\d{4}-\d{2}$/, 'Mês no formato AAAA-MM'),
+        })
+        .parse(request.query);
+
+      const scope = requireScope(request);
+      if (scope.kind === 'OWN_PROFESSIONAL' && scope.professionalId !== profissionalId) {
+        throw notFound('Fechamento de comissão');
+      }
+
+      const referencia = new Date(`${mes}-01T12:00:00Z`);
+
+      const pdf = await inTenant(request, async (client, principal) => {
+        const gravado = await buscarFechamento(client, profissionalId, referencia);
+
+        const { rows: quem } = await client.query<{ nome: string; email: string }>(
+          'SELECT full_name AS nome, email::text AS email FROM users WHERE id = $1',
+          [profissionalId],
+        );
+        const pessoa = quem[0];
+        if (pessoa === undefined) throw notFound('Profissional');
+
+        /* Vindo da tabela quando fechado, do cálculo quando não. As duas
+           formas produzem a mesma estrutura de linhas de propósito: o
+           documento é o mesmo, muda só a origem e o carimbo. */
+        const itens =
+          gravado !== null
+            ? gravado.itens
+            : calcularComissao(
+                await baseDeComissao(client, { kind: 'ALL' }, profissionalId, referencia),
+              ).itens.map((i) => ({
+                descricao: i.descricao,
+                baseCentavos: i.baseCentavos,
+                aliquotaBp: i.aliquotaBp,
+                valorCentavos: i.valorCentavos,
+              }));
+
+        const base = gravado?.baseCentavos ?? itens.reduce((a, i) => a + i.baseCentavos, 0);
+        const total = gravado?.totalCentavos ?? itens.reduce((a, i) => a + i.valorCentavos, 0);
+        const aliquota =
+          gravado?.aliquotaMediaBp ?? (base === 0 ? 0 : Math.round((total / base) * 10_000));
+
+        /* QUANTOS ATENDIMENTOS o profissional fez no mês. Não entra na
+           conta da comissão — que sai do recebido — e entra no papel,
+           porque é a pergunta seguinte de quem lê: "o valor caiu, eu
+           trabalhei menos?". Ter os dois números lado a lado responde
+           sozinho. */
+        const { rows: atend } = await client.query<{
+          realizados: string;
+          faltas: string;
+          minutos: string;
+          alunos: string;
+        }>(
+          `SELECT count(*) FILTER (WHERE a.status = 'ATTENDED')::text AS realizados,
+                  count(*) FILTER (WHERE a.status = 'NO_SHOW')::text  AS faltas,
+                  coalesce(sum(
+                    EXTRACT(EPOCH FROM (upper(a.period) - lower(a.period))) / 60
+                  ) FILTER (WHERE a.status = 'ATTENDED'), 0)::bigint::text AS minutos,
+                  count(DISTINCT a.student_id)::text AS alunos
+             FROM appointments a
+             CROSS JOIN tenants t
+            WHERE t.id = current_tenant_id()
+              AND a.professional_id = $1
+              AND lower(a.period) >= (date_trunc('month', $2::date))::timestamp AT TIME ZONE t.timezone
+              AND lower(a.period) <  (date_trunc('month', $2::date) + INTERVAL '1 month')::timestamp AT TIME ZONE t.timezone`,
+          [profissionalId, referencia],
+        );
+        const a = atend[0] ?? { realizados: '0', faltas: '0', minutos: '0', alunos: '0' };
+
+        const { academia, timbre } = await montarTimbre(client, principal.tenantId, request.log);
+        const [ano, mesNum] = mes.split('-');
+        const nomeDoMes = referencia.toLocaleDateString('pt-BR', {
+          month: 'long',
+          year: 'numeric',
+          timeZone: 'UTC',
+        });
+
+        const info: Cabecalho = {
+          titulo: 'Fechamento do profissional',
+          subtitulo: `${pessoa.nome} · ${nomeDoMes}${gravado === null ? ' · PRÉVIA' : ''}`,
+          academia,
+          rodape: `Fechamento ${mesNum}/${ano} — ${pessoa.nome}`,
+          timbre,
+        };
+
+        const doc = abrirDocumento(info);
+        const pronto = paraBuffer(doc);
+
+        /* O NÚMERO QUE IMPORTA PRIMEIRO. Quem recebe este papel tem uma
+           pergunta só, e ela não é "qual foi a base". */
+        indicadores(doc, [
+          { rotulo: 'A receber', valor: formatCents(total) },
+          { rotulo: 'Base (recebido)', valor: formatCents(base) },
+          {
+            rotulo: 'Percentual',
+            valor: `${(aliquota / 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`,
+          },
+          { rotulo: 'Fica na academia', valor: formatCents(base - total) },
+        ]);
+
+        secao(doc, 'O mês em números');
+        indicadores(doc, [
+          { rotulo: 'Atendimentos', valor: a.realizados },
+          { rotulo: 'Faltas', valor: a.faltas },
+          { rotulo: 'Horas atendidas', valor: horas(Number(a.minutos)) },
+          { rotulo: 'Alunos distintos', valor: a.alunos },
+        ]);
+
+        if (itens.length === 0) {
+          paragrafo(
+            doc,
+            'Nenhum recebimento neste mês. A comissão sai do que foi efetivamente PAGO pelo aluno — não do que foi cobrado —, então uma mensalidade em aberto ainda não gera repasse. Ela entra no fechamento do mês em que for paga.',
+          );
+        } else {
+          secao(doc, 'De onde veio cada centavo');
+          tabela(
+            doc,
+            [
+              { titulo: 'Recebimento', largura: 250 },
+              { titulo: 'Base', largura: 90, direita: true },
+              { titulo: '%', largura: 50, direita: true },
+              { titulo: 'Comissão', largura: 92, direita: true },
+            ],
+            itens.map((i) => [
+              i.descricao,
+              formatCents(i.baseCentavos),
+              `${(i.aliquotaBp / 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`,
+              formatCents(i.valorCentavos),
+            ]),
+          );
+
+          /* A LINHA DE TOTAL DEPOIS DA TABELA, e não como última linha
+             dela: uma linha de soma com a mesma forma das outras é lida
+             como mais um item, e some no meio de trinta. */
+          secao(doc, 'Total a repassar');
+          indicadores(doc, [
+            { rotulo: 'Recebimentos', valor: String(itens.length) },
+            { rotulo: 'Base somada', valor: formatCents(base) },
+            { rotulo: 'A pagar ao profissional', valor: formatCents(total) },
+          ]);
+        }
+
+        if (gravado !== null) {
+          paragrafo(
+            doc,
+            `Mês FECHADO em ${new Date(gravado.fechadoEm).toLocaleDateString('pt-BR')}. ` +
+              `Os valores acima estão congelados nesta data e não mudam com lançamentos posteriores. ` +
+              (gravado.lancamentoVencimento === null
+                ? ''
+                : `O repasse foi lançado em contas a pagar com vencimento em ${new Date(`${gravado.lancamentoVencimento}T12:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}. `) +
+              (gravado.lancamentoPagoCentavos >= gravado.totalCentavos
+                ? 'Já quitado.'
+                : gravado.lancamentoPagoCentavos > 0
+                  ? `Pago até aqui: ${formatCents(gravado.lancamentoPagoCentavos)}.`
+                  : 'Ainda não pago.'),
+          );
+        } else {
+          paragrafo(
+            doc,
+            'PRÉVIA — este mês ainda não foi fechado. Os valores são os de agora e podem mudar até o fechamento: uma baixa lançada hoje com data do mês passado entra nesta conta. Ao fechar o mês, os números são congelados e o repasse vira uma conta a pagar.',
+          );
+        }
+
+        paragrafo(
+          doc,
+          'A comissão é calculada sobre o valor RECEBIDO de cada aluno, não sobre o cobrado. Um aluno que paga com atraso gera comissão no mês do pagamento.',
+        );
+
+        fecharDocumento(doc, info);
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'report.generate',
+          resourceType: 'report',
+          resourceId: 'comissao',
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: { mes, profissionalId, fechado: gravado !== null, itens: itens.length },
+        });
+
+        return pronto;
+      });
+
+      return responderPdf(reply, pdf, nomeDeArquivo(`fechamento-${mes}`));
     },
   );
 }

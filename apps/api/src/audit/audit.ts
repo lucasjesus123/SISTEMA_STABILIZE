@@ -62,6 +62,7 @@ export type AuditAction =
   | 'finance.recurrence.delete'
   | 'commission.read'
   | 'commission.settle'
+  | 'commission.reopen'
   // perfil próprio — quem mudou o próprio contato, e quando. Entra na
   // auditoria porque telefone e WhatsApp são o canal por onde a academia
   // fala com a pessoa: uma troca silenciosa é como se desvia a conversa.

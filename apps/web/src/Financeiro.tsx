@@ -976,11 +976,14 @@ function NovoLancamento({
 function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): ReactNode {
   const [equipe, setEquipe] = useState<api.Profissional[]>([]);
   const [quem, setQuem] = useState('');
-  const [fechamento, setFechamento] = useState<Awaited<
-    ReturnType<typeof api.buscarComissao>
-  > | null>(null);
+  const [previa, setPrevia] = useState<Awaited<ReturnType<typeof api.buscarComissao>> | null>(null);
+  const [fechado, setFechado] = useState<api.FechamentoDeComissao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
+  const [baixando, setBaixando] = useState(false);
+  const [versao, setVersao] = useState(0);
 
   /* SÓ QUEM LÊ A EQUIPE ESCOLHE ALGUÉM DA EQUIPE.
      A intenção abaixo sempre foi "o profissional cai direto no próprio
@@ -989,6 +992,10 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
      medido), então nunca vazou centavo nenhum; o que sobrava era um beco
      sem saída com o nome do colega na porta. */
   const soEuMesmo = !principal.permissions.includes('user:read');
+  /* FECHAR É DE QUEM PAGA, não de quem recebe. `commission:settle` é
+     do dono e do administrador; o profissional lê o próprio fechamento
+     e baixa o PDF, e não fecha o próprio mês. */
+  const podeFechar = principal.permissions.includes('commission:settle');
 
   useEffect(() => {
     api
@@ -1012,23 +1019,71 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
     if (quem === '') return;
     let vivo = true;
     setCarregando(true);
-    api
-      .buscarComissao(quem, mes)
-      .then((r) => {
+    /* AS DUAS COISAS DE UMA VEZ: o cálculo de agora e o fechamento
+       gravado, se houver. Qual dos dois a tela mostra é a decisão
+       central desta aba, e ela não pode ser tomada com metade da
+       informação na mão. */
+    void Promise.all([
+      api.buscarComissao(quem, mes),
+      api.buscarFechamentoDeComissao(quem, mes).then((r) => r.data),
+    ])
+      .then(([p, f]) => {
         if (!vivo) return;
-        setFechamento(r);
+        setPrevia(p);
+        setFechado(f);
         setErro(null);
       })
       .catch((e: unknown) => {
         if (!vivo) return;
-        setFechamento(null);
+        setPrevia(null);
+        setFechado(null);
         setErro(e instanceof api.ApiError ? e.message : 'Falha ao calcular.');
       })
       .finally(() => vivo && setCarregando(false));
     return () => {
       vivo = false;
     };
-  }, [quem, mes]);
+  }, [quem, mes, versao]);
+
+  /* O AVISO SÓ SOME QUANDO A PERGUNTA MUDA — trocar de profissional ou
+     de mês. Limpá-lo dentro do efeito de carga apagava a confirmação de
+     "mês fechado" no mesmo instante em que ela aparecia: fechar dispara
+     a recarga, a recarga limpava o aviso, e a única prova de que o
+     clique funcionou piscava e sumia. */
+  useEffect(() => setAviso(null), [quem, mes]);
+
+  const agir = async (fn: () => Promise<unknown>, sucesso: string): Promise<void> => {
+    setErro(null);
+    setOcupado(true);
+    try {
+      await fn();
+      setAviso(sucesso);
+      setVersao((v) => v + 1);
+    } catch (e) {
+      setErro(e instanceof api.ApiError ? e.message : 'Não foi possível concluir.');
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  /* O QUE A TELA MOSTRA: o gravado quando existe, o calculado quando
+     não. São os mesmos campos, e o que muda é se eles ainda podem
+     mudar. */
+  const itens =
+    fechado !== null
+      ? fechado.itens.map((i) => ({
+          descricao: i.descricao,
+          baseFormatada: formatCents(i.baseCentavos),
+          valorFormatado: formatCents(i.valorCentavos),
+          aliquotaBp: i.aliquotaBp,
+        }))
+      : (previa?.data.itens ?? []).map((i) => ({ ...i, aliquotaBp: null as number | null }));
+  const total = fechado?.totalCentavos ?? previa?.data.totalCentavos ?? 0;
+  const base = fechado?.baseCentavos ?? previa?.data.baseTotalCentavos ?? 0;
+  const aliquota = fechado?.aliquotaMediaBp ?? previa?.data.aliquotaMediaBp ?? 0;
+
+  const nomeDoEscolhido = equipe.find((p) => p.id === quem)?.nome ?? 'este profissional';
+  const mesPorExtenso = capitalizar(MES_ANO.format(mes));
 
   return (
     <>
@@ -1055,69 +1110,201 @@ function Comissoes({ mes, principal }: { mes: Date; principal: Principal }): Rea
       )}
 
       {erro !== null && <Erro mensagem={erro} />}
+      {aviso !== null && (
+        <p className="fin-aviso" role="status">
+          {aviso}
+        </p>
+      )}
+
       {carregando ? (
         <Carregando rotulo="Calculando o fechamento" />
-      ) : fechamento === null ? null : fechamento.data.itens.length === 0 ? (
-        <Vazio
-          titulo="Nenhum recebimento neste mês."
-          descricao="A comissão sai do que foi efetivamente PAGO — não do que foi cobrado. Enquanto o aluno não paga, não há o que repassar."
-        />
-      ) : (
+      ) : previa === null && fechado === null ? null : (
         <>
-          {/* Os MESMOS indicadores da lista, e não um segundo conjunto
-              de cartões parecido: duas caixas de número quase iguais na
-              mesma tela é como uma delas envelhece diferente. */}
-          <div className="fin-kpis fin-kpis-largo">
-            <Kpi
-              rotulo="A repassar"
-              valor={fechamento.data.totalCentavos}
-              nota={`${fechamento.data.itens.length} recebimento${fechamento.data.itens.length === 1 ? '' : 's'}`}
-            />
-            <Kpi
-              rotulo="Base de cálculo"
-              valor={fechamento.data.baseTotalCentavos}
-              nota="o que entrou por este profissional"
-            />
-            <div className="fin-kpi">
-              <span className="fin-kpi-rotulo">Percentual médio</span>
-              <strong className="fin-kpi-valor">
-                {(fechamento.data.aliquotaMediaBp / 100).toLocaleString('pt-BR', {
-                  maximumFractionDigits: 2,
-                })}
-                %
-              </strong>
-              <span className="fin-kpi-nota">ponderado pelo valor</span>
+          {/* ==================================================
+              A FAIXA DE ESTADO — fechado ou aberto.
+
+              É a primeira coisa da tela porque muda o significado de
+              todos os números abaixo dela. O mesmo "R$ 1.240,00"
+              quer dizer "é isto que ele vai receber" quando o mês
+              está fechado, e "é isto se nada mais entrar" quando não
+              está. Sem dizer qual dos dois, a tela deixa a pessoa
+              escolher a leitura errada — e o erro só aparece no dia
+              do pagamento.
+              ================================================== */}
+          <div className={`fech-faixa ${fechado === null ? 'aberta' : 'fechada'}`}>
+            <div className="fech-estado">
+              <span className="pilula-grande">
+                {fechado === null ? 'Mês em aberto' : 'Mês fechado'}
+              </span>
+              <p>
+                {fechado === null ? (
+                  <>
+                    Os números são os de agora e ainda podem mudar: uma baixa lançada hoje com data
+                    de {mesPorExtenso.toLowerCase()} entra nesta conta.
+                  </>
+                ) : (
+                  <>
+                    Congelado em {new Date(fechado.fechadoEm).toLocaleDateString('pt-BR')}. O
+                    repasse virou uma conta a pagar
+                    {fechado.lancamentoVencimento === null
+                      ? ''
+                      : `, com vencimento em ${fechado.lancamentoVencimento.split('-').reverse().join('/')}`}
+                    {fechado.quitado
+                      ? ' — e já foi quitada.'
+                      : fechado.lancamentoPagoCentavos > 0
+                        ? ` — paga até aqui: ${fechado.pagoFormatado}.`
+                        : ' — ainda não paga.'}
+                  </>
+                )}
+              </p>
+            </div>
+
+            <div className="fech-acoes">
+              {/* O PDF SAI DOS DOIS JEITOS, e o documento diz qual dos
+                  dois é: quem só quer conferir antes de fechar precisa
+                  do papel também. */}
+              <button
+                type="button"
+                className="botao-secundario"
+                disabled={baixando || quem === ''}
+                onClick={() => {
+                  setBaixando(true);
+                  void api
+                    .baixarFechamentoDoProfissional(quem, mes)
+                    .catch((e: unknown) =>
+                      setErro(e instanceof api.ApiError ? e.message : 'Falha ao gerar o PDF.'),
+                    )
+                    .finally(() => setBaixando(false));
+                }}
+              >
+                {baixando ? 'Gerando…' : fechado === null ? 'Baixar prévia' : 'Baixar recibo'}
+              </button>
+
+              {podeFechar &&
+                (fechado === null ? (
+                  <button
+                    type="button"
+                    className="botao-acao"
+                    disabled={ocupado || total <= 0}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Fechar ${mesPorExtenso.toLowerCase()} de ${nomeDoEscolhido}?\n\n` +
+                            `Valor: ${formatCents(total)}\n\n` +
+                            'Os números ficam congelados e o repasse entra em "A pagar". Fechar não paga — a baixa é lá.',
+                        )
+                      ) {
+                        void agir(
+                          () => api.fecharMesDoProfissional(quem, mes),
+                          `Mês fechado. O repasse de ${formatCents(total)} está em "A pagar".`,
+                        );
+                      }
+                    }}
+                  >
+                    {ocupado ? 'Fechando…' : 'Fechar o mês'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="botao-texto"
+                    disabled={ocupado}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Reabrir ${mesPorExtenso.toLowerCase()} de ${nomeDoEscolhido}?\n\n` +
+                            'O fechamento é apagado e a conta a pagar do repasse é cancelada. Só funciona enquanto ninguém deu baixa nela.',
+                        )
+                      ) {
+                        void agir(
+                          () => api.reabrirMesDoProfissional(quem, mes),
+                          'Mês reaberto. O lançamento do repasse foi cancelado.',
+                        );
+                      }
+                    }}
+                  >
+                    Reabrir
+                  </button>
+                ))}
             </div>
           </div>
 
-          {/* A MEMÓRIA DE CÁLCULO, linha a linha. É o que transforma o
-              fechamento em algo conferível: sem ela, o profissional
-              recebe um número e tem de acreditar. */}
-          <h2 className="plt-titulo">De onde veio cada centavo</h2>
-          <div className="rolo">
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th scope="col">Recebimento</th>
-                  <th scope="col" className="fin-col-num">Base</th>
-                  <th scope="col" className="fin-col-num">Comissão</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fechamento.data.itens.map((i, n) => (
-                  <tr key={`${i.descricao}-${n}`}>
-                    <td>{i.descricao}</td>
-                    <td className="fin-col-num">
-                      <span className="dinheiro">{i.baseFormatada}</span>
-                    </td>
-                    <td className="fin-col-num">
-                      <span className="dinheiro">{i.valorFormatado}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {itens.length === 0 ? (
+            <Vazio
+              titulo="Nenhum recebimento neste mês."
+              descricao="A comissão sai do que foi efetivamente PAGO — não do que foi cobrado. Enquanto o aluno não paga, não há o que repassar."
+            />
+          ) : (
+            <>
+              {/* Os MESMOS indicadores da lista, e não um segundo conjunto
+                  de cartões parecido: duas caixas de número quase iguais na
+                  mesma tela é como uma delas envelhece diferente. */}
+              <div className="fin-kpis fin-kpis-largo">
+                <Kpi
+                  rotulo="A repassar"
+                  valor={total}
+                  nota={`${itens.length} recebimento${itens.length === 1 ? '' : 's'}`}
+                />
+                <Kpi
+                  rotulo="Base de cálculo"
+                  valor={base}
+                  nota="o que entrou por este profissional"
+                />
+                <div className="fin-kpi">
+                  <span className="fin-kpi-rotulo">Percentual médio</span>
+                  <strong className="fin-kpi-valor">
+                    {(aliquota / 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%
+                  </strong>
+                  <span className="fin-kpi-nota">ponderado pelo valor</span>
+                </div>
+                <Kpi
+                  rotulo="Fica na academia"
+                  valor={base - total}
+                  nota="a base menos o repasse"
+                />
+              </div>
+
+              {/* A MEMÓRIA DE CÁLCULO, linha a linha. É o que transforma o
+                  fechamento em algo conferível: sem ela, o profissional
+                  recebe um número e tem de acreditar. */}
+              <h2 className="plt-titulo">De onde veio cada centavo</h2>
+              <div className="rolo">
+                <table className="tabela">
+                  <thead>
+                    <tr>
+                      <th scope="col">Recebimento</th>
+                      <th scope="col" className="fin-col-num">
+                        Base
+                      </th>
+                      <th scope="col" className="fin-col-num">
+                        %
+                      </th>
+                      <th scope="col" className="fin-col-num">
+                        Comissão
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itens.map((i, n) => (
+                      <tr key={`${i.descricao}-${n}`}>
+                        <td>{i.descricao}</td>
+                        <td className="fin-col-num">
+                          <span className="dinheiro">{i.baseFormatada}</span>
+                        </td>
+                        <td className="fin-col-num tabular">
+                          {i.aliquotaBp === null
+                            ? '—'
+                            : `${(i.aliquotaBp / 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`}
+                        </td>
+                        <td className="fin-col-num">
+                          <span className="dinheiro">{i.valorFormatado}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
     </>

@@ -6369,3 +6369,68 @@
   cursor: default;
   opacity: 0.85;
 }
+
+/* ---------------------------------------------------------------------
+   FECHAMENTO DO PROFISSIONAL — a faixa que diz se o mês fechou
+
+   É A PRIMEIRA COISA DA ABA porque muda o significado de todos os
+   números abaixo dela. O mesmo "R$ 1.240,00" quer dizer "é isto que ele
+   vai receber" com o mês fechado, e "é isto se nada mais entrar" com o
+   mês aberto. Sem dizer qual dos dois, a tela deixa a pessoa escolher a
+   leitura errada — e o erro só aparece no dia do pagamento.
+   ------------------------------------------------------------------- */
+.fech-faixa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  margin-top: var(--e-4);
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+/* ABERTO NÃO É ERRO. O tom de atenção seria mentira: o mês está aberto
+   porque ainda é o mês — o que a faixa precisa é distinguir os dois
+   estados, não alarmar sobre um deles. */
+.fech-faixa.fechada {
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 6%, transparent);
+}
+
+.fech-estado {
+  flex: 1 1 22rem;
+  min-width: 0;
+}
+.fech-estado p {
+  margin: var(--e-2) 0 0;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--texto-apoio);
+  max-width: 46ch;
+}
+
+.pilula-grande {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--fio-forte);
+  background: var(--superficie);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto);
+}
+.fech-faixa.fechada .pilula-grande {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  color: var(--ok);
+}
+
+.fech-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-3);
+}

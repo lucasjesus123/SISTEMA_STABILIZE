@@ -5,6 +5,13 @@ import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { writeAudit } from '../../audit/audit.js';
 import { notFound, unprocessable } from '../../http/errors.js';
 import { calcularComissao } from './commission.js';
+import {
+  FechamentoError,
+  buscarFechamento,
+  fechamentosDoMes,
+  fecharMes,
+  reabrirMes,
+} from './fechamento.js';
 import { gerarContasFixasDaEmpresa } from './contas-fixas.js';
 import {
   alterarContaFixa,
@@ -769,6 +776,184 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
               valorFormatado: formatCents(i.valorCentavos),
             })),
           },
+        };
+      });
+    },
+  );
+
+  /* ------------------------------------------------------------------
+   * FECHAR O MÊS
+   *
+   * O cálculo acima é VOLÁTIL: ele lê `finance_payments` agora, e uma
+   * baixa retroativa muda o número de um mês que o profissional já
+   * recebeu. Fechar transforma o cálculo em documento — grava o total,
+   * a alíquota e a memória linha a linha — e cria a DESPESA que a
+   * academia vai pagar.
+   *
+   * FECHAR NÃO PAGA. A baixa acontece em "A pagar", como qualquer
+   * despesa. Um botão que fizesse as duas coisas afirmaria que o
+   * dinheiro saiu no dia em que alguém conferiu a conta.
+   * ---------------------------------------------------------------- */
+
+  app.get(
+    '/comissoes/:professionalId/fechamento',
+    { preHandler: [app.authorize('commission:read')] },
+    async (request) => {
+      const { professionalId } = z.object({ professionalId: idSchema }).parse(request.params);
+      const { mes } = z.object({ mes: z.coerce.date() }).parse(request.query);
+      const scope = requireScope(request);
+
+      if (scope.kind === 'OWN_PROFESSIONAL' && scope.professionalId !== professionalId) {
+        throw notFound('Fechamento de comissão');
+      }
+
+      return inTenant(request, async (client) => {
+        const f = await buscarFechamento(client, professionalId, mes);
+        return {
+          data:
+            f === null
+              ? null
+              : {
+                  ...f,
+                  baseFormatada: formatCents(f.baseCentavos),
+                  totalFormatado: formatCents(f.totalCentavos),
+                  pagoFormatado: formatCents(f.lancamentoPagoCentavos),
+                  quitado: f.lancamentoPagoCentavos >= f.totalCentavos,
+                },
+        };
+      });
+    },
+  );
+
+  app.post(
+    '/comissoes/:professionalId/fechar',
+    { preHandler: [app.authorize('commission:settle')] },
+    async (request, reply) => {
+      const { professionalId } = z.object({ professionalId: idSchema }).parse(request.params);
+      const body = z
+        .object({
+          mes: z.coerce.date(),
+          /* O VENCIMENTO É ESCOLHÍVEL e tem padrão. Cada academia paga
+             num dia — dia 5, dia 10, no mesmo dia do fechamento — e
+             fixar um deles no código faria metade delas corrigir o
+             lançamento à mão toda vez. */
+          vencimento: z.coerce.date().optional(),
+          observacao: z.string().trim().max(500).optional(),
+        })
+        .parse(request.body);
+
+      return inTenant(request, async (client, principal) => {
+        const lancamentos = await baseDeComissao(
+          client,
+          { kind: 'ALL' },
+          professionalId,
+          body.mes,
+        );
+        const calculo = calcularComissao(lancamentos);
+
+        const { rows: quem } = await client.query<{ nome: string }>(
+          'SELECT full_name AS nome FROM users WHERE id = $1',
+          [professionalId],
+        );
+        const profissional = quem[0]?.nome;
+        if (profissional === undefined) throw notFound('Profissional');
+
+        /* Dia 5 do mês SEGUINTE ao de referência: é quando quase toda
+           academia paga, e é depois de o mês ter acabado — vencer no
+           dia 30 do próprio mês colocaria a conta a pagar em atraso
+           antes de o fechamento poder ser feito. */
+        const padrao = new Date(body.mes.getFullYear(), body.mes.getMonth() + 1, 5);
+
+        try {
+          const feito = await fecharMes(client, principal.tenantId, {
+            professionalId,
+            profissional,
+            mes: body.mes,
+            fechamento: calculo,
+            vencimento: body.vencimento ?? padrao,
+            criadoPor: principal.userId,
+            observacao: body.observacao,
+          });
+
+          await writeAudit(client, principal.tenantId, {
+            action: 'commission.settle',
+            resourceType: 'commission',
+            resourceId: feito.id,
+            actorId: principal.userId,
+            actorRole: principal.role,
+            ip: request.ip,
+            metadata: {
+              mes: body.mes.toISOString().slice(0, 7),
+              profissionalId: professionalId,
+              totalCentavos: calculo.totalCentavos,
+              itens: calculo.itens.length,
+              lancamentoId: feito.lancamentoId,
+            },
+          });
+
+          void reply.status(201);
+          return {
+            data: {
+              id: feito.id,
+              lancamentoId: feito.lancamentoId,
+              totalCentavos: calculo.totalCentavos,
+              totalFormatado: formatCents(calculo.totalCentavos),
+            },
+          };
+        } catch (erro) {
+          if (erro instanceof FechamentoError) throw unprocessable(erro.message);
+          throw erro;
+        }
+      });
+    },
+  );
+
+  app.delete(
+    '/comissoes/:professionalId/fechamento',
+    { preHandler: [app.authorize('commission:settle')] },
+    async (request) => {
+      const { professionalId } = z.object({ professionalId: idSchema }).parse(request.params);
+      const { mes } = z.object({ mes: z.coerce.date() }).parse(request.query);
+
+      return inTenant(request, async (client, principal) => {
+        try {
+          const ok = await reabrirMes(client, professionalId, mes);
+          if (!ok) throw notFound('Fechamento de comissão');
+        } catch (erro) {
+          if (erro instanceof FechamentoError) throw unprocessable(erro.message);
+          throw erro;
+        }
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'commission.reopen',
+          resourceType: 'commission',
+          resourceId: professionalId,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: { mes: mes.toISOString().slice(0, 7) },
+        });
+
+        return { ok: true };
+      });
+    },
+  );
+
+  /* A visão da ACADEMIA sobre o mês: quem já fechou e quanto. Sem ela,
+     saber se falta fechar alguém exige abrir os profissionais um a um. */
+  app.get(
+    '/comissoes/fechados',
+    { preHandler: [app.authorize('commission:settle')] },
+    async (request) => {
+      const { mes } = z.object({ mes: z.coerce.date() }).parse(request.query);
+      return inTenant(request, async (client) => {
+        const linhas = await fechamentosDoMes(client, mes);
+        return {
+          data: linhas.map((l) => ({
+            ...l,
+            totalFormatado: formatCents(l.totalCentavos),
+            quitado: l.pagoCentavos >= l.totalCentavos,
+          })),
         };
       });
     },

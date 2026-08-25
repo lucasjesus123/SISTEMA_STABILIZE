@@ -235,8 +235,17 @@ export async function baseDeComissao(
     recebido_centavos: Cents;
     aliquota_bp: number;
   }>(
+    /* O NOME DO ALUNO ENTRA NA DESCRIÇÃO, e não fica só no `student_id`.
+       A memória de cálculo é o que o profissional confere linha a linha,
+       e sete linhas escritas "Mensalidade agosto de 2026" não são
+       conferíveis: ele não tem como saber se falta alguém. Com o nome,
+       ele bate a lista contra os próprios alunos em dez segundos.
+
+       Colado na descrição de propósito: `commission_items` COPIA este
+       texto ao fechar, e o fechamento precisa continuar contando a mesma
+       história se o aluno for renomeado ou desligado depois. */
     `SELECT e.id                       AS entry_id,
-            e.description              AS descricao,
+            e.description || coalesce(' · ' || al.full_name, '') AS descricao,
             e.student_id,
             e.appointment_id,
             e.amount_cents             AS valor_centavos,
@@ -244,6 +253,7 @@ export async function baseDeComissao(
             COALESCE(c.commission_bp, 0)            AS aliquota_bp
        FROM finance_entries e
        JOIN finance_payments p ON p.entry_id = e.id
+       LEFT JOIN students al ON al.id = e.student_id
        LEFT JOIN student_contracts c
               ON c.id = e.contract_id
       WHERE e.direction = 'RECEIVABLE'
@@ -251,7 +261,7 @@ export async function baseDeComissao(
         AND e.cancelled_at IS NULL
         AND date_trunc('month', p.paid_at) = date_trunc('month', $2::date)
         AND ${escopo.sql}
-      GROUP BY e.id, e.description, e.student_id, e.appointment_id,
+      GROUP BY e.id, e.description, al.full_name, e.student_id, e.appointment_id,
                e.amount_cents, c.commission_bp
       ORDER BY e.due_date`,
     values,

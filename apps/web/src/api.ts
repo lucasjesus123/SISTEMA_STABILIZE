@@ -305,6 +305,72 @@ export const buscarComissao = (profissionalId: string, mes: Date) =>
     };
   }>(`/api/finance/comissoes/${profissionalId}?mes=${iso(mes)}`);
 
+/* --------------------------------------------------------------------
+ * FECHAR O MÊS
+ *
+ * A rota acima CALCULA — ela lê os pagamentos agora, e o número muda se
+ * uma baixa retroativa for lançada depois. Estas aqui FECHAM: gravam o
+ * total e a memória de cálculo, e criam a conta a pagar do repasse.
+ * ------------------------------------------------------------------ */
+
+export interface FechamentoDeComissao {
+  id: string;
+  mes: string;
+  profissionalId: string;
+  profissional: string;
+  baseCentavos: number;
+  baseFormatada: string;
+  totalCentavos: number;
+  totalFormatado: string;
+  aliquotaMediaBp: number;
+  status: string;
+  fechadoEm: string;
+  lancamentoId: string | null;
+  lancamentoPagoCentavos: number;
+  pagoFormatado: string;
+  lancamentoVencimento: string | null;
+  quitado: boolean;
+  itens: {
+    descricao: string;
+    baseCentavos: number;
+    aliquotaBp: number;
+    valorCentavos: number;
+  }[];
+}
+
+export const buscarFechamentoDeComissao = (profissionalId: string, mes: Date) =>
+  api<{ data: FechamentoDeComissao | null }>(
+    `/api/finance/comissoes/${profissionalId}/fechamento?mes=${iso(mes)}`,
+  );
+
+export const fecharMesDoProfissional = (
+  profissionalId: string,
+  mes: Date,
+  opcoes?: { vencimento?: string; observacao?: string },
+) =>
+  api<{ data: { id: string; lancamentoId: string; totalFormatado: string } }>(
+    `/api/finance/comissoes/${profissionalId}/fechar`,
+    { method: 'POST', body: JSON.stringify({ mes: iso(mes), ...opcoes }) },
+  );
+
+export const reabrirMesDoProfissional = (profissionalId: string, mes: Date) =>
+  api<{ ok: true }>(`/api/finance/comissoes/${profissionalId}/fechamento?mes=${iso(mes)}`, {
+    method: 'DELETE',
+  });
+
+export interface FechadoNoMes {
+  profissionalId: string;
+  profissional: string;
+  totalCentavos: number;
+  totalFormatado: string;
+  baseCentavos: number;
+  pagoCentavos: number;
+  quitado: boolean;
+}
+
+export const buscarFechadosDoMes = (mes: Date) =>
+  api<{ data: FechadoNoMes[] }>(`/api/finance/comissoes/fechados?mes=${iso(mes)}`);
+
 /* -------------------------------------------------------------------- */
 
 export interface AlunoEmRisco {
@@ -2072,6 +2138,15 @@ export const baixarOcupacao = (de: Date, ate: Date) =>
 
 export const baixarInadimplencia = () =>
   baixarRelatorio('/api/relatorios/inadimplencia', 'inadimplencia.pdf');
+
+/** O papel que vai junto com o pagamento do profissional. */
+export const baixarFechamentoDoProfissional = (profissionalId: string, mes: Date) => {
+  const ref = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, '0')}`;
+  return baixarRelatorio(
+    `/api/relatorios/comissao?profissionalId=${profissionalId}&mes=${ref}`,
+    `fechamento-${ref}.pdf`,
+  );
+};
 
 /* ====================================================================
  * CRM — QUEM AINDA NÃO É ALUNO
