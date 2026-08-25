@@ -95,7 +95,13 @@ const como = (t: string) => ({ authorization: `Bearer ${t}` });
 /** Cadastra alguém pela API da academia, como o administrador faria. */
 async function cadastrar(
   s: Sessao,
-  dados: { nome: string; email: string; papel: string; areas?: string[] | null },
+  dados: {
+    nome: string;
+    email: string;
+    papel: string;
+    areas?: string[] | null;
+    senha?: string | null;
+  },
 ): Promise<{ status: number; id: string; senha: string; corpo: string }> {
   const res = await app.inject({
     method: 'POST',
@@ -105,8 +111,10 @@ async function cadastrar(
   });
   const corpo = res.body;
   if (res.statusCode !== 201) return { status: res.statusCode, id: '', senha: '', corpo };
-  const d = (res.json() as { data: { id: string; senhaProvisoria: string } }).data;
-  return { status: res.statusCode, id: d.id, senha: d.senhaProvisoria, corpo };
+  const d = (res.json() as { data: { id: string; senhaProvisoria: string | null } }).data;
+  /* `senhaProvisoria` nula = a senha foi ESCOLHIDA por quem cadastrou e o
+     servidor não a devolve. */
+  return { status: res.statusCode, id: d.id, senha: d.senhaProvisoria ?? '', corpo };
 }
 
 /** Tira a exigência de troca de senha, para poder usar a conta no teste. */
@@ -379,6 +387,88 @@ suite('Recorte de acesso por pessoa', () => {
       headers: como(dona.token),
       payload: { nome: 'Dona da Academia', papel: 'OWNER', cor: '#2E6F6F', areas: null },
     });
+  });
+
+  /* ==================================================================
+   * A senha: gerada ou escolhida
+   *
+   * Os dois caminhos existem e a diferença entre eles NÃO é comodidade:
+   * a gerada viaja por telefone e quem cadastrou a conhece, então a troca
+   * no primeiro acesso é o que faz ela deixar de valer. A escolhida foi
+   * combinada com a pessoa ali mesmo, e exigir a troca seria transformar
+   * a decisão em obstáculo.
+   * ================================================================ */
+
+  it('a senha GERADA volta uma vez e obriga a troca', async () => {
+    const dona = await entrar(ids.emailDono);
+    const criado = await cadastrar(dona, {
+      nome: 'Senha Gerada',
+      email: `gerada-${ids.sufixo}@areas.test`,
+      papel: 'RECEPTION',
+    });
+    expect(criado.status).toBe(201);
+    expect(criado.senha.length).toBeGreaterThanOrEqual(12);
+
+    const entrou = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: {
+        email: `gerada-${ids.sufixo}@areas.test`,
+        password: criado.senha,
+        tenantSlug: ids.slug,
+      },
+    });
+    expect(entrou.statusCode).toBe(200);
+    expect((entrou.json() as { user: { mustChangePassword: boolean } }).user.mustChangePassword).toBe(
+      true,
+    );
+  });
+
+  it('a senha ESCOLHIDA entra direto, e NÃO volta na resposta', async () => {
+    const dona = await entrar(ids.emailDono);
+    const combinada = 'senha-combinada-2026';
+    const criado = await cadastrar(dona, {
+      nome: 'Senha Escolhida',
+      email: `escolhida-${ids.sufixo}@areas.test`,
+      papel: 'RECEPTION',
+      senha: combinada,
+    });
+    expect(criado.status).toBe(201);
+
+    /* NÃO ECOA A SENHA. Quem cadastrou acabou de digitá-la; devolvê-la
+       seria pôr num log de navegador um segredo que não precisava sair
+       daqui. */
+    expect(criado.corpo).not.toContain(combinada);
+    expect(criado.senha).toBe('');
+
+    const entrou = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: {
+        email: `escolhida-${ids.sufixo}@areas.test`,
+        password: combinada,
+        tenantSlug: ids.slug,
+      },
+    });
+    expect(entrou.statusCode).toBe(200);
+    /* Sem tela de troca: a pessoa combinou a senha com quem cadastrou. */
+    expect((entrou.json() as { user: { mustChangePassword: boolean } }).user.mustChangePassword).toBe(
+      false,
+    );
+  });
+
+  it('senha escolhida curta demais é recusada — o mínimo vale para as duas', async () => {
+    const dona = await entrar(ids.emailDono);
+    const criado = await cadastrar(dona, {
+      nome: 'Senha Fraca',
+      email: `fraca-${ids.sufixo}@areas.test`,
+      papel: 'RECEPTION',
+      senha: '123456',
+    });
+    expect(criado.status).toBe(422);
+    /* Afrouxar aqui abriria uma porta de entrada mais fraca do que a que
+       a troca de senha já exige. */
+    expect(criado.corpo).toContain('10');
   });
 
   it('área inventada não vira acesso nenhum — nem tudo, nem metade', async () => {

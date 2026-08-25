@@ -331,10 +331,14 @@ export interface NovaEmpresa {
 export async function criarEmpresa(
   dados: NovaEmpresa,
   hashDaSenha: string,
+  /* `true` quando a senha foi GERADA — ela viajou por telefone ou
+     WhatsApp e quem cadastrou a conhece. `false` quando foi escolhida em
+     conjunto com o responsável. */
+  trocarSenha = true,
 ): Promise<{ empresaId: string; donoId: string }> {
   return withoutTenantContext('cron', async (client) => {
     const { rows } = await client.query<{ empresa_id: string; dono_id: string }>(
-      'SELECT * FROM plataforma_criar_empresa($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
+      'SELECT * FROM plataforma_criar_empresa($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
       [
         dados.nome,
         dados.slug,
@@ -348,6 +352,7 @@ export async function criarEmpresa(
         dados.donoNome,
         dados.donoEmail,
         hashDaSenha,
+        trocarSenha,
       ],
     );
     const l = rows[0]!;
@@ -424,21 +429,29 @@ export async function criarGestor(
   email: string,
   hash: string,
   papel: 'OWNER' | 'ADMIN',
+  /* `true` quando a senha foi GERADA: ela viajou por telefone ou
+     WhatsApp e quem cadastrou a conhece, então não pode continuar
+     valendo. `false` quando foi escolhida em conjunto com a pessoa. */
+  trocarSenha = true,
 ): Promise<string> {
   return withoutTenantContext('cron', async (client) => {
     const { rows } = await client.query<{ plataforma_criar_gestor: string }>(
-      'SELECT plataforma_criar_gestor($1,$2,$3,$4,$5)',
-      [empresaId, nome, email, hash, papel],
+      'SELECT plataforma_criar_gestor($1,$2,$3,$4,$5,$6)',
+      [empresaId, nome, email, hash, papel, trocarSenha],
     );
     return rows[0]!.plataforma_criar_gestor;
   });
 }
 
-export async function redefinirSenhaDoGestor(userId: string, hash: string): Promise<boolean> {
+export async function redefinirSenhaDoGestor(
+  userId: string,
+  hash: string,
+  trocarSenha = true,
+): Promise<boolean> {
   return withoutTenantContext('cron', async (client) => {
     const { rows } = await client.query<{ plataforma_redefinir_senha_gestor: boolean }>(
-      'SELECT plataforma_redefinir_senha_gestor($1, $2)',
-      [userId, hash],
+      'SELECT plataforma_redefinir_senha_gestor($1, $2, $3)',
+      [userId, hash, trocarSenha],
     );
     return rows[0]?.plataforma_redefinir_senha_gestor === true;
   });

@@ -1,6 +1,6 @@
 import { getPool, withTenant } from '../../db/pool.js';
 import { env } from '../../config/env.js';
-import { enviarTexto } from './uazapi.js';
+import { configuracao, enviarTexto } from './uazapi.js';
 import { decifrar } from './segredo.js';
 import type { FastifyBaseLogger } from 'fastify';
 
@@ -57,7 +57,11 @@ export async function enviarAniversariosDoDia(
     semWhatsapp: 0,
   };
 
-  if (env().UAZAPI_BASE_URL === undefined) {
+  /* PELA CONFIGURAÇÃO EFETIVA, e não só pela variável de ambiente: a
+     integração passou a poder ser configurada no painel da plataforma, e
+     olhar só o ambiente deixaria a fila parada para quem configurou por
+     lá — sem erro, sem log, sem nada acontecendo. */
+  if ((await configuracao()).base === null) {
     log.debug('uazapi não configurado; aniversários ignorados');
     return total;
   }

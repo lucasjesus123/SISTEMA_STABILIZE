@@ -1033,6 +1033,82 @@ suite('Painel da plataforma', () => {
   });
 
   /* ==================================================================
+   * O teste da ponte com a uazapi
+   * ================================================================ */
+
+  it('o teste da conexão não abre para quem não é operador', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/plataforma/config/testar' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('sem configuração, o teste diz O QUE falta — e não "não funcionou"', async () => {
+    const { token } = await entrarNoPainel();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/plataforma/config/testar',
+      headers: como(token),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const { data } = res.json() as { data: { ok: boolean; motivo?: string } };
+    expect(data.ok).toBe(false);
+    /* A diferença entre "falta o endereço" e "falta o token" é a
+       diferença entre saber o que fazer e conferir tudo de novo. O
+       ambiente de teste não tem nenhum dos dois, então a resposta é
+       sobre o primeiro que falta. */
+    expect(data.motivo).toMatch(/endereço|token/i);
+  });
+
+  it('o teste NUNCA devolve o token administrativo para a tela', async () => {
+    const { token } = await entrarNoPainel();
+
+    const segredo = `token-secreto-${ids.sufixo}`;
+    const salvou = await app.inject({
+      method: 'PUT',
+      url: '/api/plataforma/config',
+      headers: como(token),
+      payload: {
+        uazapiBaseUrl: 'https://nao-existe.invalid',
+        uazapiAdminToken: segredo,
+      },
+    });
+    expect(salvou.statusCode).toBe(200);
+
+    /* A leitura da configuração diz que EXISTE um token, e não qual. */
+    const lido = await app.inject({
+      method: 'GET',
+      url: '/api/plataforma/config',
+      headers: como(token),
+    });
+    expect(lido.body).not.toContain(segredo);
+    expect((lido.json() as { data: { temToken: boolean } }).data.temToken).toBe(true);
+
+    /* E o teste também não — nem quando falha. O erro do provedor pode
+       trazer o token ecoado, e é por isso que a mensagem que chega na
+       tela é escrita por nós. */
+    const testou = await app.inject({
+      method: 'POST',
+      url: '/api/plataforma/config/testar',
+      headers: como(token),
+    });
+    expect(testou.statusCode).toBe(200);
+    expect(testou.body).not.toContain(segredo);
+
+    const { data } = testou.json() as { data: { ok: boolean; motivo?: string } };
+    expect(data.ok).toBe(false);
+    expect(data.motivo).toBeDefined();
+
+    /* Limpa para não deixar a configuração inválida para os testes
+       seguintes desta suíte. */
+    await app.inject({
+      method: 'PUT',
+      url: '/api/plataforma/config',
+      headers: como(token),
+      payload: { uazapiBaseUrl: '', uazapiAdminToken: null },
+    });
+  });
+
+  /* ==================================================================
    * Troca de senha
    * ================================================================ */
 

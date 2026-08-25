@@ -1316,8 +1316,13 @@ export interface DadosDeUsuario {
   areas?: string[] | null;
 }
 
-export const criarUsuario = (dados: DadosDeUsuario & { email: string }) =>
-  api<{ data: { id: string; senhaProvisoria: string } }>('/api/cadastros/usuarios', {
+/**
+ * Cadastra a pessoa. `senha` ausente = o sistema gera uma provisória e a
+ * devolve uma única vez; `senha` preenchida = quem cadastrou combinou a
+ * senha na hora, e nesse caso ela NÃO volta na resposta.
+ */
+export const criarUsuario = (dados: DadosDeUsuario & { email: string; senha?: string | null }) =>
+  api<{ data: { id: string; senhaProvisoria: string | null } }>('/api/cadastros/usuarios', {
     method: 'POST',
     body: JSON.stringify(dados),
   });
@@ -1334,9 +1339,11 @@ export const definirUsuarioAtivo = (id: string, ativo: boolean) =>
     body: JSON.stringify({ ativo }),
   });
 
-export const redefinirSenhaDeUsuario = (id: string) =>
-  api<{ data: { senhaProvisoria: string } }>(`/api/cadastros/usuarios/${id}/senha`, {
+/** Sem `senha`, gera uma provisória e a devolve. Com `senha`, define a que veio. */
+export const redefinirSenhaDeUsuario = (id: string, senha?: string | null) =>
+  api<{ data: { senhaProvisoria: string | null } }>(`/api/cadastros/usuarios/${id}/senha`, {
     method: 'POST',
+    body: JSON.stringify({ senha: senha ?? null }),
   });
 
 /* ====================================================================

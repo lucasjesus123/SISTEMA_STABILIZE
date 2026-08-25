@@ -220,9 +220,31 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
     }),
   );
 
+  /**
+   * A senha pode ser ESCOLHIDA por quem cadastra, e não só gerada.
+   *
+   * Gerada, ninguém — nem quem cadastrou — sabe a senha definitiva,
+   * porque a troca é obrigatória no primeiro acesso. Escolhida, quem
+   * cadastrou combinou a senha com a pessoa ali mesmo, e exigir a troca
+   * seria transformar a decisão em obstáculo.
+   *
+   * A segunda existe porque a primeira tem um custo real: ditar catorze
+   * caracteres aleatórios por telefone é ver a pessoa digitar errado três
+   * vezes. O mínimo de dez caracteres vale para as duas.
+   */
+  const senhaEscolhida = z
+    .string()
+    .min(10, 'A senha precisa de pelo menos 10 caracteres.')
+    .max(128)
+    .nullish()
+    .transform((v) => (v ? v : null));
+
   app.post('/usuarios', { preHandler: [app.authorize('user:write')] }, async (request, reply) => {
     const body = usuarioSchema
-      .extend({ email: z.string().trim().toLowerCase().email('E-mail inválido.').max(160) })
+      .extend({
+        email: z.string().trim().toLowerCase().email('E-mail inválido.').max(160),
+        senha: senhaEscolhida,
+      })
       .parse(request.body);
 
     return inTenant(request, async (client, principal) => {
@@ -230,7 +252,7 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
         throw forbidden('Só o dono da academia cria outro dono.');
       }
 
-      const senha = senhaProvisoria();
+      const senha = body.senha ?? senhaProvisoria();
       const criado = await repo
         .criarUsuario(client, principal.tenantId, {
           nome: body.nome,
@@ -240,6 +262,7 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
           cor: body.cor,
           areas: body.areas,
           hash: await hashPassword(senha),
+          trocarSenha: body.senha === null,
         })
         .catch((e: unknown) => {
           if (typeof e === 'object' && e !== null && (e as { code?: string }).code === '23505') {
@@ -259,11 +282,12 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
       });
 
       void reply.status(201);
-      /* A senha aparece UMA VEZ, na resposta desta chamada. Não é
-         guardada em claro em lugar nenhum e a troca é obrigatória no
-         primeiro acesso — quem cadastrou nunca sabe a senha definitiva
-         de ninguém. */
-      return { data: { id: criado.id, senhaProvisoria: senha } };
+      /* A senha GERADA aparece UMA VEZ, na resposta desta chamada: não é
+         guardada em claro em lugar nenhum, e a troca é obrigatória no
+         primeiro acesso. A ESCOLHIDA não volta — quem cadastrou acabou
+         de digitá-la, e devolvê-la seria pôr num log de navegador um
+         segredo que não precisava sair daqui. */
+      return { data: { id: criado.id, senhaProvisoria: body.senha === null ? senha : null } };
     });
   });
 
@@ -351,6 +375,7 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/usuarios/:id/senha', { preHandler: [app.authorize('user:write')] }, async (request) => {
     const { id } = idParam.parse(request.params);
+    const escolhida = senhaEscolhida.parse((request.body as { senha?: unknown } | null)?.senha);
 
     return inTenant(request, async (client, principal) => {
       const papelAtual = await repo.papelDe(client, id);
@@ -359,8 +384,10 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
         throw forbidden('Só o dono da academia redefine a senha de outro dono.');
       }
 
-      const senha = senhaProvisoria();
-      if (!(await repo.redefinirSenha(client, id, await hashPassword(senha)))) {
+      const senha = escolhida ?? senhaProvisoria();
+      if (
+        !(await repo.redefinirSenha(client, id, await hashPassword(senha), escolhida === null))
+      ) {
         throw notFound('Usuário');
       }
 
@@ -371,9 +398,9 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
         actorId: principal.userId,
         actorRole: principal.role,
         ip: request.ip,
-        metadata: { senhaRedefinida: true },
+        metadata: { senhaRedefinida: true, escolhida: escolhida !== null },
       });
-      return { data: { senhaProvisoria: senha } };
+      return { data: { senhaProvisoria: escolhida === null ? senha : null } };
     });
   });
 

@@ -46,80 +46,24 @@ export default function Plataforma(): ReactNode {
     );
   }
 
-  if (operador === null) return <Entrada aoEntrar={setOperador} />;
+  /* SEM SESSÃO, VOLTA PARA A TELA NORMAL — não há segunda tela de login.
+     Havia uma aqui, e ela era uma armadilha: quem chegava em
+     /plataforma pelo histórico do navegador via um formulário que só
+     aceita operador, digitava o e-mail da academia e recebia "E-mail ou
+     senha incorretos" sem entender por quê. A tela de entrada é uma só,
+     em `/`, e é o servidor que descobre quem é quem. */
+  if (operador === null) {
+    window.location.replace('/');
+    return (
+      <div className="plt-carregando">
+        <Carregando rotulo="Levando você para a entrada" />
+      </div>
+    );
+  }
   if (operador.precisaTrocarSenha) {
     return <TrocaObrigatoria aoTrocar={setOperador} />;
   }
   return <Painel operador={operador} aoSair={() => setOperador(null)} />;
-}
-
-/* ====================================================================
- * Entrada
- * ================================================================== */
-
-function Entrada({ aoEntrar }: { aoEntrar: (o: plt.Operador) => void }): ReactNode {
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
-  const [erro, setErro] = useState<string | null>(null);
-  const [enviando, setEnviando] = useState(false);
-
-  const enviar = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault();
-    setErro(null);
-    setEnviando(true);
-    try {
-      aoEntrar(await plt.entrar(email.trim(), senha));
-    } catch (x) {
-      setErro(x instanceof plt.ErroPlataforma ? x.message : 'Não foi possível entrar.');
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  return (
-    <div className="plt-entrada">
-      <form className="plt-entrada-caixa" onSubmit={(e) => void enviar(e)} noValidate>
-        <Marca variante="horizontal" altura={34} />
-        <p className="plt-eyebrow">Painel da plataforma</p>
-        <h1>Operação do serviço</h1>
-        <p className="plt-sub">
-          Aqui se cadastram as academias. Para entrar numa delas, use o sistema normal.
-        </p>
-
-        <label className="campo campo-cheia">
-          <span className="campo-rotulo">E-mail</span>
-          <input
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoFocus
-          />
-        </label>
-        <label className="campo campo-cheia">
-          <span className="campo-rotulo">Senha</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            required
-          />
-        </label>
-
-        {erro !== null && (
-          <p className="mensagem-erro" role="alert">
-            {erro}
-          </p>
-        )}
-
-        <button type="submit" className="botao-acao" disabled={enviando}>
-          {enviando ? 'Entrando…' : 'Entrar'}
-        </button>
-      </form>
-    </div>
-  );
 }
 
 function TrocaObrigatoria({ aoTrocar }: { aoTrocar: (o: plt.Operador) => void }): ReactNode {
@@ -755,13 +699,26 @@ function NovaAcademia({
     donoNome: '',
     donoEmail: '',
   });
+  /* Gerar ou digitar — ver o comentário do mesmo par no cadastro de
+     equipe. A gerada é o padrão porque nem quem cadastra fica sabendo a
+     definitiva; a digitada existe porque ditar catorze caracteres
+     aleatórios por telefone não funciona. */
+  const [senhaModo, setSenhaModo] = useState<'gerar' | 'definir'>('gerar');
+  const [senhaDoDono, setSenhaDoDono] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [detalhes, setDetalhes] = useState<{ campo: string; problema: string }[]>([]);
   const [enviando, setEnviando] = useState(false);
-  const [pronto, setPronto] = useState<{ email: string; senha: string } | null>(null);
+  /* `senha` nula = foi escolhida por quem cadastrou, e o servidor não a
+     devolve: quem digitou já sabe, e ecoá-la seria pôr num log de
+     navegador um segredo que não precisava sair daqui. */
+  const [pronto, setPronto] = useState<{ email: string; senha: string | null } | null>(null);
 
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
+    if (senhaModo === 'definir' && senhaDoDono.trim().length < 10) {
+      setErro('A senha precisa de pelo menos 10 caracteres.');
+      return;
+    }
     setErro(null);
     setDetalhes([]);
     setEnviando(true);
@@ -778,6 +735,7 @@ function NovaAcademia({
         testeAte: f.testeAte || null,
         donoNome: f.donoNome.trim(),
         donoEmail: f.donoEmail.trim(),
+        donoSenha: senhaModo === 'definir' ? senhaDoDono : null,
       });
       setPronto({ email: r.data.dono.email, senha: r.data.dono.senhaProvisoria });
     } catch (x) {
@@ -805,14 +763,22 @@ function NovaAcademia({
             <span>E-mail</span>
             <strong className="mono">{pronto.email}</strong>
           </p>
-          <p className="plt-senha-linha">
-            <span>Senha provisória</span>
-            <strong className="mono plt-destaque">{pronto.senha}</strong>
-          </p>
-          <p className="plt-aviso">
-            Esta senha aparece <b>uma única vez</b> e não fica guardada em lugar nenhum. Copie
-            agora e envie ao responsável — o sistema exige a troca no primeiro acesso.
-          </p>
+          {pronto.senha !== null ? (
+            <>
+              <p className="plt-senha-linha">
+                <span>Senha provisória</span>
+                <strong className="mono plt-destaque">{pronto.senha}</strong>
+              </p>
+              <p className="plt-aviso">
+                Esta senha aparece <b>uma única vez</b> e não fica guardada em lugar nenhum. Copie
+                agora e envie ao responsável — o sistema exige a troca no primeiro acesso.
+              </p>
+            </>
+          ) : (
+            <p className="plt-aviso">
+              O responsável já entra com a senha que você definiu, sem tela de troca.
+            </p>
+          )}
         </div>
         <div className="formulario-acoes campo-cheia">
           <button type="button" className="botao-acao" onClick={aoCriar}>
@@ -935,6 +901,53 @@ function NovaAcademia({
             required
           />
         </label>
+
+        <fieldset className="campo campo-cheia eq-acessos">
+          <legend className="campo-rotulo">Senha do responsável</legend>
+          <label className="eq-tudo">
+            <input
+              type="radio"
+              name="senha-do-dono"
+              checked={senhaModo === 'gerar'}
+              onChange={() => setSenhaModo('gerar')}
+            />
+            <span>
+              <strong>Gerar uma provisória</strong>
+              <span className="campo-dica">
+                Aparece uma única vez ao cadastrar, e o responsável troca no primeiro acesso.
+              </span>
+            </span>
+          </label>
+          <label className="eq-tudo">
+            <input
+              type="radio"
+              name="senha-do-dono"
+              checked={senhaModo === 'definir'}
+              onChange={() => setSenhaModo('definir')}
+            />
+            <span>
+              <strong>Eu defino agora</strong>
+              <span className="campo-dica">
+                Para combinar a senha com o cliente na hora. Ele entra direto, sem tela de troca.
+              </span>
+            </span>
+          </label>
+          {senhaModo === 'definir' && (
+            <label className="campo eq-senha-campo">
+              <span className="campo-rotulo">Senha</span>
+              <input
+                type="text"
+                value={senhaDoDono}
+                onChange={(e) => setSenhaDoDono(e.target.value)}
+                autoComplete="off"
+                placeholder="pelo menos 10 caracteres"
+              />
+              <span className="campo-dica">
+                Fica visível de propósito — é para você conferir antes de passar adiante.
+              </span>
+            </label>
+          )}
+        </fieldset>
 
         {erro !== null && (
           <div className="mensagem-erro campo-cheia" role="alert">
@@ -1526,7 +1539,7 @@ function DetalheAcademia({
     try {
       const { data } = await plt.redefinirSenha(u.id);
       setJanela(null);
-      setSenhaGerada({ email: u.email, senha: data.senhaProvisoria });
+      setSenhaGerada({ email: u.email, senha: data.senhaProvisoria ?? '' });
     } catch (e) {
       setErro(e instanceof plt.ErroPlataforma ? e.message : 'Não foi possível redefinir.');
     } finally {
@@ -1623,14 +1636,19 @@ function DetalheAcademia({
 
       {senhaGerada !== null && (
         <div className="plt-senha">
-          <p className="plt-eyebrow">Senha provisória gerada</p>
+          <p className="plt-eyebrow">
+            {senhaGerada.senha === '' ? 'Conta criada' : 'Senha provisória gerada'}
+          </p>
           <p className="plt-senha-linha">
             <span>{senhaGerada.email}</span>
-            <strong className="mono plt-destaque">{senhaGerada.senha}</strong>
+            {senhaGerada.senha !== '' && (
+              <strong className="mono plt-destaque">{senhaGerada.senha}</strong>
+            )}
           </p>
           <p className="plt-aviso">
-            Aparece uma única vez. As sessões abertas dessa pessoa foram encerradas, e ela precisa
-            trocar a senha no primeiro acesso.
+            {senhaGerada.senha === ''
+              ? 'A pessoa já entra com a senha que você definiu, sem tela de troca.'
+              : 'Aparece uma única vez. As sessões abertas dessa pessoa foram encerradas, e ela precisa trocar a senha no primeiro acesso.'}
           </p>
           <button type="button" className="botao-secundario" onClick={() => setSenhaGerada(null)}>
             Entendi
@@ -1781,11 +1799,17 @@ function NovoGestor({
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [papel, setPapel] = useState<'OWNER' | 'ADMIN'>('ADMIN');
+  const [senhaModo, setSenhaModo] = useState<'gerar' | 'definir'>('gerar');
+  const [senha, setSenha] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
+    if (senhaModo === 'definir' && senha.trim().length < 10) {
+      setErro('A senha precisa de pelo menos 10 caracteres.');
+      return;
+    }
     setErro(null);
     setEnviando(true);
     try {
@@ -1793,8 +1817,11 @@ function NovoGestor({
         nome: nome.trim(),
         email: email.trim(),
         papel,
+        senha: senhaModo === 'definir' ? senha : null,
       });
-      aoCriar(email.trim(), data.senhaProvisoria);
+      /* A escolhida não volta do servidor; a tela de "copie agora" só
+         faz sentido para a gerada. */
+      aoCriar(email.trim(), data.senhaProvisoria ?? '');
     } catch (x) {
       setErro(x instanceof plt.ErroPlataforma ? x.message : 'Não foi possível criar.');
     } finally {
@@ -1820,6 +1847,46 @@ function NovoGestor({
         </select>
         <span className="campo-dica">Os dois enxergam tudo dentro da academia.</span>
       </label>
+
+      <fieldset className="campo campo-cheia eq-acessos">
+        <legend className="campo-rotulo">Senha</legend>
+        <label className="eq-tudo">
+          <input
+            type="radio"
+            name="senha-do-gestor"
+            checked={senhaModo === 'gerar'}
+            onChange={() => setSenhaModo('gerar')}
+          />
+          <span>
+            <strong>Gerar uma provisória</strong>
+            <span className="campo-dica">Aparece uma vez, e a pessoa troca no primeiro acesso.</span>
+          </span>
+        </label>
+        <label className="eq-tudo">
+          <input
+            type="radio"
+            name="senha-do-gestor"
+            checked={senhaModo === 'definir'}
+            onChange={() => setSenhaModo('definir')}
+          />
+          <span>
+            <strong>Eu defino agora</strong>
+            <span className="campo-dica">Ela entra direto, sem tela de troca.</span>
+          </span>
+        </label>
+        {senhaModo === 'definir' && (
+          <label className="campo eq-senha-campo">
+            <span className="campo-rotulo">Senha</span>
+            <input
+              type="text"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              autoComplete="off"
+              placeholder="pelo menos 10 caracteres"
+            />
+          </label>
+        )}
+      </fieldset>
 
       {erro !== null && (
         <p className="mensagem-erro campo-cheia" role="alert">
@@ -1851,6 +1918,13 @@ function Whatsapp(): ReactNode {
   const [salvo, setSalvo] = useState(false);
   const [enviando, setEnviando] = useState(false);
 
+  /* `null` é "ainda não perguntei" — diferente de "perguntei e falhou".
+     Um indicador que nasce vermelho ensina a ignorar o vermelho. */
+  const [ponte, setPonte] = useState<{ ok: boolean; instancias?: number; motivo?: string } | null>(
+    null,
+  );
+  const [testando, setTestando] = useState(false);
+
   const carregar = useCallback(async () => {
     try {
       const { data } = await plt.lerConfig();
@@ -1861,9 +1935,31 @@ function Whatsapp(): ReactNode {
     }
   }, []);
 
+  const testar = useCallback(async () => {
+    setTestando(true);
+    try {
+      const { data } = await plt.testarConfig();
+      setPonte(data);
+    } catch (e) {
+      setPonte({
+        ok: false,
+        motivo: e instanceof plt.ErroPlataforma ? e.message : 'Não foi possível testar.',
+      });
+    } finally {
+      setTestando(false);
+    }
+  }, []);
+
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  /* TESTA SOZINHO AO ABRIR A TELA. O estado da integração é a pergunta
+     que traz alguém até aqui — obrigar a clicar para descobrir faria a
+     resposta chegar só a quem já desconfiava. */
+  useEffect(() => {
+    if (c !== null && c.temToken) void testar();
+  }, [c, testar]);
 
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -1875,6 +1971,10 @@ function Whatsapp(): ReactNode {
       setTokenNovo('');
       setSalvo(true);
       await carregar();
+      /* Salvou, testa: a pergunta seguinte a "salvei" é sempre "e
+         funcionou?", e fazer a pessoa clicar de novo para descobrir é
+         cobrar duas ações por uma intenção. */
+      await testar();
     } catch (x) {
       setErro(x instanceof plt.ErroPlataforma ? x.message : 'Não foi possível salvar.');
     } finally {
@@ -1886,12 +1986,65 @@ function Whatsapp(): ReactNode {
 
   return (
     <>
-      <div className="secao-cabecalho">
-        <h1>WhatsApp</h1>
-        <p>
-          O endereço e o token administrativo ficam aqui, na plataforma. Cada academia só lê o QR
-          Code e conecta o próprio número.
-        </p>
+      <div className="secao-cabecalho plt-cabecalho-acao">
+        <div>
+          <h1>WhatsApp</h1>
+          <p>
+            O endereço e o token administrativo ficam aqui, na plataforma. Cada academia só lê o QR
+            Code e conecta o próprio número.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="botao-secundario"
+          onClick={() => void testar()}
+          disabled={testando || !c.temToken}
+          title={c.temToken ? undefined : 'Salve o token administrativo primeiro.'}
+        >
+          {testando ? 'Testando…' : 'Testar conexão'}
+        </button>
+      </div>
+
+      {/* O ESTADO DA PONTE, no alto e antes dos campos. Sem ele, salvar
+          o endereço e o token era um ato de fé: a tela dizia "salvo" e a
+          primeira notícia de que algo estava errado viria semanas
+          depois, quando uma academia tentasse conectar o número. */}
+      <div className={`plt-ponte ${!c.temToken ? 'vazia' : testando ? 'testando' : ponte === null ? 'vazia' : ponte.ok ? 'viva' : 'morta'}`}>
+        <span className="plt-ponte-ponto" aria-hidden="true" />
+        <span className="plt-ponte-texto" role="status" aria-live="polite">
+          {!c.temToken ? (
+            <>
+              <strong>Não configurado</strong>
+              <span>Sem o token administrativo, nenhuma academia conecta o WhatsApp.</span>
+            </>
+          ) : testando ? (
+            <>
+              <strong>Verificando…</strong>
+              <span>Falando com o servidor da uazapi.</span>
+            </>
+          ) : ponte === null ? (
+            <>
+              <strong>Não verificado</strong>
+              <span>Clique em "Testar conexão" para saber se a ponte está de pé.</span>
+            </>
+          ) : ponte.ok ? (
+            <>
+              <strong>Conectado</strong>
+              <span>
+                O servidor respondeu e aceitou o token administrativo
+                {ponte.instancias !== undefined
+                  ? ` · ${ponte.instancias} número${ponte.instancias === 1 ? '' : 's'} na conta`
+                  : ''}
+                .
+              </span>
+            </>
+          ) : (
+            <>
+              <strong>Sem conexão</strong>
+              <span>{ponte.motivo ?? 'Não foi possível falar com o servidor da uazapi.'}</span>
+            </>
+          )}
+        </span>
       </div>
 
       <form className="formulario" onSubmit={(e) => void enviar(e)} noValidate>

@@ -272,8 +272,8 @@ export interface DadosEmpresa {
   donoEmail: string;
 }
 
-export const criarEmpresa = (dados: DadosEmpresa) =>
-  api<{ data: { empresaId: string; dono: { email: string; senhaProvisoria: string } } }>(
+export const criarEmpresa = (dados: DadosEmpresa & { donoSenha?: string | null }) =>
+  api<{ data: { empresaId: string; dono: { email: string; senhaProvisoria: string | null } } }>(
     '/empresas',
     { method: 'POST', body: JSON.stringify(dados) },
   );
@@ -321,9 +321,9 @@ export const listarUsuarios = (empresaId: string) =>
 
 export const criarGestor = (
   empresaId: string,
-  dados: { nome: string; email: string; papel: 'OWNER' | 'ADMIN' },
+  dados: { nome: string; email: string; papel: 'OWNER' | 'ADMIN'; senha?: string | null },
 ) =>
-  api<{ data: { id: string; senhaProvisoria: string } }>(`/empresas/${empresaId}/gestores`, {
+  api<{ data: { id: string; senhaProvisoria: string | null } }>(`/empresas/${empresaId}/gestores`, {
     method: 'POST',
     body: JSON.stringify(dados),
   });
@@ -347,8 +347,12 @@ export const removerUsuario = (usuarioId: string) =>
     { method: 'DELETE' },
   );
 
-export const redefinirSenha = (usuarioId: string) =>
-  api<{ data: { senhaProvisoria: string } }>(`/usuarios/${usuarioId}/senha`, { method: 'POST' });
+/** Sem `senha`, gera uma provisória e a devolve. Com `senha`, define a que veio. */
+export const redefinirSenha = (usuarioId: string, senha?: string | null) =>
+  api<{ data: { senhaProvisoria: string | null } }>(`/usuarios/${usuarioId}/senha`, {
+    method: 'POST',
+    body: JSON.stringify({ senha: senha ?? null }),
+  });
 
 export const definirUsuarioAtivo = (usuarioId: string, ativo: boolean) =>
   api<{ ok: boolean }>(`/usuarios/${usuarioId}/situacao`, {
@@ -377,6 +381,19 @@ export interface ConfigWhatsapp {
 }
 
 export const lerConfig = () => api<{ data: ConfigWhatsapp }>('/config');
+
+/**
+ * A ponte com a uazapi está de pé?
+ *
+ * Chama o endpoint de Super Admin lá do outro lado: se ele responde, o
+ * endereço está certo E o token administrativo vale. Devolve `ok` e, na
+ * falha, um motivo escrito por nós — o texto do provedor pode trazer
+ * caminho de arquivo, versão e às vezes o próprio token ecoado.
+ */
+export const testarConfig = () =>
+  api<{ data: { ok: boolean; instancias?: number; motivo?: string } }>('/config/testar', {
+    method: 'POST',
+  });
 
 export const salvarConfig = (uazapiBaseUrl: string | null, uazapiAdminToken: string | null) =>
   api<{ ok: boolean }>('/config', {

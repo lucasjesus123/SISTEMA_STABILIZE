@@ -12,6 +12,7 @@ import {
 import { getDummyHash, hashPassword, verifyPassword } from '../../auth/password.js';
 import { badRequest, conflict, forbidden, notFound, unauthorized } from '../../http/errors.js';
 import { cifrar } from '../whatsapp/segredo.js';
+import { configuracao, esquecerConfiguracao, verificarAdmin } from '../whatsapp/uazapi.js';
 import * as repo from './plataforma.repository.js';
 import {
   COOKIE_PLATAFORMA,
@@ -111,6 +112,34 @@ const empresaSchema = z.object({
  * O alfabeto exclui caracteres que se confundem ao ditar por telefone —
  * 0/O, 1/l/I — porque é assim que essa senha costuma viajar.
  */
+/**
+ * A senha que quem cadastra escolheu, quando escolheu.
+ *
+ * SÃO DOIS CAMINHOS COM CONSEQUÊNCIAS DIFERENTES, e a diferença não é
+ * comodidade:
+ *
+ *   · GERADA: ninguém — nem quem cadastrou — sabe a senha definitiva,
+ *     porque o sistema exige a troca no primeiro acesso.
+ *   · ESCOLHIDA: quem cadastrou sabe a senha, e continua sabendo. A troca
+ *     obrigatória não faz sentido aqui (a pessoa acabou de combinar a
+ *     senha com quem vai usá-la) e por isso não é exigida.
+ *
+ * A segunda existe porque a primeira, na prática, tem um custo real:
+ * ditar uma senha de quatorze caracteres por telefone e ver a pessoa
+ * digitar errado três vezes. Quem opera decide qual das duas serve
+ * naquele dia; o software não decide por ele.
+ *
+ * O MÍNIMO DE DEZ CARACTERES vale para as duas. É o mesmo mínimo da
+ * troca de senha, e afrouxar aqui seria abrir uma porta de entrada mais
+ * fraca do que a que já existe.
+ */
+const senhaEscolhida = z
+  .string()
+  .min(10, 'A senha precisa de pelo menos 10 caracteres.')
+  .max(128)
+  .nullish()
+  .transform((v) => (v ? v : null));
+
 function senhaProvisoria(): string {
   const alfabeto = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
   const bytes = randomBytes(14);
@@ -347,10 +376,12 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
     const { id } = await operador(request);
     const dados = empresaSchema.parse(request.body);
 
-    const provisoria = senhaProvisoria();
+    const escolhida = senhaEscolhida.parse((request.body as { donoSenha?: unknown }).donoSenha);
+    const senha = escolhida ?? senhaProvisoria();
+
     let criada: { empresaId: string; donoId: string };
     try {
-      criada = await repo.criarEmpresa(dados, await hashPassword(provisoria));
+      criada = await repo.criarEmpresa(dados, await hashPassword(senha), escolhida === null);
     } catch (erro) {
       /* 23505 é violação de unicidade. O slug é o campo com índice
          único que o operador digita, então a mensagem aponta para ele em
@@ -370,7 +401,13 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
     return {
       data: {
         empresaId: criada.empresaId,
-        dono: { email: dados.donoEmail, senhaProvisoria: provisoria },
+        dono: {
+          email: dados.donoEmail,
+          /* Só volta quando FOI GERADA. A escolhida quem cadastrou já
+             sabe — devolvê-la seria pôr num log de navegador um segredo
+             que não precisava sair daqui. */
+          senhaProvisoria: escolhida === null ? senha : null,
+        },
       },
     };
   });
@@ -496,18 +533,20 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
         nome: z.string().trim().min(2).max(160),
         email: z.string().trim().toLowerCase().email('E-mail inválido.'),
         papel: z.enum(['OWNER', 'ADMIN']),
+        senha: senhaEscolhida,
       })
       .parse(request.body);
 
-    const provisoria = senhaProvisoria();
+    const senha = dados.senha ?? senhaProvisoria();
     let novoId: string;
     try {
       novoId = await repo.criarGestor(
         id,
         dados.nome,
         dados.email,
-        await hashPassword(provisoria),
+        await hashPassword(senha),
         dados.papel,
+        dados.senha === null,
       );
     } catch (erro) {
       if (ehOperadorVirandoUsuario(erro)) throw badRequest(OPERADOR_NAO_VIRA_USUARIO);
@@ -519,7 +558,7 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
 
     await repo.registrar(adminId, 'plataforma.gestor_criado', id, dados.email, request.ip);
     void reply.status(201);
-    return { data: { id: novoId, senhaProvisoria: provisoria } };
+    return { data: { id: novoId, senhaProvisoria: dados.senha === null ? senha : null } };
   });
 
   /* ------------------------------------------------------------------
@@ -609,12 +648,19 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
   app.post('/usuarios/:id/senha', async (request) => {
     const { id: adminId } = await operador(request);
     const { id } = idParam.parse(request.params);
-    const provisoria = senhaProvisoria();
-    if (!(await repo.redefinirSenhaDoGestor(id, await hashPassword(provisoria)))) {
+
+    const escolhida = senhaEscolhida.parse((request.body as { senha?: unknown } | null)?.senha);
+    const senha = escolhida ?? senhaProvisoria();
+
+    if (
+      !(await repo.redefinirSenhaDoGestor(id, await hashPassword(senha), escolhida === null))
+    ) {
       throw notFound('Usuário');
     }
-    await repo.registrar(adminId, 'plataforma.senha_redefinida', null, id, request.ip);
-    return { data: { senhaProvisoria: provisoria } };
+    await repo.registrar(adminId, 'plataforma.senha_redefinida', null, id, request.ip, {
+      escolhida: escolhida !== null,
+    });
+    return { data: { senhaProvisoria: escolhida === null ? senha : null } };
   });
 
   app.post('/usuarios/:id/situacao', async (request) => {
@@ -752,9 +798,73 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
       dados.uazapiAdminToken === null ? null : cifrar(dados.uazapiAdminToken),
       id,
     );
+    /* Sem isto o "Testar" logo depois de salvar rodaria com o valor
+       velho do cache e diria que o token novo não vale. */
+    esquecerConfiguracao();
+
     await repo.registrar(id, 'plataforma.config_salva', null, null, request.ip, {
       trocouToken: dados.uazapiAdminToken !== null,
     });
     return { ok: true };
+  });
+
+  /* ------------------------------------------------------------------
+   * POST /api/plataforma/config/testar
+   *
+   * A PONTE ESTÁ DE PÉ?
+   *
+   * Sem isto, salvar o endereço e o token era um ato de fé: a tela dizia
+   * "Configuração salva" e a primeira notícia de que algo estava errado
+   * viria semanas depois, quando uma academia tentasse conectar o número
+   * e recebesse um 401 sem explicação.
+   *
+   * A prova é `/instance/all`, que só o token ADMINISTRATIVO abre: se
+   * responde, o endereço está certo E o token vale. Uma rota que
+   * qualquer token abrisse não distinguiria "configurado" de
+   * "configurado errado".
+   *
+   * O ERRO DO PROVEDOR NÃO VIRA A NOSSA MENSAGEM — ele pode trazer
+   * caminho de arquivo, versão de software e às vezes o próprio token
+   * ecoado. Vai para o log; a tela recebe texto escrito aqui.
+   * ---------------------------------------------------------------- */
+  app.post('/config/testar', async (request) => {
+    await operador(request);
+
+    const { base, admin } = await configuracao();
+    if (base === null) return { data: { ok: false, motivo: 'Falta o endereço da uazapi.' } };
+    if (admin === null) {
+      return { data: { ok: false, motivo: 'Falta o token administrativo.' } };
+    }
+
+    try {
+      const { instancias } = await verificarAdmin();
+      return { data: { ok: true, instancias } };
+    } catch (erro) {
+      request.log.warn({ err: erro }, 'teste da uazapi falhou');
+      const texto = erro instanceof Error ? erro.message : '';
+
+      /* Os três desfechos que a pessoa consegue AGIR sobre, separados —
+         "não funcionou" manda conferir tudo de novo; dizer qual dos três
+         é manda conferir uma coisa. */
+      if (/\b401\b|\b403\b/.test(texto)) {
+        return {
+          data: { ok: false, motivo: 'O servidor respondeu, mas recusou o token administrativo.' },
+        };
+      }
+      if (/não respondeu em/.test(texto)) {
+        return {
+          data: { ok: false, motivo: 'O servidor não respondeu a tempo. Confira o endereço.' },
+        };
+      }
+      if (/\b404\b/.test(texto)) {
+        return {
+          data: {
+            ok: false,
+            motivo: 'O endereço respondeu, mas não parece ser uma uazapi. Confira o subdomínio.',
+          },
+        };
+      }
+      return { data: { ok: false, motivo: 'Não foi possível falar com o servidor da uazapi.' } };
+    }
   });
 }

@@ -887,3 +887,67 @@ body:has(.faixa-suporte) .tema-troca {
   font-size: var(--t-xs);
   color: var(--texto-apoio);
 }
+
+/* ---------------------------------------------------------------------
+   O ESTADO DA PONTE COM A UAZAPI
+
+   Mesma gramática dos cartões da rede: verde é "funciona agora",
+   vermelho é "não funciona", e cinza é "ainda não perguntei" — que NÃO
+   pode parecer falha, senão ensina a ignorar o vermelho.
+   ------------------------------------------------------------------- */
+.plt-ponte {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  margin-bottom: var(--e-5);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--fio);
+  border-left: 3px solid var(--fio-forte);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+}
+.plt-ponte-texto {
+  display: grid;
+  gap: 2px;
+  font-size: var(--t-sm);
+}
+.plt-ponte-texto strong {
+  color: var(--texto);
+}
+.plt-ponte-texto span {
+  color: var(--texto-apoio);
+}
+.plt-ponte-ponto {
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--fio-forte);
+  flex: none;
+}
+
+.plt-ponte.viva {
+  border-left-color: var(--ok);
+}
+.plt-ponte.viva .plt-ponte-ponto {
+  background: var(--ok);
+  animation: rede-pulso 2.4s var(--saida) infinite;
+}
+.plt-ponte.viva .plt-ponte-texto strong {
+  color: var(--ok);
+}
+
+.plt-ponte.morta {
+  border-left-color: var(--erro);
+}
+.plt-ponte.morta .plt-ponte-ponto {
+  background: var(--erro);
+}
+.plt-ponte.morta .plt-ponte-texto strong {
+  color: var(--erro);
+}
+
+.plt-ponte.testando .plt-ponte-ponto {
+  background: var(--teal);
+  animation: rede-pulso 1s var(--saida) infinite;
+}

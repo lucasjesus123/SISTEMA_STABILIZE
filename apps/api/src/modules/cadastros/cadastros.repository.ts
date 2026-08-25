@@ -362,6 +362,10 @@ export async function criarUsuario(
     cor: string | null;
     areas: string[] | null;
     hash: string;
+    /* `true` quando a senha foi GERADA — viajou por telefone e quem
+       cadastrou a conhece. `false` quando foi escolhida na hora, com a
+       pessoa junto. */
+    trocarSenha: boolean;
   },
 ): Promise<{ id: string }> {
   const { rows } = await client.query<{ id: string }>(
@@ -370,7 +374,7 @@ export async function criarUsuario(
        ninguém. */
     `INSERT INTO users (tenant_id, email, password_hash, full_name, role, phone, cor, areas,
                         must_change_password)
-     VALUES ($1,$2,$3,$4,$5::user_role,$6,$7,$8,true)
+     VALUES ($1,$2,$3,$4,$5::user_role,$6,$7,$8,$9)
      RETURNING id`,
     [
       tenantId,
@@ -381,6 +385,7 @@ export async function criarUsuario(
       dados.telefone,
       dados.cor,
       dados.areas,
+      dados.trocarSenha,
     ],
   );
   return rows[0]!;
@@ -460,13 +465,14 @@ export async function redefinirSenha(
   client: TenantClient,
   id: string,
   hash: string,
+  trocarSenha = true,
 ): Promise<boolean> {
   const { rowCount } = await client.query(
     `UPDATE users
-        SET password_hash = $2, password_changed_at = now(), must_change_password = true,
+        SET password_hash = $2, password_changed_at = now(), must_change_password = $3,
             failed_login_count = 0, locked_until = NULL
       WHERE id = $1 AND role <> 'STUDENT'`,
-    [id, hash],
+    [id, hash, trocarSenha],
   );
   if ((rowCount ?? 0) > 0) {
     await client.query(

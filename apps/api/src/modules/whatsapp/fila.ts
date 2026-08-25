@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { getPool, withTenant } from '../../db/pool.js';
 import { env } from '../../config/env.js';
-import { enviarTexto } from './uazapi.js';
+import { configuracao, enviarTexto } from './uazapi.js';
 import { decifrar } from './segredo.js';
 
 /**
@@ -50,7 +50,11 @@ export interface ResultadoDaFila {
 export async function esvaziarFila(log: FastifyBaseLogger): Promise<ResultadoDaFila> {
   const total: ResultadoDaFila = { enviadas: 0, falhas: 0, descartadas: 0, semInstancia: 0 };
 
-  if (env().UAZAPI_BASE_URL === undefined) {
+  /* PELA CONFIGURAÇÃO EFETIVA, e não só pela variável de ambiente: a
+     integração passou a poder ser configurada no painel da plataforma, e
+     olhar só o ambiente deixaria a fila parada para quem configurou por
+     lá — sem erro, sem log, sem nada acontecendo. */
+  if ((await configuracao()).base === null) {
     log.debug('uazapi não configurado; fila do WhatsApp parada');
     return total;
   }

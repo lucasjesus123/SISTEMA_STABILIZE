@@ -263,7 +263,9 @@ function Linha({
                     )
                   ) {
                     void agir(() =>
-                      api.redefinirSenhaDeUsuario(u.id).then((r) => aoGerarSenha(r.data.senhaProvisoria)),
+                      api
+                        .redefinirSenhaDeUsuario(u.id)
+                        .then((r) => aoGerarSenha(r.data.senhaProvisoria ?? '')),
                     );
                   }
                 }}
@@ -336,6 +338,14 @@ function Formulario({
      existia tem. A tela guarda os dois estados separados de propósito:
      "não recortei" e "recortei para nenhuma" são coisas diferentes, e a
      segunda é um erro que o formulário impede. */
+  /* GERAR OU DIGITAR. A senha gerada tem uma propriedade que a digitada
+     não tem — nem quem cadastrou sabe a definitiva, porque a troca é
+     obrigatória no primeiro acesso — e é por isso que ela continua sendo
+     o padrão. Mas ditar catorze caracteres aleatórios por telefone é ver
+     a pessoa errar três vezes, e quem opera precisa poder combinar a
+     senha ali mesmo. */
+  const [senhaModo, setSenhaModo] = useState<'gerar' | 'definir'>('gerar');
+  const [senha, setSenha] = useState('');
   const [recortar, setRecortar] = useState(usuario?.areas != null);
   const [areas, setAreas] = useState<string[]>(usuario?.areas ?? []);
   const [erro, setErro] = useState<string | null>(null);
@@ -361,6 +371,10 @@ function Formulario({
 
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
+    if (novo && senhaModo === 'definir' && senha.trim().length < 10) {
+      setErro('A senha precisa de pelo menos 10 caracteres.');
+      return;
+    }
     if (recortar && areas.length === 0) {
       setErro('Marque ao menos uma seção — ou deixe "tudo do papel" para não recortar.');
       return;
@@ -376,8 +390,14 @@ function Formulario({
         areas: recortar ? areas : null,
       };
       if (novo) {
-        const r = await api.criarUsuario({ ...dados, email: email.trim() });
-        aoSalvar({ nome, senha: r.data.senhaProvisoria });
+        const r = await api.criarUsuario({
+          ...dados,
+          email: email.trim(),
+          senha: senhaModo === 'definir' ? senha : null,
+        });
+        /* A escolhida não volta do servidor — quem cadastrou acabou de
+           digitá-la. Só a gerada precisa da tela que mostra uma vez. */
+        aoSalvar(r.data.senhaProvisoria === null ? null : { nome, senha: r.data.senhaProvisoria });
       } else {
         await api.salvarUsuario(usuario.id, dados);
         aoSalvar(null);
@@ -397,7 +417,7 @@ function Formulario({
         <h1>{novo ? 'Cadastrar pessoa' : `Editar ${usuario.nome}`}</h1>
         <p>
           {novo
-            ? 'O acesso é criado com uma senha provisória, mostrada uma única vez ao salvar.'
+            ? 'Você escolhe a senha ou deixa o sistema gerar uma provisória — e marca o que esta pessoa enxerga.'
             : 'O e-mail não muda por aqui — ele é o login, e trocá-lo derrubaria o acesso.'}
         </p>
       </div>
@@ -472,6 +492,63 @@ function Formulario({
             É por ela que os horários desta pessoa são reconhecidos no calendário.
           </span>
         </fieldset>
+
+        {novo && (
+          <fieldset className="campo campo-cheia eq-acessos">
+            <legend className="campo-rotulo">Senha de acesso</legend>
+
+            <label className="eq-tudo">
+              <input
+                type="radio"
+                name="senha-modo"
+                checked={senhaModo === 'gerar'}
+                onChange={() => setSenhaModo('gerar')}
+              />
+              <span>
+                <strong>Gerar uma provisória</strong>
+                <span className="campo-dica">
+                  Aparece uma única vez ao salvar, e a pessoa é obrigada a trocá-la no primeiro
+                  acesso. Nem você fica sabendo a senha definitiva dela.
+                </span>
+              </span>
+            </label>
+
+            <label className="eq-tudo">
+              <input
+                type="radio"
+                name="senha-modo"
+                checked={senhaModo === 'definir'}
+                onChange={() => setSenhaModo('definir')}
+              />
+              <span>
+                <strong>Eu defino agora</strong>
+                <span className="campo-dica">
+                  Para combinar a senha com a pessoa na hora. Ela entra direto, sem tela de troca.
+                </span>
+              </span>
+            </label>
+
+            {senhaModo === 'definir' && (
+              <label className="campo eq-senha-campo">
+                <span className="campo-rotulo">Senha</span>
+                <input
+                  type="text"
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
+                  autoComplete="off"
+                  placeholder="pelo menos 10 caracteres"
+                />
+                {/* VISÍVEL, e não mascarada: quem digita aqui está
+                    combinando a senha com alguém do lado, e um campo de
+                    pontinhos faz errar exatamente no momento em que ler o
+                    que se escreveu é o ponto. */}
+                <span className="campo-dica">
+                  Fica visível de propósito — é para você conferir antes de passar adiante.
+                </span>
+              </label>
+            )}
+          </fieldset>
+        )}
 
         {/* ==================================================
             O QUE ESTA PESSOA ENXERGA
