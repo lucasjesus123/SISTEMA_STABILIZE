@@ -1209,6 +1209,7 @@ function EditarUsuario({
   aoSalvar: () => void;
   aoRedefinir: (u: plt.UsuarioDaEmpresa) => void;
 }): ReactNode {
+  const [removendo, setRemovendo] = useState(false);
   const [nome, setNome] = useState(usuario.nome);
   const [email, setEmail] = useState(usuario.email);
   const [papel, setPapel] = useState<'OWNER' | 'ADMIN'>(
@@ -1219,6 +1220,26 @@ function EditarUsuario({
   const [enviando, setEnviando] = useState(false);
 
   const trocouEmail = email.trim().toLowerCase() !== usuario.email.toLowerCase();
+
+  const remover = async (): Promise<void> => {
+    if (
+      !window.confirm(
+        `Remover a conta de ${usuario.nome} (${usuario.email}) desta academia?\n\nEla deixa de aparecer na lista. Se a pessoa já atendeu aluno, o sistema recusa e explica.`,
+      )
+    ) {
+      return;
+    }
+    setErro(null);
+    setRemovendo(true);
+    try {
+      await plt.removerUsuario(usuario.id);
+      aoSalvar();
+    } catch (x) {
+      setErro(x instanceof plt.ErroPlataforma ? x.message : 'Não foi possível remover.');
+    } finally {
+      setRemovendo(false);
+    }
+  };
 
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -1301,6 +1322,26 @@ function EditarUsuario({
           </button>
           <button type="submit" className="botao-acao" disabled={enviando}>
             {enviando ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+
+        {/* SEPARADO DO RESTO, no fim. Apagar uma conta não divide espaço
+            com "Salvar", que é o botão em que a mão cai por hábito. */}
+        <div className="plt-perigo campo-cheia">
+          <div>
+            <h3 className="plt-titulo">Remover do sistema</h3>
+            <p className="plt-sub">
+              A conta some da lista desta academia. Quem já atendeu aluno não pode ser removido —
+              nesse caso, desmarque "Conta ativa" acima.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="botao-perigo"
+            disabled={enviando || removendo}
+            onClick={() => void remover()}
+          >
+            {removendo ? 'Removendo…' : 'Remover'}
           </button>
         </div>
       </form>
@@ -1985,6 +2026,7 @@ function rotuloAcao(a: string): string {
     'plataforma.senha_redefinida': 'redefiniu senha',
     'plataforma.empresa_excluida': 'EXCLUIU academia',
     'plataforma.usuario_editado': 'editou usuário',
+    'plataforma.usuario_removido': 'removeu usuário',
     'plataforma.usuario_ativado': 'ativou usuário',
     'plataforma.usuario_desativado': 'desativou usuário',
     'plataforma.entrou_como': 'entrou como usuário',

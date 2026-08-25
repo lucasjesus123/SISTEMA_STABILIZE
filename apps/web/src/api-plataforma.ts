@@ -333,6 +333,20 @@ export const salvarUsuario = (
   dados: { nome: string; email: string; papel: 'OWNER' | 'ADMIN' },
 ) => api<{ ok: boolean }>(`/usuarios/${usuarioId}`, { method: 'PUT', body: JSON.stringify(dados) });
 
+/**
+ * Apaga a conta de um gestor.
+ *
+ * O servidor recusa quando a pessoa já atendeu aluno — evolução, treino,
+ * agenda e comissão são ON DELETE RESTRICT, porque documento assinado
+ * não pode ficar sem autor — e quando ela é a única proprietária ativa.
+ * Nos dois casos a mensagem diz o que fazer no lugar.
+ */
+export const removerUsuario = (usuarioId: string) =>
+  api<{ ok: boolean; data: { nome: string | null; email: string | null } }>(
+    `/usuarios/${usuarioId}`,
+    { method: 'DELETE' },
+  );
+
 export const redefinirSenha = (usuarioId: string) =>
   api<{ data: { senhaProvisoria: string } }>(`/usuarios/${usuarioId}/senha`, { method: 'POST' });
 

@@ -49,6 +49,25 @@ const loginSchema = z.object({
 
 const idParam = z.object({ id: z.string().uuid('Identificador inválido') });
 
+/**
+ * A trava está no banco (031) e a explicação está aqui, uma vez só.
+ *
+ * O dono do serviço não pode ter conta dentro de academia nenhuma, e a
+ * razão não é só de aparência: o login tenta a plataforma PRIMEIRO, então
+ * um e-mail de operador nunca chega na porta da academia. A conta
+ * nasceria morta — inalcançável por quem a criou, e visível como
+ * proprietário na lista que o cliente enxerga.
+ */
+const OPERADOR_NAO_VIRA_USUARIO =
+  'Este e-mail é o de um operador da plataforma e não pode ter conta dentro de uma academia. ' +
+  'Para dar suporte, use "Entrar como" — aquele acesso fica registrado no histórico da academia.';
+
+/** A exceção que o 031 levanta chega aqui como 23514 com esta mensagem. */
+function ehOperadorVirandoUsuario(erro: unknown): boolean {
+  const e = erro as { code?: string; message?: string };
+  return e.code === '23514' && (e.message ?? '').includes('operador_nao_vira_usuario');
+}
+
 const empresaSchema = z.object({
   nome: z.string().trim().min(2, 'Informe o nome da academia.').max(120),
   slug: z
@@ -336,6 +355,7 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
       /* 23505 é violação de unicidade. O slug é o campo com índice
          único que o operador digita, então a mensagem aponta para ele em
          vez de devolver "erro interno". */
+      if (ehOperadorVirandoUsuario(erro)) throw badRequest(OPERADOR_NAO_VIRA_USUARIO);
       if ((erro as { code?: string }).code === '23505') {
         throw conflict('Já existe uma academia com este identificador (slug).');
       }
@@ -490,6 +510,7 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
         dados.papel,
       );
     } catch (erro) {
+      if (ehOperadorVirandoUsuario(erro)) throw badRequest(OPERADOR_NAO_VIRA_USUARIO);
       if ((erro as { code?: string }).code === '23505') {
         throw conflict('Já existe um usuário com este e-mail nesta academia.');
       }
@@ -532,6 +553,7 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
 
     if (recusa === 'nao_encontrado') throw notFound('Usuário');
     if (recusa === 'papel_invalido') throw badRequest('Papel inválido.');
+    if (recusa === 'operador_nao_vira_usuario') throw badRequest(OPERADOR_NAO_VIRA_USUARIO);
     if (recusa === 'ultimo_dono') {
       /* A academia ficaria sem proprietário, e proprietário é quem pode
          nomear outro. Sem esta trava a saída seria abrir um chamado. */
@@ -545,6 +567,43 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
       papel: dados.papel,
     });
     return { ok: true };
+  });
+
+  /* ------------------------------------------------------------------
+   * DELETE /api/plataforma/usuarios/:id
+   *
+   * Apaga a conta de um gestor. Existe por causa das contas que a trava
+   * do 031 passou a impedir e que já estavam criadas — a do próprio dono
+   * do serviço, entre elas: desativar deixa a linha na lista que o
+   * cliente enxerga, e o que se quer é que ela suma de lá.
+   *
+   * QUEM ATENDEU ALUNO NÃO SAI, e não é esta rota que decide: as chaves
+   * de `evolutions`, `workout_plans`, `appointments` e `commissions` são
+   * RESTRICT, porque documento assinado não pode ficar sem autor. O banco
+   * recusa e a resposta manda desativar.
+   * ---------------------------------------------------------------- */
+  app.delete('/usuarios/:id', async (request) => {
+    const { id: adminId } = await operador(request);
+    const { id } = idParam.parse(request.params);
+
+    const r = await repo.removerGestor(id);
+
+    if (!r.ok) {
+      if (r.motivo === 'nao_encontrado') throw notFound('Usuário');
+      if (r.motivo === 'ultimo_dono') {
+        throw badRequest(
+          'Esta é a única conta de proprietário ativa da academia. Promova outra pessoa a proprietário antes de remover esta.',
+        );
+      }
+      throw badRequest(
+        'Esta conta já atendeu aluno — assinou evolução, montou treino ou tem horário na agenda — e apagá-la deixaria esses registros sem autor. Desative a conta: ela deixa de entrar e o histórico continua de pé.',
+      );
+    }
+
+    await repo.registrar(adminId, 'plataforma.usuario_removido', null, r.email, request.ip, {
+      nome: r.nome,
+    });
+    return { ok: true, data: { nome: r.nome, email: r.email } };
   });
 
   app.post('/usuarios/:id/senha', async (request) => {

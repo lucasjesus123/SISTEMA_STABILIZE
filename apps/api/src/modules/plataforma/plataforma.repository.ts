@@ -463,7 +463,11 @@ export async function ativarGestor(userId: string, ativo: boolean): Promise<bool
  * sistema que ele não pode contornar, e as duas viravam a mesma tela
  * cinza se a função só dissesse "não".
  */
-export type RecusaAoEditar = 'papel_invalido' | 'nao_encontrado' | 'ultimo_dono';
+export type RecusaAoEditar =
+  | 'papel_invalido'
+  | 'nao_encontrado'
+  | 'ultimo_dono'
+  | 'operador_nao_vira_usuario';
 
 export async function editarGestor(
   userId: string,
@@ -479,6 +483,36 @@ export async function editarGestor(
     const r = rows[0];
     if (r === undefined) return 'nao_encontrado';
     return r.ok ? null : (r.motivo ?? 'nao_encontrado');
+  });
+}
+
+export interface ResultadoDaRemocao {
+  ok: boolean;
+  motivo: 'nao_encontrado' | 'ultimo_dono' | 'tem_historico' | null;
+  nome: string | null;
+  email: string | null;
+}
+
+/**
+ * Apaga a conta de um gestor.
+ *
+ * Ver o comentário da função no 031: quem assinou evolução, montou
+ * treino, tem horário na agenda ou comissão NÃO sai — as chaves são
+ * RESTRICT, e um documento assinado não pode ficar sem autor. Sai a
+ * conta que nunca fez nada, que é o caso das contas criadas por engano.
+ */
+export async function removerGestor(userId: string): Promise<ResultadoDaRemocao> {
+  return withoutTenantContext('cron', async (client) => {
+    const { rows } = await client.query<{
+      ok: boolean;
+      motivo: ResultadoDaRemocao['motivo'];
+      nome: string | null;
+      email: string | null;
+    }>('SELECT * FROM plataforma_remover_usuario($1)', [userId]);
+
+    const r = rows[0];
+    if (r === undefined) return { ok: false, motivo: 'nao_encontrado', nome: null, email: null };
+    return r;
   });
 }
 

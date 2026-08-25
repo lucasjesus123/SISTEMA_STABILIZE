@@ -749,6 +749,188 @@ suite('Painel da plataforma', () => {
   });
 
   /* ==================================================================
+   * O dono do serviço não existe dentro de academia nenhuma
+   *
+   * A separação sempre foi de tabela — `platform_admins` não é `users` —,
+   * e por isso o operador nunca apareceu na lista de usuários de empresa
+   * alguma. O que faltava era impedir que o MESMO E-MAIL fosse usado para
+   * criar uma conta de academia: foi assim que o e-mail do dono do
+   * serviço acabou figurando como PROPRIETÁRIO na lista que o cliente vê.
+   *
+   * E aquela conta nem funcionava: o login tenta a plataforma primeiro,
+   * então um e-mail de operador nunca chega na porta da academia.
+   * ================================================================ */
+
+  it('o operador não aparece na lista de usuários de academia nenhuma', async () => {
+    const { token } = await entrarNoPainel();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/plataforma/empresas/${ids.tenant}/usuarios`,
+      headers: como(token),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain(ids.emailOperador);
+  });
+
+  it('não deixa cadastrar academia com o e-mail do operador como responsável', async () => {
+    const { token } = await entrarNoPainel();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/plataforma/empresas',
+      headers: como(token),
+      payload: {
+        nome: 'Academia do Próprio Dono',
+        slug: `dono-${ids.sufixo}`,
+        donoNome: 'Operador Disfarçado',
+        donoEmail: ids.emailOperador,
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain('Entrar como');
+
+    /* E NÃO DEIXOU A ACADEMIA PELA METADE. A academia é criada antes do
+       usuário na mesma função; sem a trava vir primeiro, a recusa
+       deixaria um tenant órfão a cada tentativa. */
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/plataforma/empresas',
+      headers: como(token),
+    });
+    expect((lista.json() as { data: { slug: string }[] }).data.some((e) => e.slug === `dono-${ids.sufixo}`)).toBe(
+      false,
+    );
+  });
+
+  it('não deixa nomear o operador como gestor de uma academia', async () => {
+    const { token } = await entrarNoPainel();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/plataforma/empresas/${ids.tenant}/gestores`,
+      headers: como(token),
+      payload: { nome: 'Operador Disfarçado', email: ids.emailOperador, papel: 'ADMIN' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('nem por renomeação: um gestor não vira o operador trocando o e-mail', async () => {
+    /* A trava do cadastro sozinha seria contornável sem má intenção:
+       cria-se o gestor com um e-mail qualquer e depois troca-se para o do
+       operador na janela de edição. */
+    const { token } = await entrarNoPainel();
+    const criado = await app.inject({
+      method: 'POST',
+      url: `/api/plataforma/empresas/${ids.tenant}/gestores`,
+      headers: como(token),
+      payload: {
+        nome: 'Gestor Comum',
+        email: `comum-${ids.sufixo}@plataforma.test`,
+        papel: 'ADMIN',
+      },
+    });
+    expect(criado.statusCode).toBe(201);
+    const gestorId = (criado.json() as { data: { id: string } }).data.id;
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/plataforma/usuarios/${gestorId}`,
+      headers: como(token),
+      payload: { nome: 'Gestor Comum', email: ids.emailOperador, papel: 'ADMIN' },
+    });
+    expect(res.statusCode).toBe(400);
+
+    /* E a conta que ele acabou de criar sai limpa: nunca atendeu
+       ninguém. É o caminho para tirar da lista as contas que a trava
+       passou a impedir e que já estavam criadas. */
+    const removida = await app.inject({
+      method: 'DELETE',
+      url: `/api/plataforma/usuarios/${gestorId}`,
+      headers: como(token),
+    });
+    expect(removida.statusCode).toBe(200);
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: `/api/plataforma/empresas/${ids.tenant}/usuarios`,
+      headers: como(token),
+    });
+    expect(lista.body).not.toContain(`comum-${ids.sufixo}@plataforma.test`);
+  });
+
+  it('não remove a única proprietária da academia', async () => {
+    const { token } = await entrarNoPainel();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/plataforma/usuarios/${ids.donoId}`,
+      headers: como(token),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain('proprietário');
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: `/api/plataforma/empresas/${ids.tenant}/usuarios`,
+      headers: como(token),
+    });
+    expect(lista.body).toContain(ids.emailDono);
+  });
+
+  it('não remove quem já atendeu aluno — manda desativar', async () => {
+    const { token } = await entrarNoPainel();
+
+    const criado = await app.inject({
+      method: 'POST',
+      url: `/api/plataforma/empresas/${ids.tenant}/gestores`,
+      headers: como(token),
+      payload: {
+        nome: 'Administradora Que Atendeu',
+        email: `atendeu-${ids.sufixo}@plataforma.test`,
+        papel: 'ADMIN',
+      },
+    });
+    const quemAtendeu = (criado.json() as { data: { id: string } }).data.id;
+
+    /* Um treino assinado por ela. `workout_plans.professional_id` é ON
+       DELETE RESTRICT justamente porque documento assinado não pode
+       ficar sem autor — e é o banco, não a rota, que garante isso. */
+    const aluno = await comTenant(ids.tenant, async (c) => {
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO students (tenant_id, full_name) VALUES ($1,'Aluno do Treino') RETURNING id`,
+        [ids.tenant],
+      );
+      const alunoId = r.rows[0]!.id;
+      await c.query(
+        `INSERT INTO workout_plans (tenant_id, student_id, professional_id, name, starts_on)
+         VALUES ($1,$2,$3,'Treino A', current_date)`,
+        [ids.tenant, alunoId, quemAtendeu],
+      );
+      return alunoId;
+    });
+    expect(aluno).toBeDefined();
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/plataforma/usuarios/${quemAtendeu}`,
+      headers: como(token),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain('Desative');
+
+    /* A conta continua lá, e o treino também: recusar não pode ter
+       apagado metade do caminho. */
+    const lista = await app.inject({
+      method: 'GET',
+      url: `/api/plataforma/empresas/${ids.tenant}/usuarios`,
+      headers: como(token),
+    });
+    expect(lista.body).toContain(`atendeu-${ids.sufixo}@plataforma.test`);
+
+    const treinos = await comTenant(ids.tenant, (c) =>
+      c.query('SELECT 1 FROM workout_plans WHERE professional_id = $1', [quemAtendeu]),
+    );
+    expect(treinos.rowCount).toBe(1);
+  });
+
+  /* ==================================================================
    * Excluir a academia
    *
    * A única ação do sistema que destrói dado de cliente. Os testes daqui
