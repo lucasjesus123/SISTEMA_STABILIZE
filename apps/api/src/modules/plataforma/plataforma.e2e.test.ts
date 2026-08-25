@@ -536,6 +536,216 @@ suite('Painel da plataforma', () => {
   });
 
   /* ==================================================================
+   * Editar o usuário da academia
+   * ================================================================ */
+
+  it('edita nome, e-mail e papel — e a pessoa passa a entrar pelo e-mail novo', async () => {
+    const { token } = await entrarNoPainel();
+
+    /* Um segundo gestor, para o dono original não ser o único dono
+       ativo: rebaixá-lo esbarraria na trava do último proprietário, que
+       tem teste próprio logo abaixo. */
+    const emailSocio = `socio-${ids.sufixo}@plataforma.test`;
+    const criado = await app.inject({
+      method: 'POST',
+      url: `/api/plataforma/empresas/${ids.tenant}/gestores`,
+      headers: como(token),
+      payload: { nome: 'Sócio Silva', email: emailSocio, papel: 'OWNER' },
+    });
+    expect(criado.statusCode).toBe(201);
+    const socioId = (criado.json() as { data: { id: string } }).data.id;
+
+    const emailNovo = `socio-novo-${ids.sufixo}@plataforma.test`;
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/plataforma/usuarios/${socioId}`,
+      headers: como(token),
+      payload: { nome: 'Sócia Andrade', email: emailNovo, papel: 'ADMIN' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: `/api/plataforma/empresas/${ids.tenant}/usuarios`,
+      headers: como(token),
+    });
+    const u = (lista.json() as { data: { id: string; nome: string; email: string; papel: string }[] })
+      .data.find((x) => x.id === socioId);
+    expect(u).toMatchObject({ nome: 'Sócia Andrade', email: emailNovo, papel: 'ADMIN' });
+
+    /* O QUE O TESTE REALMENTE GUARDA: o e-mail é a identidade de login.
+       Trocar o campo sem que o login acompanhe deixaria a pessoa de fora
+       do sistema com um cadastro que parece certo na tela. */
+    const senha = (
+      (await app.inject({
+        method: 'POST',
+        url: `/api/plataforma/usuarios/${socioId}/senha`,
+        headers: como(token),
+      })).json() as { data: { senhaProvisoria: string } }
+    ).data.senhaProvisoria;
+
+    const entrou = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: emailNovo, password: senha, tenantSlug: ids.slug },
+    });
+    expect(entrou.statusCode).toBe(200);
+  });
+
+  it('não deixa a academia sem proprietário', async () => {
+    const { token } = await entrarNoPainel();
+
+    /* O dono original é agora o único OWNER ativo — o sócio virou ADMIN
+       no teste anterior. Rebaixá-lo criaria uma academia onde ninguém
+       pode nomear outro dono, e a saída seria um chamado. */
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/plataforma/usuarios/${ids.donoId}`,
+      headers: como(token),
+      payload: { nome: 'Dono da Academia', email: ids.emailDono, papel: 'ADMIN' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain('proprietário');
+
+    /* E não mexeu em nada: uma recusa que já tivesse gravado metade da
+       alteração seria pior do que não recusar. */
+    const lista = await app.inject({
+      method: 'GET',
+      url: `/api/plataforma/empresas/${ids.tenant}/usuarios`,
+      headers: como(token),
+    });
+    const dono = (lista.json() as { data: { id: string; papel: string }[] }).data.find(
+      (x) => x.id === ids.donoId,
+    );
+    expect(dono!.papel).toBe('OWNER');
+  });
+
+  it('recusa e-mail que já é de outra pessoa da mesma academia', async () => {
+    const { token } = await entrarNoPainel();
+    const outro = await app.inject({
+      method: 'POST',
+      url: `/api/plataforma/empresas/${ids.tenant}/gestores`,
+      headers: como(token),
+      payload: {
+        nome: 'Terceiro Nome',
+        email: `terceiro-${ids.sufixo}@plataforma.test`,
+        papel: 'ADMIN',
+      },
+    });
+    const outroId = (outro.json() as { data: { id: string } }).data.id;
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/plataforma/usuarios/${outroId}`,
+      headers: como(token),
+      payload: { nome: 'Terceiro Nome', email: ids.emailDono, papel: 'ADMIN' },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  /* ==================================================================
+   * Excluir a academia
+   *
+   * A única ação do sistema que destrói dado de cliente. Os testes daqui
+   * existem para as DUAS TRANCAS não sumirem numa refatoração: elas são
+   * duas linhas de guarda que passariam despercebidas no diff, e sem
+   * elas um clique errado na lista apaga uma academia inteira.
+   * ================================================================ */
+
+  it('não exclui academia que ainda está no ar', async () => {
+    const { token } = await entrarNoPainel();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/plataforma/empresas/${ids.tenant}`,
+      headers: como(token),
+      payload: { confirmacao: ids.slug },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain('Suspenda');
+
+    const ainda = await comTenant(ids.tenant, (c) =>
+      c.query('SELECT 1 FROM tenants WHERE id = $1', [ids.tenant]),
+    );
+    expect(ainda.rowCount).toBe(1);
+  });
+
+  it('exclui a academia suspensa quando o identificador confere, e leva os dados junto', async () => {
+    const { token } = await entrarNoPainel();
+
+    /* Uma academia descartável, criada pela própria API: excluir a
+       academia principal levaria junto o resto da suíte. */
+    const slug = `descartavel-${ids.sufixo}`;
+    const criada = await app.inject({
+      method: 'POST',
+      url: '/api/plataforma/empresas',
+      headers: como(token),
+      payload: {
+        nome: 'Academia Descartável',
+        slug,
+        donoNome: 'Dono Passageiro',
+        donoEmail: `passageiro-${ids.sufixo}@plataforma.test`,
+      },
+    });
+    expect(criada.statusCode).toBe(201);
+    const empresaId = (criada.json() as { data: { empresaId: string } }).data.empresaId;
+
+    await comTenant(empresaId, (c) =>
+      c.query(`INSERT INTO students (tenant_id,full_name) VALUES ($1,'Aluno Que Some')`, [empresaId]),
+    );
+
+    /* Suspender primeiro — é o que a trava exige. */
+    const suspensa = await app.inject({
+      method: 'POST',
+      url: `/api/plataforma/empresas/${empresaId}/situacao`,
+      headers: como(token),
+      payload: { ativa: false, motivo: 'encerrou o contrato' },
+    });
+    expect(suspensa.statusCode).toBe(200);
+
+    /* O identificador errado não passa, mesmo com a academia suspensa.
+       Confirmar com "sim" é reflexo; digitar o slug é leitura. */
+    const errado = await app.inject({
+      method: 'DELETE',
+      url: `/api/plataforma/empresas/${empresaId}`,
+      headers: como(token),
+      payload: { confirmacao: `${slug}-quase` },
+    });
+    expect(errado.statusCode).toBe(400);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/plataforma/empresas/${empresaId}`,
+      headers: como(token),
+      payload: { confirmacao: slug },
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { data: { alunos: number } }).data.alunos).toBe(1);
+
+    /* Foi mesmo, e levou junto: as chaves são ON DELETE CASCADE, e é
+       essa cascata que faz a exclusão significar o que promete. */
+    const sobrou = await comTenant(empresaId, async (c) => ({
+      tenant: (await c.query('SELECT 1 FROM tenants WHERE id = $1', [empresaId])).rowCount,
+      alunos: (await c.query('SELECT 1 FROM students WHERE tenant_id = $1', [empresaId])).rowCount,
+      usuarios: (await c.query('SELECT 1 FROM users WHERE tenant_id = $1', [empresaId])).rowCount,
+    }));
+    expect(sobrou).toEqual({ tenant: 0, alunos: 0, usuarios: 0 });
+
+    /* O REGISTRO SOBREVIVE À ACADEMIA. `platform_audit.tenant_id` não
+       tem chave estrangeira justamente para isto: quem excluiu, quando,
+       e o tamanho do que foi apagado continuam legíveis depois que não
+       há mais nada para juntar à linha. */
+    const historico = await app.inject({
+      method: 'GET',
+      url: '/api/plataforma/historico',
+      headers: como(token),
+    });
+    const linhas = (historico.json() as { data: { acao: string; alvo: string | null }[] }).data;
+    expect(linhas.some((m) => m.acao === 'plataforma.empresa_excluida' && m.alvo === slug)).toBe(
+      true,
+    );
+  });
+
+  /* ==================================================================
    * Troca de senha
    * ================================================================ */
 

@@ -348,9 +348,20 @@
   text-decoration-color: var(--fio-forte);
   transition: color var(--rapido) var(--saida);
 }
-.botao-texto:hover {
+.botao-texto:hover:not(:disabled) {
   color: var(--texto);
   text-decoration-color: currentColor;
+}
+
+/* DESABILITADO TEM DE PARECER DESABILITADO. Sem isto o botão fica
+   idêntico ao que funciona: mesma cor, mesmo sublinhado, mesmo hover. A
+   pessoa clica, não acontece nada, e ela clica de novo — o `title`
+   explica o motivo, mas ninguém para o mouse em cima de um botão que
+   parece normal para descobrir por que ele não obedece. */
+.botao-texto:disabled {
+  opacity: 0.4;
+  text-decoration: none;
+  cursor: not-allowed;
 }
 
 .mensagem-erro {

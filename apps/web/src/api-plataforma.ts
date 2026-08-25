@@ -255,6 +255,20 @@ export const salvarEmpresa = (
   dados: Omit<DadosEmpresa, 'slug' | 'donoNome' | 'donoEmail'> & { observacoes: string | null },
 ) => api<{ ok: boolean }>(`/empresas/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
 
+/**
+ * Exclui a academia inteira e tudo o que é dela.
+ *
+ * `confirmacao` é o slug digitado de novo por quem está excluindo — o
+ * servidor recusa se não bater, e recusa também se a academia ainda
+ * estiver no ar. As duas travas moram no banco; aqui elas só não são
+ * escondidas de quem lê este arquivo.
+ */
+export const excluirEmpresa = (id: string, confirmacao: string) =>
+  api<{ ok: boolean; data: { nome: string | null; alunos: number; usuarios: number } }>(
+    `/empresas/${id}`,
+    { method: 'DELETE', body: JSON.stringify({ confirmacao }) },
+  );
+
 export const definirSituacao = (id: string, ativa: boolean, motivo: string | null) =>
   api<{ ok: boolean }>(`/empresas/${id}/situacao`, {
     method: 'POST',
@@ -285,6 +299,11 @@ export const criarGestor = (
     method: 'POST',
     body: JSON.stringify(dados),
   });
+
+export const salvarUsuario = (
+  usuarioId: string,
+  dados: { nome: string; email: string; papel: 'OWNER' | 'ADMIN' },
+) => api<{ ok: boolean }>(`/usuarios/${usuarioId}`, { method: 'PUT', body: JSON.stringify(dados) });
 
 export const redefinirSenha = (usuarioId: string) =>
   api<{ data: { senhaProvisoria: string } }>(`/usuarios/${usuarioId}/senha`, { method: 'POST' });

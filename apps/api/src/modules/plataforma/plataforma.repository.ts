@@ -388,6 +388,70 @@ export async function ativarGestor(userId: string, ativo: boolean): Promise<bool
   });
 }
 
+/**
+ * Edita nome, e-mail e papel de um gestor.
+ *
+ * Devolve o motivo da recusa em vez de um booleano seco porque as
+ * recusas são diferentes entre si e o operador precisa saber qual foi:
+ * "não encontrado" é engano de link, "último dono" é uma regra do
+ * sistema que ele não pode contornar, e as duas viravam a mesma tela
+ * cinza se a função só dissesse "não".
+ */
+export type RecusaAoEditar = 'papel_invalido' | 'nao_encontrado' | 'ultimo_dono';
+
+export async function editarGestor(
+  userId: string,
+  nome: string,
+  email: string,
+  papel: 'OWNER' | 'ADMIN',
+): Promise<RecusaAoEditar | null> {
+  return withoutTenantContext('cron', async (client) => {
+    const { rows } = await client.query<{ ok: boolean; motivo: RecusaAoEditar | null }>(
+      'SELECT * FROM plataforma_editar_usuario($1,$2,$3,$4)',
+      [userId, nome, email, papel],
+    );
+    const r = rows[0];
+    if (r === undefined) return 'nao_encontrado';
+    return r.ok ? null : (r.motivo ?? 'nao_encontrado');
+  });
+}
+
+export interface ResultadoDaExclusao {
+  ok: boolean;
+  motivo: 'nao_encontrado' | 'confirmacao_errada' | 'precisa_suspender' | null;
+  nome: string | null;
+  alunos: number;
+  usuarios: number;
+}
+
+/**
+ * Exclui a academia inteira. Ver o comentário da função no 029: a
+ * academia precisa estar SUSPENSA e o chamador precisa repetir o slug.
+ * As contagens voltam para o registro de auditoria poder dizer o tamanho
+ * do que foi destruído — depois do DELETE não há mais o que contar.
+ */
+export async function excluirEmpresa(id: string, slug: string): Promise<ResultadoDaExclusao> {
+  return withoutTenantContext('cron', async (client) => {
+    const { rows } = await client.query<{
+      ok: boolean;
+      motivo: ResultadoDaExclusao['motivo'];
+      nome: string | null;
+      alunos: string;
+      usuarios: string;
+    }>('SELECT * FROM plataforma_excluir_empresa($1,$2)', [id, slug]);
+
+    const r = rows[0];
+    if (r === undefined) return { ok: false, motivo: 'nao_encontrado', nome: null, alunos: 0, usuarios: 0 };
+    return {
+      ok: r.ok,
+      motivo: r.motivo,
+      nome: r.nome,
+      alunos: Number(r.alunos),
+      usuarios: Number(r.usuarios),
+    };
+  });
+}
+
 /* --------------------------------------------------------------------
  * Configuração e diário
  * ------------------------------------------------------------------ */

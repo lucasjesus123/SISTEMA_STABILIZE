@@ -379,6 +379,49 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /* ------------------------------------------------------------------
+   * DELETE /api/plataforma/empresas/:id
+   *
+   * A ÚNICA ROTA DO SISTEMA QUE DESTRÓI DADO DE CLIENTE. Apaga a
+   * academia e, por cascata, alunos, prontuário, anamnese, financeiro,
+   * treino e anexo — vinte e sete tabelas. Não há desfazer.
+   *
+   * Duas trancas, as duas no banco (029): a academia precisa estar
+   * SUSPENSA, e quem chama precisa repetir o slug. Aqui em cima ficam só
+   * as mensagens, porque a decisão de recusar não pode depender de a
+   * API lembrar de perguntar.
+   * ---------------------------------------------------------------- */
+  app.delete('/empresas/:id', async (request) => {
+    const { id: adminId } = await operador(request);
+    const { id } = idParam.parse(request.params);
+    const { confirmacao } = z
+      .object({ confirmacao: z.string().trim().toLowerCase().min(1) })
+      .parse(request.body);
+
+    const r = await repo.excluirEmpresa(id, confirmacao);
+
+    if (!r.ok) {
+      if (r.motivo === 'nao_encontrado') throw notFound('Academia');
+      if (r.motivo === 'confirmacao_errada') {
+        throw badRequest('O identificador digitado não é o desta academia.');
+      }
+      throw badRequest(
+        'Suspenda a academia antes de excluí-la. Suspender é reversível e tira o cliente do ar na hora; excluir não tem volta.',
+      );
+    }
+
+    /* O registro sobrevive à academia: `platform_audit.tenant_id` não
+       tem chave estrangeira, de propósito. Guardar o nome e o tamanho do
+       que foi apagado é o que torna a linha legível depois que não
+       existe mais nada para juntar a ela. */
+    await repo.registrar(adminId, 'plataforma.empresa_excluida', null, confirmacao, request.ip, {
+      nome: r.nome,
+      alunos: r.alunos,
+      usuarios: r.usuarios,
+    });
+    return { ok: true, data: { nome: r.nome, alunos: r.alunos, usuarios: r.usuarios } };
+  });
+
+  /* ------------------------------------------------------------------
    * Usuários de cada empresa
    * ---------------------------------------------------------------- */
   app.get('/empresas/:id/usuarios', async (request) => {
@@ -437,6 +480,52 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
     await repo.registrar(adminId, 'plataforma.gestor_criado', id, dados.email, request.ip);
     void reply.status(201);
     return { data: { id: novoId, senhaProvisoria: provisoria } };
+  });
+
+  /* ------------------------------------------------------------------
+   * PUT /api/plataforma/usuarios/:id
+   *
+   * Nome, e-mail e papel numa chamada só — é assim que a mudança chega:
+   * "o e-mail do dono mudou e ele agora é a Ana, que era administradora".
+   * As duas travas moram no banco (029): não se deixa academia sem dono,
+   * e trocar o e-mail derruba as sessões daquela conta.
+   * ---------------------------------------------------------------- */
+  app.put('/usuarios/:id', async (request) => {
+    const { id: adminId } = await operador(request);
+    const { id } = idParam.parse(request.params);
+    const dados = z
+      .object({
+        nome: z.string().trim().min(2, 'Informe o nome.').max(160),
+        email: z.string().trim().toLowerCase().email('E-mail inválido.'),
+        papel: z.enum(['OWNER', 'ADMIN']),
+      })
+      .parse(request.body);
+
+    let recusa: repo.RecusaAoEditar | null;
+    try {
+      recusa = await repo.editarGestor(id, dados.nome, dados.email, dados.papel);
+    } catch (erro) {
+      if ((erro as { code?: string }).code === '23505') {
+        throw conflict('Já existe um usuário com este e-mail nesta academia.');
+      }
+      throw erro;
+    }
+
+    if (recusa === 'nao_encontrado') throw notFound('Usuário');
+    if (recusa === 'papel_invalido') throw badRequest('Papel inválido.');
+    if (recusa === 'ultimo_dono') {
+      /* A academia ficaria sem proprietário, e proprietário é quem pode
+         nomear outro. Sem esta trava a saída seria abrir um chamado. */
+      throw badRequest(
+        'Esta é a única conta de proprietário ativa da academia. Promova outra pessoa a proprietário antes de rebaixar esta.',
+      );
+    }
+
+    await repo.registrar(adminId, 'plataforma.usuario_editado', null, id, request.ip, {
+      email: dados.email,
+      papel: dados.papel,
+    });
+    return { ok: true };
   });
 
   app.post('/usuarios/:id/senha', async (request) => {

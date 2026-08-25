@@ -760,6 +760,439 @@ function NovaAcademia({
 }
 
 /* ====================================================================
+ * Janela de edição
+ *
+ * Uma janela e não uma página: quem edita está olhando para a lista de
+ * usuários da academia e precisa continuar vendo onde estava. Trocar de
+ * tela para mudar um e-mail faz perder o lugar, e voltar de uma tela de
+ * edição sempre deixa a dúvida de se salvou.
+ * ================================================================== */
+
+function Janela({
+  titulo,
+  descricao,
+  aoFechar,
+  children,
+}: {
+  titulo: string;
+  descricao?: string;
+  aoFechar: () => void;
+  children: ReactNode;
+}): ReactNode {
+  /* ESC FECHA. É o reflexo de quem usa teclado, e uma janela que só
+     fecha no botão obriga a procurar o botão. */
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') aoFechar();
+    };
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, [aoFechar]);
+
+  return (
+    <div className="plt-janela-fundo" onClick={aoFechar} role="presentation">
+      <div
+        className="plt-janela"
+        role="dialog"
+        aria-modal="true"
+        aria-label={titulo}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="plt-janela-topo">
+          <div>
+            <h2>{titulo}</h2>
+            {descricao !== undefined && <p className="plt-sub">{descricao}</p>}
+          </div>
+          <button type="button" className="botao-texto" onClick={aoFechar}>
+            Fechar
+          </button>
+        </div>
+        <div className="plt-janela-corpo">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------
+ * Editar o cadastro da academia
+ * ------------------------------------------------------------------ */
+
+function EditarEmpresa({
+  empresa,
+  aoFechar,
+  aoSalvar,
+}: {
+  empresa: plt.Empresa;
+  aoFechar: () => void;
+  aoSalvar: () => void;
+}): ReactNode {
+  const [f, setF] = useState({
+    nome: empresa.nome,
+    documento: empresa.documento ?? '',
+    timezone: empresa.timezone,
+    plano: empresa.plano ?? '',
+    contatoNome: empresa.contatoNome ?? '',
+    contatoEmail: empresa.contatoEmail ?? '',
+    contatoWhatsapp: mascararTelefone(empresa.contatoWhatsapp ?? ''),
+    observacoes: empresa.observacoes ?? '',
+    testeAte: empresa.testeAte ?? '',
+  });
+  const [erro, setErro] = useState<string | null>(null);
+  const [detalhes, setDetalhes] = useState<{ campo: string; problema: string }[]>([]);
+  const [enviando, setEnviando] = useState(false);
+
+  const enviar = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setErro(null);
+    setDetalhes([]);
+    setEnviando(true);
+    try {
+      await plt.salvarEmpresa(empresa.id, {
+        nome: f.nome.trim(),
+        documento: f.documento.replace(/\D/g, '') || null,
+        timezone: f.timezone.trim() || null,
+        plano: f.plano.trim() || null,
+        contatoNome: f.contatoNome.trim() || null,
+        contatoEmail: f.contatoEmail.trim() || null,
+        contatoWhatsapp: telefoneParaE164(f.contatoWhatsapp),
+        observacoes: f.observacoes.trim() || null,
+        testeAte: f.testeAte || null,
+      });
+      aoSalvar();
+    } catch (x) {
+      if (x instanceof plt.ErroPlataforma) {
+        setErro(x.message);
+        setDetalhes(x.campos);
+      } else {
+        setErro('Não foi possível salvar.');
+      }
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <Janela
+      titulo="Editar academia"
+      descricao="Vale para cobrança e contato. O que a academia mostra nos relatórios dela é configurado lá dentro."
+      aoFechar={aoFechar}
+    >
+      <form className="formulario" onSubmit={(e) => void enviar(e)} noValidate>
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Nome</span>
+          <input value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} required autoFocus />
+        </label>
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Identificador</span>
+          <input className="mono" value={empresa.slug} readOnly disabled />
+          {/* NÃO É EDITÁVEL, e o campo aparece assim mesmo: ele responde
+              a pergunta "qual é o slug desta academia?", que é o que se
+              digita para confirmar uma exclusão. Esconder o campo faria
+              procurar. */}
+          <span className="campo-dica">Não muda: aparece em endereço, integração e auditoria.</span>
+        </label>
+
+        <label className="campo campo-terco">
+          <span className="campo-rotulo">CNPJ</span>
+          <input
+            inputMode="numeric"
+            value={f.documento}
+            onChange={(e) => setF({ ...f, documento: e.target.value })}
+          />
+        </label>
+        <label className="campo campo-terco">
+          <span className="campo-rotulo">Plano</span>
+          <input
+            value={f.plano}
+            onChange={(e) => setF({ ...f, plano: e.target.value })}
+            placeholder="Essencial, Profissional…"
+          />
+        </label>
+        <label className="campo campo-terco">
+          <span className="campo-rotulo">Teste até</span>
+          <input type="date" value={f.testeAte} onChange={(e) => setF({ ...f, testeAte: e.target.value })} />
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Fuso horário</span>
+          <input
+            className="mono"
+            value={f.timezone}
+            onChange={(e) => setF({ ...f, timezone: e.target.value })}
+            placeholder="America/Sao_Paulo"
+          />
+          {/* O FUSO DECIDE QUE DIA É HOJE para esta academia: check-in,
+              vencimento, agenda e relatório contam a partir dele. Errar
+              aqui move a virada do dia da academia inteira. */}
+          <span className="campo-dica">Decide o que é "hoje" para esta academia.</span>
+        </label>
+
+        <h2 className="formulario-secao campo-cheia">Contato comercial</h2>
+        <label className="campo campo-terco">
+          <span className="campo-rotulo">Nome</span>
+          <input value={f.contatoNome} onChange={(e) => setF({ ...f, contatoNome: e.target.value })} />
+        </label>
+        <label className="campo campo-terco">
+          <span className="campo-rotulo">E-mail</span>
+          <input
+            type="email"
+            value={f.contatoEmail}
+            onChange={(e) => setF({ ...f, contatoEmail: e.target.value })}
+          />
+        </label>
+        <label className="campo campo-terco">
+          <span className="campo-rotulo">WhatsApp</span>
+          <input
+            inputMode="tel"
+            placeholder="(51) 99999-9999"
+            value={f.contatoWhatsapp}
+            onChange={(e) => setF({ ...f, contatoWhatsapp: mascararTelefone(e.target.value) })}
+          />
+        </label>
+
+        <label className="campo campo-cheia">
+          <span className="campo-rotulo">Observações</span>
+          <textarea
+            rows={3}
+            value={f.observacoes}
+            onChange={(e) => setF({ ...f, observacoes: e.target.value })}
+            placeholder="Combinado de preço, contato alternativo, o que ficou de fazer…"
+          />
+          <span className="campo-dica">Só você lê. A academia não enxerga este campo.</span>
+        </label>
+
+        {erro !== null && (
+          <div className="mensagem-erro campo-cheia" role="alert">
+            <p>{erro}</p>
+            {detalhes.length > 0 && (
+              <ul className="lista-erros">
+                {detalhes.map((d) => (
+                  <li key={d.campo}>
+                    <b>{d.campo}:</b> {d.problema}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <div className="formulario-acoes campo-cheia">
+          <button type="button" className="botao-secundario" onClick={aoFechar}>
+            Cancelar
+          </button>
+          <button type="submit" className="botao-acao" disabled={enviando}>
+            {enviando ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+      </form>
+    </Janela>
+  );
+}
+
+/* --------------------------------------------------------------------
+ * Editar o usuário
+ * ------------------------------------------------------------------ */
+
+function EditarUsuario({
+  usuario,
+  aoFechar,
+  aoSalvar,
+  aoRedefinir,
+}: {
+  usuario: plt.UsuarioDaEmpresa;
+  aoFechar: () => void;
+  aoSalvar: () => void;
+  aoRedefinir: (u: plt.UsuarioDaEmpresa) => void;
+}): ReactNode {
+  const [nome, setNome] = useState(usuario.nome);
+  const [email, setEmail] = useState(usuario.email);
+  const [papel, setPapel] = useState<'OWNER' | 'ADMIN'>(
+    usuario.papel === 'OWNER' ? 'OWNER' : 'ADMIN',
+  );
+  const [ativo, setAtivo] = useState(usuario.ativo);
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  const trocouEmail = email.trim().toLowerCase() !== usuario.email.toLowerCase();
+
+  const enviar = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setErro(null);
+    setEnviando(true);
+    try {
+      await plt.salvarUsuario(usuario.id, { nome: nome.trim(), email: email.trim(), papel });
+      /* A situação é outra rota porque é outra decisão: uma desativa a
+         conta, a outra corrige o cadastro. Salvar as duas juntas aqui é
+         conveniência da tela, não mistura de conceito. */
+      if (ativo !== usuario.ativo) await plt.definirUsuarioAtivo(usuario.id, ativo);
+      aoSalvar();
+    } catch (x) {
+      setErro(x instanceof plt.ErroPlataforma ? x.message : 'Não foi possível salvar.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <Janela titulo="Editar usuário" descricao={usuario.email} aoFechar={aoFechar}>
+      <form className="formulario" onSubmit={(e) => void enviar(e)} noValidate>
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Nome completo</span>
+          <input value={nome} onChange={(e) => setNome(e.target.value)} required autoFocus />
+        </label>
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">E-mail de acesso</span>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          {trocouEmail && (
+            /* Avisado ANTES de salvar, não depois: trocar o e-mail é
+               trocar a identidade de login, e as sessões abertas caem.
+               Quem não sabia disso descobriria pelo telefone do cliente. */
+            <span className="campo-dica plt-atencao">
+              Ao salvar, esta pessoa entra pelo e-mail novo e as sessões abertas dela caem. A senha
+              continua a mesma.
+            </span>
+          )}
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Papel</span>
+          <select value={papel} onChange={(e) => setPapel(e.target.value as 'OWNER' | 'ADMIN')}>
+            <option value="ADMIN">Administrador</option>
+            <option value="OWNER">Proprietário</option>
+          </select>
+          <span className="campo-dica">
+            Os dois enxergam tudo dentro da academia. Nenhum dos dois enxerga este painel.
+          </span>
+        </label>
+
+        <label className="campo campo-meia campo-caixa">
+          <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
+          <span>
+            Conta ativa
+            <span className="campo-dica">
+              Desativada, ela não entra e as sessões abertas são encerradas. O histórico fica.
+            </span>
+          </span>
+        </label>
+
+        {erro !== null && (
+          <p className="mensagem-erro campo-cheia" role="alert">
+            {erro}
+          </p>
+        )}
+
+        <div className="formulario-acoes campo-cheia">
+          <button
+            type="button"
+            className="botao-texto"
+            onClick={() => aoRedefinir(usuario)}
+            disabled={enviando}
+          >
+            Gerar senha provisória
+          </button>
+          <span className="plt-espaco" />
+          <button type="button" className="botao-secundario" onClick={aoFechar}>
+            Cancelar
+          </button>
+          <button type="submit" className="botao-acao" disabled={enviando}>
+            {enviando ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+      </form>
+    </Janela>
+  );
+}
+
+/* --------------------------------------------------------------------
+ * Excluir a academia
+ * ------------------------------------------------------------------ */
+
+function ExcluirAcademia({
+  empresa,
+  aoFechar,
+  aoExcluir,
+}: {
+  empresa: plt.Empresa;
+  aoFechar: () => void;
+  aoExcluir: () => void;
+}): ReactNode {
+  const [confirmacao, setConfirmacao] = useState('');
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  const bate = confirmacao.trim().toLowerCase() === empresa.slug;
+
+  const enviar = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setErro(null);
+    setEnviando(true);
+    try {
+      await plt.excluirEmpresa(empresa.id, confirmacao.trim().toLowerCase());
+      aoExcluir();
+    } catch (x) {
+      setErro(x instanceof plt.ErroPlataforma ? x.message : 'Não foi possível excluir.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <Janela titulo="Excluir academia" aoFechar={aoFechar}>
+      <form className="formulario" onSubmit={(e) => void enviar(e)} noValidate>
+        <div className="plt-perigo-aviso campo-cheia">
+          <p>
+            Isto apaga <strong>{empresa.nome}</strong> e tudo o que é dela: {empresa.alunos} aluno
+            {empresa.alunos === 1 ? '' : 's'}, {empresa.usuarios} usuário
+            {empresa.usuarios === 1 ? '' : 's'}, prontuário, anamnese, financeiro, treino e anexo.
+          </p>
+          {/* O QUE SE PERDE, EM VOZ ALTA. Um "tem certeza?" genérico é
+              respondido no reflexo; a conta do que vai embora é lida. */}
+          <p>
+            <strong>Não há como desfazer.</strong> A única volta é o backup da noite anterior.
+          </p>
+        </div>
+
+        {empresa.ativa && (
+          <p className="mensagem-erro campo-cheia" role="alert">
+            Esta academia ainda está no ar. Suspenda primeiro — suspender é reversível e tira o
+            cliente do ar na hora. Se ninguém reclamar, volte aqui.
+          </p>
+        )}
+
+        <label className="campo campo-cheia">
+          <span className="campo-rotulo">
+            Digite <span className="mono plt-destaque">{empresa.slug}</span> para confirmar
+          </span>
+          <input
+            className="mono"
+            value={confirmacao}
+            onChange={(e) => setConfirmacao(e.target.value)}
+            autoComplete="off"
+            autoFocus
+            disabled={empresa.ativa}
+          />
+        </label>
+
+        {erro !== null && (
+          <p className="mensagem-erro campo-cheia" role="alert">
+            {erro}
+          </p>
+        )}
+
+        <div className="formulario-acoes campo-cheia">
+          <button type="button" className="botao-secundario" onClick={aoFechar}>
+            Cancelar
+          </button>
+          <button type="submit" className="botao-perigo" disabled={enviando || !bate || empresa.ativa}>
+            {enviando ? 'Excluindo…' : 'Excluir para sempre'}
+          </button>
+        </div>
+      </form>
+    </Janela>
+  );
+}
+
+/* ====================================================================
  * Detalhe da academia
  * ================================================================== */
 
@@ -777,6 +1210,11 @@ function DetalheAcademia({
   const [senhaGerada, setSenhaGerada] = useState<{ email: string; senha: string } | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [novoGestor, setNovoGestor] = useState(false);
+
+  /* Uma janela de cada vez, num estado só: duas booleanas independentes
+     deixam abrir "editar" por cima de "excluir". */
+  type Janela = { tipo: 'empresa' } | { tipo: 'excluir' } | { tipo: 'usuario'; u: plt.UsuarioDaEmpresa };
+  const [janela, setJanela] = useState<Janela | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -841,6 +1279,7 @@ function DetalheAcademia({
     setOcupado(true);
     try {
       const { data } = await plt.redefinirSenha(u.id);
+      setJanela(null);
       setSenhaGerada({ email: u.email, senha: data.senhaProvisoria });
     } catch (e) {
       setErro(e instanceof plt.ErroPlataforma ? e.message : 'Não foi possível redefinir.');
@@ -866,15 +1305,58 @@ function DetalheAcademia({
             {empresa.alunosAtivos === 1 ? '' : 's'}
           </p>
         </div>
-        <button
-          type="button"
-          className={empresa.ativa ? 'botao-secundario' : 'botao-acao'}
-          onClick={() => void alternarSituacao()}
-          disabled={ocupado}
-        >
-          {empresa.ativa ? 'Suspender' : 'Reativar'}
-        </button>
+        <div className="plt-acoes-topo">
+          <button
+            type="button"
+            className="botao-secundario"
+            onClick={() => setJanela({ tipo: 'empresa' })}
+          >
+            Editar academia
+          </button>
+          <button
+            type="button"
+            className={empresa.ativa ? 'botao-secundario' : 'botao-acao'}
+            onClick={() => void alternarSituacao()}
+            disabled={ocupado}
+          >
+            {empresa.ativa ? 'Suspender' : 'Reativar'}
+          </button>
+        </div>
       </div>
+
+      {janela?.tipo === 'empresa' && (
+        <EditarEmpresa
+          empresa={empresa}
+          aoFechar={() => setJanela(null)}
+          aoSalvar={() => {
+            setJanela(null);
+            aoMudar();
+          }}
+        />
+      )}
+      {janela?.tipo === 'usuario' && (
+        <EditarUsuario
+          usuario={janela.u}
+          aoFechar={() => setJanela(null)}
+          aoRedefinir={(u) => void redefinir(u)}
+          aoSalvar={() => {
+            setJanela(null);
+            void carregar();
+            aoMudar();
+          }}
+        />
+      )}
+      {janela?.tipo === 'excluir' && (
+        <ExcluirAcademia
+          empresa={empresa}
+          aoFechar={() => setJanela(null)}
+          aoExcluir={() => {
+            setJanela(null);
+            aoMudar();
+            aoSair();
+          }}
+        />
+      )}
 
       {!empresa.ativa && (
         <div className="plt-suspensa" role="status">
@@ -961,6 +1443,19 @@ function DetalheAcademia({
                     <button
                       type="button"
                       className="botao-texto"
+                      onClick={() => setJanela({ tipo: 'usuario', u })}
+                      disabled={ocupado || (u.papel !== 'OWNER' && u.papel !== 'ADMIN')}
+                      title={
+                        u.papel !== 'OWNER' && u.papel !== 'ADMIN'
+                          ? 'A plataforma administra só proprietário e administrador. Os demais são responsabilidade da academia.'
+                          : undefined
+                      }
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="botao-texto"
                       onClick={() => void entrarComo(u)}
                       disabled={ocupado || !u.ativo || !empresa.ativa}
                     >
@@ -986,6 +1481,27 @@ function DetalheAcademia({
           </table>
         </div>
       )}
+
+      {/* NO FIM DA PÁGINA, e separado do resto. Excluir é a única ação
+          do sistema que destrói dado de cliente; ela não pode dividir
+          espaço com "Suspender" no alto, onde a mão vai por hábito. */}
+      <div className="plt-perigo">
+        <div>
+          <h2 className="plt-titulo">Excluir academia</h2>
+          <p className="plt-sub">
+            Apaga a academia e tudo o que é dela. Não tem volta e exige que ela esteja suspensa
+            antes.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="botao-perigo"
+          onClick={() => setJanela({ tipo: 'excluir' })}
+          disabled={ocupado}
+        >
+          Excluir
+        </button>
+      </div>
     </>
   );
 }
@@ -1262,6 +1778,8 @@ function rotuloAcao(a: string): string {
     'plataforma.empresa_reativada': 'reativou academia',
     'plataforma.gestor_criado': 'criou gestor',
     'plataforma.senha_redefinida': 'redefiniu senha',
+    'plataforma.empresa_excluida': 'EXCLUIU academia',
+    'plataforma.usuario_editado': 'editou usuário',
     'plataforma.usuario_ativado': 'ativou usuário',
     'plataforma.usuario_desativado': 'desativou usuário',
     'plataforma.entrou_como': 'entrou como usuário',
