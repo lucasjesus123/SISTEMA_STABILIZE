@@ -80,6 +80,7 @@ const como = (token: string) => ({ authorization: `Bearer ${token}` });
 let proximoIp = 0;
 const ipDeTeste = (): string => `203.0.113.${(proximoIp++ % 250) + 1}`;
 
+
 /** Entra no painel e devolve o access token e o cookie de refresh. */
 async function entrarNoPainel(
   senha = SENHA_OPERADOR,
@@ -533,6 +534,110 @@ suite('Painel da plataforma', () => {
     } finally {
       cliente.release();
     }
+  });
+
+  /* ==================================================================
+   * Visão da rede
+   * ================================================================ */
+
+  it('a rede acende verde para quem está usando o sistema AGORA', async () => {
+    const { token } = await entrarNoPainel();
+
+    /* UMA ACADEMIA RECÉM-NASCIDA, e não a da suíte: os testes acima já
+       entraram na conta do dono dela, e a presença fica carimbada. O que
+       este teste precisa provar é a TRANSIÇÃO de apagado para aceso, e
+       para isso o ponto de partida tem de ser apagado de verdade. */
+    const slug = `viva-${ids.sufixo}`;
+    const email = `viva-${ids.sufixo}@plataforma.test`;
+    const criada = await app.inject({
+      method: 'POST',
+      url: '/api/plataforma/empresas',
+      headers: como(token),
+      payload: { nome: 'Academia Que Acorda', slug, donoNome: 'Dono Novo', donoEmail: email },
+    });
+    expect(criada.statusCode).toBe(201);
+    const { empresaId, dono } = (
+      criada.json() as { data: { empresaId: string; dono: { senhaProvisoria: string } } }
+    ).data;
+
+    const naRede = async (): Promise<{ onlineAgora: number; ultimaAtividade: string | null }> => {
+      const r = await app.inject({
+        method: 'GET',
+        url: '/api/plataforma/rede?janela=5',
+        headers: como(token),
+      });
+      expect(r.statusCode).toBe(200);
+      const achada = (
+        r.json() as {
+          data: { id: string; onlineAgora: number; ultimaAtividade: string | null }[];
+        }
+      ).data.find((e) => e.id === empresaId);
+      if (achada === undefined) throw new Error('academia não apareceu na rede');
+      return achada;
+    };
+
+    const antes = await naRede();
+    expect(antes.onlineAgora).toBe(0);
+    expect(antes.ultimaAtividade).toBeNull();
+
+    /* Uma chamada autenticada QUALQUER carimba a presença — é o ponto:
+       consultar a agenda conta como usar o sistema, e nem `last_login_at`
+       nem `audit_log` registram isso. O login sozinho não basta: quem
+       entrou de manhã e fechou a aba tem o mesmo `last_login_at` de quem
+       está com a tela aberta agora. */
+    const entrou = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email, password: dono.senhaProvisoria, tenantSlug: slug },
+    });
+    expect(entrou.statusCode).toBe(200);
+
+    const usou = await app.inject({
+      method: 'GET',
+      url: '/api/perfil',
+      headers: como((entrou.json() as { accessToken: string }).accessToken),
+    });
+    expect(usou.statusCode).toBe(200);
+
+    const depois = await naRede();
+    expect(depois.onlineAgora).toBe(1);
+    expect(depois.ultimaAtividade).not.toBeNull();
+  });
+
+  it('uma janela curta demais não confunde "hoje de manhã" com "agora"', async () => {
+    const { token } = await entrarNoPainel();
+
+    /* Zero não é aceito — a janela mínima é um minuto —, e o teste existe
+       porque uma janela de zero devolveria verde para o banco inteiro ou
+       para ninguém, dependendo do arredondamento. */
+    const invalida = await app.inject({
+      method: 'GET',
+      url: '/api/plataforma/rede?janela=0',
+      headers: como(token),
+    });
+    expect(invalida.statusCode).toBe(422);
+  });
+
+  it('a rede devolve CONTAGEM, e nunca uma linha de aluno', async () => {
+    const { token } = await entrarNoPainel();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/plataforma/rede',
+      headers: como(token),
+    });
+    expect(res.statusCode).toBe(200);
+
+    /* A aluna existe e é reservada: o nome dela está no banco desta
+       academia e não pode atravessar para o painel do dono do serviço.
+       Este teste é a mesma guarda da listagem antiga, repetida aqui
+       porque a rota é nova e o descuido seria acrescentar "só o nome do
+       último aluno" numa consulta que já passa por eles. */
+    expect(res.body).not.toContain('Aluna Reservada');
+  });
+
+  it('a rede não abre para quem não é operador', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/plataforma/rede' });
+    expect(res.statusCode).toBe(401);
   });
 
   /* ==================================================================

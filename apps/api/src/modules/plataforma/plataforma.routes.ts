@@ -305,6 +305,25 @@ export async function plataformaRoutes(app: FastifyInstance): Promise<void> {
     return { data: await repo.listarEmpresas() };
   });
 
+  /* ------------------------------------------------------------------
+   * GET /api/plataforma/rede
+   *
+   * A rede inteira com o sinal de vida de cada academia. A tela recarrega
+   * sozinha de meio em meio minuto, então esta rota precisa ser barata:
+   * é UMA consulta, sem N+1, e devolve contagem — nunca linha de aluno.
+   *
+   * A janela vem da tela e não de uma constante aqui: o que conta como
+   * "agora" muda com o horário: às 6h da manhã, cinco minutos sem
+   * ninguém é normal.
+   * ---------------------------------------------------------------- */
+  app.get('/rede', async (request) => {
+    await operador(request);
+    const { janela } = z
+      .object({ janela: z.coerce.number().int().min(1).max(1440).default(5) })
+      .parse(request.query);
+    return { data: await repo.lerRede(janela) };
+  });
+
   app.post('/empresas', async (request, reply) => {
     const { id } = await operador(request);
     const dados = empresaSchema.parse(request.body);

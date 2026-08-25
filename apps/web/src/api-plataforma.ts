@@ -230,6 +230,34 @@ export interface Empresa {
 
 export const listarEmpresas = () => api<{ data: Empresa[] }>('/empresas');
 
+/**
+ * A academia como a Visão da Rede a mostra.
+ *
+ * `onlineAgora` é gente com ATIVIDADE nos últimos minutos, e não sessão
+ * aberta: sessão dura quatorze dias e não quer dizer ninguém olhando
+ * para a tela. É esse número que acende o verde do cartão.
+ */
+export interface NaRede {
+  id: string;
+  nome: string;
+  slug: string;
+  documento: string | null;
+  plano: string | null;
+  ativa: boolean;
+  suspensaMotivo: string | null;
+  testeAte: string | null;
+  criadaEm: string;
+  alunos: number;
+  alunosAtivos: number;
+  usuarios: number;
+  onlineAgora: number;
+  ultimaAtividade: string | null;
+  entradasHoje: number;
+}
+
+export const lerRede = (janelaMinutos: number) =>
+  api<{ data: NaRede[] }>(`/rede?janela=${janelaMinutos}`);
+
 export interface DadosEmpresa {
   nome: string;
   slug: string;

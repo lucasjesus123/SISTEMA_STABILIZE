@@ -43,6 +43,72 @@ export interface Empresa {
   usuarios: number;
 }
 
+/**
+ * A academia como o painel de rede a mostra: os mesmos números da
+ * listagem, mais o que diz se ela está VIVA agora.
+ *
+ * `onlineAgora` é gente com atividade nos últimos minutos, não sessão
+ * aberta: sessão dura quatorze dias e não significa ninguém olhando para
+ * a tela. Ver `030_presenca_super.sql`.
+ */
+export interface NaRede {
+  id: string;
+  nome: string;
+  slug: string;
+  documento: string | null;
+  plano: string | null;
+  ativa: boolean;
+  suspensaMotivo: string | null;
+  testeAte: string | null;
+  criadaEm: string;
+  alunos: number;
+  alunosAtivos: number;
+  usuarios: number;
+  onlineAgora: number;
+  ultimaAtividade: string | null;
+  entradasHoje: number;
+}
+
+export async function lerRede(janelaMinutos: number): Promise<NaRede[]> {
+  return withoutTenantContext('cron', async (client) => {
+    const { rows } = await client.query<{
+      id: string;
+      nome: string;
+      slug: string;
+      documento: string | null;
+      plano: string | null;
+      ativa: boolean;
+      suspensa_motivo: string | null;
+      teste_ate: Date | null;
+      criada_em: Date;
+      alunos: string;
+      alunos_ativos: string;
+      usuarios: string;
+      online_agora: string;
+      ultima_atividade: Date | null;
+      entradas_hoje: string;
+    }>('SELECT * FROM plataforma_rede($1)', [janelaMinutos]);
+
+    return rows.map((r) => ({
+      id: r.id,
+      nome: r.nome,
+      slug: r.slug,
+      documento: r.documento,
+      plano: r.plano,
+      ativa: r.ativa,
+      suspensaMotivo: r.suspensa_motivo,
+      testeAte: r.teste_ate === null ? null : r.teste_ate.toISOString().slice(0, 10),
+      criadaEm: r.criada_em.toISOString(),
+      alunos: Number(r.alunos),
+      alunosAtivos: Number(r.alunos_ativos),
+      usuarios: Number(r.usuarios),
+      onlineAgora: Number(r.online_agora),
+      ultimaAtividade: r.ultima_atividade?.toISOString() ?? null,
+      entradasHoje: Number(r.entradas_hoje),
+    }));
+  });
+}
+
 export interface Gestor {
   id: string;
   nome: string;

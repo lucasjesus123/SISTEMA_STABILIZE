@@ -199,7 +199,7 @@ function Painel({ operador, aoSair }: { operador: plt.Operador; aoSair: () => vo
 
   const secoes: { id: Secao; nome: string }[] = [
     { id: 'visao', nome: 'Visão geral' },
-    { id: 'empresas', nome: 'Academias' },
+    { id: 'empresas', nome: 'Visão da rede' },
     { id: 'whatsapp', nome: 'WhatsApp' },
     { id: 'historico', nome: 'Histórico' },
   ];
@@ -388,27 +388,58 @@ function quando(iso: string): string {
  * ================================================================== */
 
 function Academias(): ReactNode {
-  const [lista, setLista] = useState<plt.Empresa[] | null>(null);
+  const [rede, setRede] = useState<plt.NaRede[] | null>(null);
+  const [cadastros, setCadastros] = useState<plt.Empresa[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
   const [aberta, setAberta] = useState<plt.Empresa | null>(null);
+  const [editando, setEditando] = useState<plt.Empresa | null>(null);
   const [busca, setBusca] = useState('');
+  const [filtro, setFiltro] = useState<'todas' | 'online' | 'paradas' | 'suspensas'>('todas');
+  const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
 
-  const carregar = useCallback(async () => {
-    setErro(null);
+  /* O QUE CONTA COMO "AGORA". Cinco minutos é o que separa "tem gente na
+     tela" de "alguém passou por aqui hoje": o carimbo de presença é
+     escrito no máximo a cada três minutos por pessoa, então uma janela
+     menor devolveria vermelho para quem está usando o sistema neste
+     instante. */
+  const JANELA = 5;
+
+  const carregar = useCallback(async (comCadastros: boolean) => {
     try {
-      setLista((await plt.listarEmpresas()).data);
+      const [r, c] = await Promise.all([
+        plt.lerRede(JANELA),
+        comCadastros ? plt.listarEmpresas() : Promise.resolve(null),
+      ]);
+      setRede(r.data);
+      if (c !== null) setCadastros(c.data);
+      setAtualizadoEm(new Date());
+      setErro(null);
     } catch (e) {
       setErro(e instanceof plt.ErroPlataforma ? e.message : 'Não foi possível carregar.');
     }
   }, []);
 
   useEffect(() => {
-    void carregar();
+    void carregar(true);
   }, [carregar]);
 
-  if (erro !== null) return <Erro mensagem={erro} aoTentar={() => void carregar()} />;
-  if (lista === null) return <Carregando rotulo="Carregando as academias" />;
+  /* SOZINHO, DE MEIO EM MEIO MINUTO. Um painel de "quem está online
+     agora" que só atualiza quando alguém aperta F5 mostra o passado com
+     cara de presente — e é pior do que não mostrar nada, porque parece
+     confiável. */
+  useEffect(() => {
+    if (aberta !== null || criando) return undefined;
+    const t = setInterval(() => void carregar(false), 30_000);
+    return () => clearInterval(t);
+  }, [carregar, aberta, criando]);
+
+  if (erro !== null && rede === null) {
+    return <Erro mensagem={erro} aoTentar={() => void carregar(true)} />;
+  }
+  if (rede === null) return <Carregando rotulo="Carregando a rede" />;
+
+  const cadastroDe = (id: string): plt.Empresa | null => cadastros.find((c) => c.id === id) ?? null;
 
   if (criando) {
     return (
@@ -416,7 +447,7 @@ function Academias(): ReactNode {
         aoSair={() => setCriando(false)}
         aoCriar={() => {
           setCriando(false);
-          void carregar();
+          void carregar(true);
         }}
       />
     );
@@ -427,27 +458,38 @@ function Academias(): ReactNode {
       <DetalheAcademia
         empresa={aberta}
         aoSair={() => setAberta(null)}
-        aoMudar={() => void carregar()}
+        aoMudar={() => void carregar(true)}
       />
     );
   }
 
   const termo = busca.trim().toLowerCase();
-  const visiveis =
-    termo === ''
-      ? lista
-      : lista.filter(
-          (e) => e.nome.toLowerCase().includes(termo) || e.slug.toLowerCase().includes(termo),
-        );
+  const visiveis = rede
+    .filter((e) => {
+      if (filtro === 'online') return e.ativa && e.onlineAgora > 0;
+      if (filtro === 'paradas') return e.ativa && e.onlineAgora === 0;
+      if (filtro === 'suspensas') return !e.ativa;
+      return true;
+    })
+    .filter(
+      (e) =>
+        termo === '' ||
+        e.nome.toLowerCase().includes(termo) ||
+        e.slug.toLowerCase().includes(termo) ||
+        (e.documento ?? '').includes(termo),
+    );
+
+  const ativas = rede.filter((e) => e.ativa);
+  const operando = ativas.filter((e) => e.onlineAgora > 0);
+  const gente = rede.reduce((n, e) => n + e.onlineAgora, 0);
 
   return (
     <>
       <div className="secao-cabecalho plt-cabecalho-acao">
         <div>
-          <h1>Academias</h1>
+          <h1>Visão da rede</h1>
           <p>
-            {lista.length} cadastrada{lista.length === 1 ? '' : 's'}. Os números são contagens — o
-            painel não abre o cadastro de ninguém.
+            Cada academia e o que ela está fazendo agora. Atualiza sozinha a cada 30 segundos.
           </p>
         </div>
         <button type="button" className="botao-acao" onClick={() => setCriando(true)}>
@@ -455,64 +497,227 @@ function Academias(): ReactNode {
         </button>
       </div>
 
-      {/* `campo-busca` e não `campo-cheia`: fora de um `.formulario` o
-          span do grid não vale nada e o campo estica pela página inteira
-          — caixa de busca de largura de tela parece campo de texto
-          longo, e ninguém digita duas palavras nela. */}
-      <label className="campo campo-busca">
-        <span className="campo-rotulo">Buscar</span>
-        <input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Nome ou identificador"
+      <div className="rede-resumo">
+        <ResumoDaRede rotulo="Academias" valor={rede.length} />
+        <ResumoDaRede rotulo="Ativas" valor={ativas.length} />
+        <ResumoDaRede
+          rotulo="Operando agora"
+          valor={operando.length}
+          tom={operando.length > 0 ? 'viva' : 'parada'}
         />
-      </label>
+        <ResumoDaRede rotulo="Pessoas na tela" valor={gente} tom={gente > 0 ? 'viva' : 'parada'} />
+      </div>
+
+      <div className="rede-controles">
+        <label className="campo campo-busca">
+          <span className="campo-rotulo">Buscar</span>
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Nome, identificador ou CNPJ"
+          />
+        </label>
+
+        <div className="rede-filtros" role="group" aria-label="Filtrar academias">
+          {(
+            [
+              ['todas', `Todas · ${rede.length}`],
+              ['online', `Com gente · ${operando.length}`],
+              ['paradas', `Sem ninguém · ${ativas.length - operando.length}`],
+              ['suspensas', `Suspensas · ${rede.length - ativas.length}`],
+            ] as const
+          ).map(([id, nome]) => (
+            <button
+              key={id}
+              type="button"
+              className={`rede-filtro ${filtro === id ? 'ativa' : ''}`}
+              aria-pressed={filtro === id}
+              onClick={() => setFiltro(id)}
+            >
+              {nome}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {erro !== null && (
+        <p className="mensagem-erro" role="alert">
+          {erro} — mostrando o último resultado que chegou.
+        </p>
+      )}
 
       {visiveis.length === 0 ? (
         <Vazio
-          titulo="Nenhuma academia encontrada."
-          descricao="Ajuste a busca ou cadastre a primeira."
+          titulo="Nenhuma academia aqui."
+          descricao="Ajuste a busca ou o filtro. Se a rede está vazia, cadastre a primeira."
         />
       ) : (
-        <div className="rolo">
-          <table className="tabela">
-            <thead>
-              <tr>
-                <th scope="col">Academia</th>
-                <th scope="col">Plano</th>
-                <th scope="col">Alunos</th>
-                <th scope="col">Usuários</th>
-                <th scope="col">Situação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visiveis.map((e) => (
-                <tr key={e.id} className="linha-clicavel" onClick={() => setAberta(e)}>
-                  <td>
-                    <strong>{e.nome}</strong>
-                    <span className="plt-slug mono">{e.slug}</span>
-                  </td>
-                  <td>{e.plano ?? '—'}</td>
-                  <td className="tabular">
-                    {e.alunosAtivos}
-                    {e.alunos !== e.alunosAtivos && (
-                      <span className="plt-secundario"> de {e.alunos}</span>
-                    )}
-                  </td>
-                  <td className="tabular">{e.usuarios}</td>
-                  <td>
-                    <span className={`plt-pilula ${e.ativa ? 'ok' : 'erro'}`}>
-                      {e.ativa ? 'ativa' : 'suspensa'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rede-grade">
+          {visiveis.map((e) => (
+            <CartaoDaRede
+              key={e.id}
+              e={e}
+              aoAbrir={() => {
+                const c = cadastroDe(e.id);
+                if (c !== null) setAberta(c);
+              }}
+              aoEditar={() => {
+                const c = cadastroDe(e.id);
+                if (c !== null) setEditando(c);
+              }}
+            />
+          ))}
         </div>
+      )}
+
+      {atualizadoEm !== null && (
+        <p className="rede-carimbo" role="status" aria-live="polite">
+          Atualizado às {HORA.format(atualizadoEm)}
+        </p>
+      )}
+
+      {editando !== null && (
+        <EditarEmpresa
+          empresa={editando}
+          aoFechar={() => setEditando(null)}
+          aoSalvar={() => {
+            setEditando(null);
+            void carregar(true);
+          }}
+        />
       )}
     </>
   );
+}
+
+const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+function ResumoDaRede({
+  rotulo,
+  valor,
+  tom,
+}: {
+  rotulo: string;
+  valor: number;
+  tom?: 'viva' | 'parada';
+}): ReactNode {
+  return (
+    <div className={`rede-resumo-item ${tom ?? ''}`}>
+      <span className="rede-resumo-rotulo">{rotulo}</span>
+      <strong className="rede-resumo-valor tabular">{valor}</strong>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------
+ * O cartão
+ *
+ * VERDE quando tem gente usando o sistema neste momento, VERMELHO quando
+ * não tem. Suspensa é um terceiro estado e aparece como tal: dizer
+ * "vermelho, ninguém online" de uma academia que está fora do ar seria
+ * verdade e informação errada — o motivo de não ter ninguém é outro, e a
+ * ação também.
+ * ------------------------------------------------------------------ */
+
+function CartaoDaRede({
+  e,
+  aoAbrir,
+  aoEditar,
+}: {
+  e: plt.NaRede;
+  aoAbrir: () => void;
+  aoEditar: () => void;
+}): ReactNode {
+  const estado = !e.ativa ? 'suspensa' : e.onlineAgora > 0 ? 'viva' : 'parada';
+
+  return (
+    <article className={`rede-cartao ${estado}`}>
+      <button
+        type="button"
+        className="rede-cartao-corpo"
+        onClick={aoAbrir}
+        aria-label={`Abrir ${e.nome}`}
+      >
+        <span className="rede-cartao-topo">
+          <span className="rede-selo">
+            {/* O PONTO PULSA SÓ QUANDO ESTÁ VIVO. Animação em todos os
+                estados seria decoração; aqui ela é o próprio dado. */}
+            <span className="rede-ponto" aria-hidden="true" />
+            {estado === 'suspensa' ? 'Suspensa' : estado === 'viva' ? 'Com gente' : 'Sem ninguém'}
+          </span>
+          {e.plano !== null && <span className="rede-plano">{e.plano}</span>}
+        </span>
+
+        <span className="rede-nome">{e.nome}</span>
+        <span className="rede-slug mono">
+          {e.slug}
+          {e.documento !== null && ` · ${e.documento}`}
+        </span>
+
+        <span className="rede-numeros">
+          <Numero rotulo="Na tela" valor={e.onlineAgora} destaque={e.onlineAgora > 0} />
+          <Numero rotulo="Alunos" valor={e.alunosAtivos} />
+          <Numero rotulo="Equipe" valor={e.usuarios} />
+          <Numero rotulo="Entradas hoje" valor={e.entradasHoje} />
+        </span>
+
+        <span className="rede-rodape">
+          {estado === 'suspensa'
+            ? e.suspensaMotivo ?? 'Fora do ar.'
+            : e.onlineAgora > 0
+              ? `${e.onlineAgora} pessoa${e.onlineAgora === 1 ? '' : 's'} usando o sistema`
+              : `Última vez: ${desdeQuando(e.ultimaAtividade)}`}
+        </span>
+      </button>
+
+      <div className="rede-acoes">
+        <button type="button" className="botao-texto" onClick={aoAbrir}>
+          Detalhes
+        </button>
+        <button type="button" className="botao-texto" onClick={aoEditar}>
+          Editar
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function Numero({
+  rotulo,
+  valor,
+  destaque = false,
+}: {
+  rotulo: string;
+  valor: number;
+  destaque?: boolean;
+}): ReactNode {
+  return (
+    <span className={`rede-numero ${destaque ? 'destaque' : ''}`}>
+      <span className="rede-numero-valor tabular">{valor}</span>
+      <span className="rede-numero-rotulo">{rotulo}</span>
+    </span>
+  );
+}
+
+/**
+ * "Há 3 minutos", "ontem", "nunca".
+ *
+ * Data absoluta responde à pergunta errada. Quem olha um painel de rede
+ * quer saber se a academia está viva, e "14/08 às 09:12" obriga a fazer
+ * a conta de cabeça para descobrir isso.
+ */
+function desdeQuando(iso: string | null): string {
+  if (iso === null) return 'nunca usou';
+  const minutos = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (minutos < 1) return 'agora mesmo';
+  if (minutos < 60) return `há ${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `há ${horas} h`;
+  const dias = Math.floor(horas / 24);
+  if (dias === 1) return 'ontem';
+  if (dias < 30) return `há ${dias} dias`;
+  const meses = Math.floor(dias / 30);
+  return meses === 1 ? 'há um mês' : `há ${meses} meses`;
 }
 
 /* ====================================================================

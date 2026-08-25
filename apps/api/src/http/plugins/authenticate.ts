@@ -64,6 +64,64 @@ async function authenticate(request: FastifyRequest): Promise<void> {
     role: claims.role,
     studentId: claims.sid,
   };
+
+  marcarPresenca(request);
+}
+
+/**
+ * "Esta pessoa estava aqui."
+ *
+ * O painel da plataforma precisa responder quais academias estão VIVAS
+ * agora, e nada do que já existia respondia isso: `last_login_at` é o
+ * login e não o uso, uma sessão não revogada dura quatorze dias, e o
+ * `audit_log` só guarda o que muda alguma coisa — a recepcionista que
+ * passou a manhã consultando a agenda não aparece em nenhum dos três, e
+ * ela é exatamente o caso de "tem gente usando".
+ *
+ * NÃO É UM CONTADOR DE REQUISIÇÕES. Gravar a cada chamada poria uma
+ * escrita no caminho de TODA rota autenticada, inclusive as que só leem.
+ * O mapa em memória segura o carimbo por alguns minutos, então o custo
+ * real é um UPDATE por chave primária a cada `TOQUE_MINIMO_MS` por
+ * pessoa. Depois de um reinício o mapa nasce vazio e a primeira chamada
+ * de cada um grava de novo — perder essa memória não perde informação,
+ * só antecipa uma escrita.
+ *
+ * E NÃO É AGUARDADO. Falhar aqui não pode transformar uma requisição
+ * boa em erro: o carimbo é para um painel, não para uma decisão.
+ */
+const TOQUE_MINIMO_MS = 3 * 60 * 1000;
+const ultimoToque = new Map<string, number>();
+
+function marcarPresenca(request: FastifyRequest): void {
+  const principal = request.principal;
+  if (principal === undefined) return;
+
+  const agora = Date.now();
+  const anterior = ultimoToque.get(principal.userId);
+  if (anterior !== undefined && agora - anterior < TOQUE_MINIMO_MS) return;
+
+  /* Marcado ANTES de gravar, e não depois: sem isto, um pico de chamadas
+     simultâneas do mesmo usuário dispara um UPDATE cada, que é
+     precisamente o que o mapa existe para evitar. */
+  ultimoToque.set(principal.userId, agora);
+
+  /* O mapa é de um processo que não reinicia sozinho. Sem esta poda ele
+     cresce com cada pessoa que já usou o sistema desde o último deploy —
+     devagar, e para sempre. */
+  if (ultimoToque.size > 5000) {
+    for (const [id, quando] of ultimoToque) {
+      if (agora - quando > TOQUE_MINIMO_MS) ultimoToque.delete(id);
+    }
+  }
+
+  void withTenant({ tenantId: principal.tenantId, userId: principal.userId }, (c) =>
+    c.query('UPDATE users SET last_seen_at = now() WHERE id = $1', [principal.userId]),
+  ).catch(() => {
+    /* Silêncio de propósito: um log por falha aqui viraria uma linha por
+       requisição se o banco oscilar, e o que se perde é um pontinho
+       verde no painel. */
+    ultimoToque.delete(principal.userId);
+  });
 }
 
 const authPlugin = fp(async (app: FastifyInstance) => {
