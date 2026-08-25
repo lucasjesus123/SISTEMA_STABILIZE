@@ -39,6 +39,9 @@ export function Whatsapp(): ReactNode {
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
+  /* O código de pareamento anda junto do QR: quando a câmera não lê —
+     luz ruim, tela suja, celular antigo —, é por ele que se conecta. */
+  const [codigo, setCodigo] = useState<string | null>(null);
   const [conectando, setConectando] = useState(false);
   const [numeroTeste, setNumeroTeste] = useState('');
 
@@ -48,7 +51,10 @@ export function Whatsapp(): ReactNode {
       const [c, m] = [await buscarWhatsapp(), await buscarMensagens()];
       setConexao(c.data);
       setMensagens(m.data);
-      if (c.data?.status === 'CONNECTED') setQr(null);
+      if (c.data?.status === 'CONNECTED') {
+        setQr(null);
+        setCodigo(null);
+      }
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Não foi possível carregar a conexão.');
     } finally {
@@ -77,7 +83,8 @@ export function Whatsapp(): ReactNode {
     try {
       const r = await conectarWhatsapp();
       setQr(r.data.qr);
-      if (r.data.qr === null) {
+      setCodigo(r.data.codigo);
+      if (r.data.qr === null && r.data.codigo === null) {
         setAviso('O provedor não devolveu um código. Tente de novo em alguns segundos.');
       }
       await carregar(false);
@@ -155,6 +162,19 @@ export function Whatsapp(): ReactNode {
         </div>
       </section>
 
+      {qr === null && codigo !== null && (
+        /* SEM QR MAS COM CÓDIGO. Acontece quando o provedor devolve só o
+           pareamento; antes disso a tela dizia "não devolveu um código"
+           tendo um código na mão. */
+        <section className="wa-qr">
+          <p className="wa-qr-nota">
+            No celular: <b>WhatsApp → Aparelhos conectados → Conectar aparelho → Conectar com
+            número de telefone</b>, e digite o código abaixo.
+          </p>
+          <p className="wa-codigo">{codigo}</p>
+        </section>
+      )}
+
       {qr !== null && (
         <section className="wa-qr">
           <h2>Leia o código no celular</h2>
@@ -169,6 +189,17 @@ export function Whatsapp(): ReactNode {
           <p className="wa-qr-nota">
             O código muda a cada poucos segundos; a tela se atualiza sozinha.
           </p>
+
+          {codigo !== null && (
+            /* A SAÍDA PARA QUANDO A CÂMERA NÃO LÊ. Luz ruim, tela suja,
+               celular antigo — e a pessoa fica tentando enquadrar um
+               quadrado que expira a cada poucos segundos. Oito
+               caracteres digitados valem o mesmo. */
+            <p className="wa-qr-alternativa">
+              Câmera não pega? Em <b>Conectar com número de telefone</b>, digite:{' '}
+              <span className="wa-codigo-linha">{codigo}</span>
+            </p>
+          )}
         </section>
       )}
 

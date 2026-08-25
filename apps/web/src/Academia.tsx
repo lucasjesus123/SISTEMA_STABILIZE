@@ -554,8 +554,102 @@ const CICLOS: { valor: string; rotulo: string }[] = [
   { valor: 'SEMIANNUAL', rotulo: 'Semestral' },
   { valor: 'ANNUAL', rotulo: 'Anual' },
 ];
+/**
+ * O que os números do formulário significam, enquanto são digitados.
+ *
+ * Não é decoração: são as duas contas que decidem se a tabela está certa
+ * — o equivalente mensal, que é a única forma de comparar ciclos
+ * diferentes, e a divisão entre o profissional e a academia.
+ */
+function Previa({
+  ciclo,
+  valor,
+  comissao,
+}: {
+  ciclo: string;
+  valor: string;
+  comissao: string;
+}): ReactNode {
+  let centavos = 0;
+  try {
+    centavos = reaisParaCentavos(valor);
+  } catch {
+    /* Digitando ainda — "39," não é um número, e piscar um erro a cada
+       tecla é pior do que não mostrar nada até fazer sentido. */
+    return null;
+  }
+  if (centavos <= 0) return null;
+
+  const pontos = Number(comissao.replace(',', '.'));
+  const bp = Number.isFinite(pontos) && pontos > 0 ? Math.round(pontos * 100) : 0;
+  const doProfissional = Math.round((centavos * bp) / 10_000);
+  const mensal = porMes(ciclo, centavos);
+
+  return (
+    <div className="plano-previa campo-cheia">
+      <div className="plano-previa-item">
+        <span>O aluno paga</span>
+        <strong className="dinheiro">{formatCents(centavos)}</strong>
+        <span className="plano-previa-nota">{rotuloDoCiclo(ciclo).toLowerCase()}</span>
+      </div>
+
+      {mensal !== null && (
+        <div className="plano-previa-item">
+          <span>Equivale por mês</span>
+          <strong className="dinheiro">{formatCents(mensal)}</strong>
+          <span className="plano-previa-nota">para comparar com o mensal</span>
+        </div>
+      )}
+
+      {bp > 0 && (
+        <>
+          <div className="plano-previa-item">
+            <span>Do profissional</span>
+            <strong className="dinheiro">{formatCents(doProfissional)}</strong>
+            <span className="plano-previa-nota">{(bp / 100).toFixed(0)}% do recebido</span>
+          </div>
+          <div className="plano-previa-item destaque">
+            <span>Fica na academia</span>
+            <strong className="dinheiro">{formatCents(centavos - doProfissional)}</strong>
+            <span className="plano-previa-nota">por cobrança</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const rotuloDoCiclo = (v: string): string =>
   CICLOS.find((c) => c.valor === v)?.rotulo ?? v;
+
+/**
+ * Quantos meses cada cobrança cobre.
+ *
+ * Serve para uma coisa só, e é a que falta numa tabela de preços:
+ * comparar planos de ciclos diferentes. "Trimestral R$ 900" e "Mensal
+ * R$ 350" não se comparam de cabeça — o primeiro é R$ 300 por mês, e é
+ * mais barato. Quem monta a tabela decide errado sem essa conta, e ela é
+ * a conta que ninguém faz na hora.
+ *
+ * `SESSION` e `WEEKLY` ficam de fora: cobrança por sessão não tem mês, e
+ * semanal depende de quantas vezes a pessoa vem. Inventar um número aqui
+ * seria pior do que não mostrar.
+ */
+const MESES_DO_CICLO: Record<string, number> = {
+  BIWEEKLY: 0.5,
+  MONTHLY: 1,
+  QUARTERLY: 3,
+  SEMIANNUAL: 6,
+  ANNUAL: 12,
+};
+
+/** O equivalente mensal em centavos, ou `null` quando não faz sentido. */
+function porMes(ciclo: string, valorCentavos: number): number | null {
+  const meses = MESES_DO_CICLO[ciclo];
+  if (meses === undefined || valorCentavos <= 0) return null;
+  if (meses === 1) return null; // já é mensal: repetir o número é ruído
+  return Math.round(valorCentavos / meses);
+}
 
 interface FormPlano {
   id: string | null;
@@ -727,6 +821,22 @@ function TabelaDeValores(): ReactNode {
             <span className="campo-dica">Sobre o valor recebido. Zero se não houver.</span>
           </label>
 
+          {/* ==================================================
+              A CONTA, ENQUANTO SE DIGITA
+
+              Uma tabela de preços é uma decisão de negócio, e as duas
+              perguntas que ela levanta não estão em nenhum campo:
+              "quanto isso dá por mês?" e "quanto sobra para a
+              academia?". Sem elas, quem monta a tabela põe um trimestral
+              mais caro que o mensal e só descobre quando um aluno
+              aponta.
+
+              Aparece a partir do momento em que há um valor, e some
+              quando não há — um quadro que fica ali dizendo R$ 0,00 vira
+              parte do formulário e para de ser lido.
+              ================================================== */}
+          <Previa ciclo={form.ciclo} valor={form.valor} comissao={form.comissao} />
+
           <div className="formulario-acoes campo-cheia">
             <button type="submit" className="botao-acao" disabled={ocupado}>
               {ocupado ? 'Salvando…' : form.id === null ? 'Criar plano' : 'Salvar'}
@@ -746,65 +856,96 @@ function TabelaDeValores(): ReactNode {
           </p>
         </div>
       ) : (
-        <table className="tabela plano-tabela">
-          <thead>
-            <tr>
-              <th>Plano</th>
-              <th>Cobrança</th>
-              <th>Sessões</th>
-              <th>Comissão</th>
-              <th className="direita">Valor</th>
-              <th className="direita">Em uso</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {planos.map((p) => (
-              <tr key={p.id} className={p.ativo ? '' : 'plano-inativo'}>
-                <td>
-                  {p.nome}
+        <div className="plano-grade">
+          {planos.map((p) => {
+            const mensal = porMes(p.ciclo, p.valorCentavos);
+            const comissao = Math.round((p.valorCentavos * p.comissaoBp) / 10_000);
+            return (
+              <article key={p.id} className={`plano-cartao ${p.ativo ? '' : 'fora'}`}>
+                <header className="plano-cartao-topo">
+                  <span className="plano-ciclo">{rotuloDoCiclo(p.ciclo)}</span>
                   {!p.ativo && <span className="plano-selo">fora da tabela</span>}
-                </td>
-                <td>{rotuloDoCiclo(p.ciclo)}</td>
-                <td>{p.sessoesIncluidas === null ? '—' : p.sessoesIncluidas}</td>
-                <td>{p.comissaoBp === 0 ? '—' : `${(p.comissaoBp / 100).toFixed(0)}%`}</td>
-                <td className="direita dinheiro">{formatCents(p.valorCentavos)}</td>
-                <td className="direita">{p.emUso === 0 ? '—' : p.emUso}</td>
-                <td className="direita">
-                  {p.ativo && (
-                    <>
-                      <button
-                        type="button"
-                        className="botao-texto"
-                        disabled={ocupado}
-                        onClick={() =>
-                          setForm({
-                            id: p.id,
-                            nome: p.nome,
-                            ciclo: p.ciclo,
-                            valor: (p.valorCentavos / 100).toFixed(2).replace('.', ','),
-                            sessoes: p.sessoesIncluidas === null ? '' : String(p.sessoesIncluidas),
-                            comissao: p.comissaoBp === 0 ? '' : String(p.comissaoBp / 100),
-                          })
-                        }
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        className="botao-texto-perigo"
-                        disabled={ocupado}
-                        onClick={() => void desativar(p)}
-                      >
-                        Tirar
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </header>
+
+                <h3 className="plano-nome">{p.nome}</h3>
+
+                {/* O VALOR É O ASSUNTO DA TELA, e por isso é o maior
+                    elemento do cartão. Na tabela ele era uma célula entre
+                    seis, do mesmo tamanho de "Sessões" — que quase sempre
+                    é um travessão. */}
+                <p className="plano-valor dinheiro">{formatCents(p.valorCentavos)}</p>
+                {mensal !== null && (
+                  <p className="plano-equivalente">
+                    equivale a <strong className="dinheiro">{formatCents(mensal)}</strong> por mês
+                  </p>
+                )}
+
+                <dl className="plano-detalhes">
+                  <div>
+                    <dt>Sessões</dt>
+                    <dd>{p.sessoesIncluidas === null ? 'ilimitadas' : p.sessoesIncluidas}</dd>
+                  </div>
+                  <div>
+                    <dt>Comissão</dt>
+                    <dd>
+                      {p.comissaoBp === 0 ? (
+                        'não há'
+                      ) : (
+                        <>
+                          {(p.comissaoBp / 100).toFixed(0)}%{' '}
+                          <span className="plano-secundario dinheiro">
+                            ({formatCents(comissao)})
+                          </span>
+                        </>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Em uso</dt>
+                    {/* CONTRATOS, e não um travessão: é este número que
+                        transforma "tirar da tabela" numa decisão
+                        informada. */}
+                    <dd>
+                      {p.emUso === 0
+                        ? 'nenhum aluno'
+                        : `${p.emUso} aluno${p.emUso === 1 ? '' : 's'}`}
+                    </dd>
+                  </div>
+                </dl>
+
+                {p.ativo && (
+                  <div className="plano-acoes">
+                    <button
+                      type="button"
+                      className="botao-texto"
+                      disabled={ocupado}
+                      onClick={() =>
+                        setForm({
+                          id: p.id,
+                          nome: p.nome,
+                          ciclo: p.ciclo,
+                          valor: (p.valorCentavos / 100).toFixed(2).replace('.', ','),
+                          sessoes: p.sessoesIncluidas === null ? '' : String(p.sessoesIncluidas),
+                          comissao: p.comissaoBp === 0 ? '' : String(p.comissaoBp / 100),
+                        })
+                      }
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="botao-texto-perigo"
+                      disabled={ocupado}
+                      onClick={() => void desativar(p)}
+                    >
+                      Tirar da tabela
+                    </button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
       )}
 
       <label className="plano-inativos">

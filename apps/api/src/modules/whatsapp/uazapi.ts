@@ -188,31 +188,78 @@ export async function verificarAdmin(): Promise<{ instancias: number }> {
   return { instancias: Array.isArray(lista) ? lista.length : 0 };
 }
 
-/** QR Code para o celular escanear. */
-export async function obterQrCode(token: string): Promise<{ qr: string | null; status: string }> {
-  const r = await chamar<{ instance?: { status?: string }; qrcode?: string; status?: string }>(
-    '/instance/connect',
-    token,
-    {},
-  );
+/**
+ * QR Code para o celular escanear.
+ *
+ * O DESENHO VEM EM `instance.qrcode`, e não na raiz da resposta. Era daí
+ * que saía "o provedor não devolveu um código": a instância era criada,
+ * a conexão começava — o status voltava certo, "aguardando leitura" —, e
+ * a única coisa que faltava era ler o campo no lugar onde ele está.
+ *
+ * E PODE VIR SEM O PREFIXO `data:`. É base64 puro em alguns servidores e
+ * data URL em outros; um `<img src>` com base64 cru não desenha nada, e
+ * o sintoma seria um quadrado vazio no lugar do QR — pior do que o erro,
+ * porque parece que funcionou.
+ *
+ * O `paircode` vai junto: são oito caracteres que a pessoa digita no
+ * celular quando a câmera não coopera — luz ruim, tela suja, mão trêmula
+ * —, e é a diferença entre conectar e desistir.
+ */
+export async function obterQrCode(
+  token: string,
+): Promise<{ qr: string | null; codigo: string | null; status: string }> {
+  const r = await chamar<{
+    instance?: { status?: string; qrcode?: string; paircode?: string };
+    qrcode?: string;
+    paircode?: string;
+    status?: string;
+  }>('/instance/connect', token, {});
+
+  const bruto = r.instance?.qrcode ?? r.qrcode ?? null;
+
   return {
-    qr: r.qrcode ?? null,
+    qr: bruto === null || bruto === '' ? null : comoImagem(bruto),
+    codigo: r.instance?.paircode ?? r.paircode ?? null,
     status: r.instance?.status ?? r.status ?? 'DISCONNECTED',
   };
 }
 
+/** Base64 cru vira data URL; data URL passa direto. */
+function comoImagem(valor: string): string {
+  return valor.startsWith('data:') ? valor : `data:image/png;base64,${valor}`;
+}
+
+/**
+ * Está conectado de verdade?
+ *
+ * A VERDADE É `status.connected && status.loggedIn`, e não o texto de
+ * `instance.status`. Os dois discordam justamente no meio do caminho: a
+ * instância fica "connecting" com o QR na tela, e existe um instante em
+ * que o texto já diz "connected" mas a sessão do WhatsApp ainda não
+ * subiu. Confiar no texto faz a tela anunciar sucesso e a primeira
+ * mensagem falhar.
+ *
+ * O NÚMERO vem de `status.jid.user`. `instance.owner` — que esta função
+ * lia — não existe na resposta, então o número nunca aparecia: a tela
+ * mostrava "conectado" sem dizer conectado a quê.
+ */
 export async function statusDaInstancia(
   token: string,
 ): Promise<{ status: string; numero: string | null }> {
-  const r = await chamar<{ instance?: { status?: string; owner?: string } }>(
-    '/instance/status',
-    token,
-    undefined,
-    'GET',
-  );
+  const r = await chamar<{
+    instance?: { status?: string; owner?: string; profileName?: string };
+    status?: { connected?: boolean; loggedIn?: boolean; jid?: { user?: string } | string };
+  }>('/instance/status', token, undefined, 'GET');
+
+  const ligado = r.status?.connected === true && r.status?.loggedIn === true;
+
+  const jid = r.status?.jid;
+  const numero =
+    typeof jid === 'string' ? (jid.split('@')[0] ?? null) : (jid?.user ?? r.instance?.owner ?? null);
+
   return {
-    status: (r.instance?.status ?? 'DISCONNECTED').toUpperCase(),
-    numero: r.instance?.owner ?? null,
+    status: ligado ? 'CONNECTED' : (r.instance?.status ?? 'DISCONNECTED').toUpperCase(),
+    numero: numero === undefined || numero === '' ? null : numero,
   };
 }
 

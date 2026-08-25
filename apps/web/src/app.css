@@ -5982,3 +5982,164 @@
   margin: var(--e-2) 0 0 calc(18px + var(--e-3));
   max-width: 28rem;
 }
+
+/* ---------------------------------------------------------------------
+   TABELA DE VALORES
+
+   Cartões e não linhas. A tabela era melhor para comparar uma coluna
+   entre muitas linhas, e uma academia tem três ou quatro planos: o que
+   se faz aqui é DECIDIR um preço, não varrer uma lista. E o valor — que
+   é o assunto — era uma célula do mesmo tamanho de "Sessões", que quase
+   sempre é um travessão.
+   ------------------------------------------------------------------- */
+.plano-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--e-3);
+  margin-top: var(--e-4);
+}
+
+.plano-cartao {
+  display: flex;
+  flex-direction: column;
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+  transition: border-color var(--rapido) var(--saida);
+}
+.plano-cartao:hover {
+  border-color: var(--fio-forte);
+}
+.plano-cartao.fora {
+  opacity: 0.6;
+}
+
+.plano-cartao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+  margin-bottom: var(--e-2);
+}
+.plano-ciclo {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--teal-fundo);
+}
+.plano-nome {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.3;
+  color: var(--texto);
+}
+.plano-valor {
+  margin: var(--e-3) 0 0;
+  font-size: 1.9rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--texto);
+}
+.plano-equivalente {
+  margin: 4px 0 0;
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+}
+
+.plano-detalhes {
+  display: grid;
+  gap: 6px;
+  margin: var(--e-4) 0 0;
+  padding-top: var(--e-3);
+  border-top: 1px solid var(--fio);
+}
+.plano-detalhes > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+.plano-detalhes dt {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-apoio);
+}
+.plano-detalhes dd {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--texto);
+  text-align: right;
+}
+.plano-secundario {
+  color: var(--texto-apoio);
+}
+
+/* GAP DE VERDADE entre as ações. Na tabela elas ficavam coladas —
+   "EditarTirar" —, porque dois botões de texto lado a lado sem
+   separador são uma palavra só. */
+.plano-acoes {
+  display: flex;
+  gap: var(--e-4);
+  margin-top: var(--e-4);
+  padding-top: var(--e-3);
+  border-top: 1px solid var(--fio);
+}
+
+/* ---- a conta ao vivo, no formulário -------------------------------- */
+.plano-previa {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--e-3);
+  margin-top: var(--e-2);
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-baixa);
+}
+.plano-previa-item {
+  display: grid;
+  gap: 1px;
+}
+.plano-previa-item > span:first-child {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-apoio);
+}
+.plano-previa-item strong {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--texto);
+}
+.plano-previa-nota {
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+}
+/* O QUE FICA NA ACADEMIA é a linha que a pessoa está procurando quando
+   mexe na comissão. */
+.plano-previa-item.destaque strong {
+  color: var(--ok);
+}
+
+/* O código de pareamento: grande, monoespaçado e selecionável inteiro.
+   É para ser lido em voz alta ou digitado num celular na outra mão. */
+.wa-codigo,
+.wa-codigo-linha {
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: var(--texto);
+  user-select: all;
+}
+.wa-codigo {
+  margin: var(--e-3) 0 0;
+  font-size: 2rem;
+}
+.wa-qr-alternativa {
+  margin: var(--e-3) 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}

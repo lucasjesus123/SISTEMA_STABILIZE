@@ -120,8 +120,10 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
         ip: request.ip,
       });
 
-      // Nunca o token — só o desenho do QR e o estado.
-      return { data: { qr: qr.qr, status: qr.status } };
+      /* Nunca o token — só o desenho do QR, o código alternativo e o
+         estado. O `codigo` é a saída para quando a câmera não coopera:
+         oito caracteres digitados no celular valem o mesmo que o QR. */
+      return { data: { qr: qr.qr, codigo: qr.codigo, status: qr.status } };
     });
   });
 

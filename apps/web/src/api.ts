@@ -718,10 +718,18 @@ export interface MensagemWhatsapp {
 
 export const buscarWhatsapp = () => api<{ data: ConexaoWhatsapp | null }>('/api/whatsapp');
 
+/**
+ * Começa a conexão e devolve o QR.
+ *
+ * `codigo` é o código de pareamento — oito caracteres que a pessoa digita
+ * no celular quando a câmera não coopera. Vem junto do QR, e é a
+ * diferença entre conectar e desistir.
+ */
 export const conectarWhatsapp = () =>
-  api<{ data: { qr: string | null; status: string } }>('/api/whatsapp/conectar', {
-    method: 'POST',
-  });
+  api<{ data: { qr: string | null; codigo: string | null; status: string } }>(
+    '/api/whatsapp/conectar',
+    { method: 'POST' },
+  );
 
 export const buscarMensagens = () =>
   api<{ data: MensagemWhatsapp[] }>('/api/whatsapp/mensagens');
