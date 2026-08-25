@@ -52,6 +52,50 @@ const TETO_CACHE = 5_000;
    digita errado e insiste manda uma consulta externa a cada tecla. */
 const VALIDADE_VAZIO_MS = 10 * 60 * 1000;
 
+/* ---------------------------------------------------------------------
+   DISJUNTOR — o que fazer quando o serviço externo está fora
+
+   O timeout de 3s já impede que uma consulta segure a conexão para
+   sempre. O que ele NÃO resolve é o serviço fora do ar por um tempo
+   longo: cada CEP digitado paga os 3 segundos inteiros de novo. No dia
+   em que a academia cadastra duzentos alunos, isso é duzentas esperas
+   de três segundos num campo que já se sabe que não vai responder — e
+   a recepção conclui que o sistema é lento, não que os Correios caíram.
+
+   A indisponibilidade de propósito NÃO entra no cache de CEP (guardar
+   "não sei" ao lado de "não existe" foi um defeito real deste arquivo).
+   O disjuntor é outra coisa: não guarda resposta nenhuma, guarda o
+   ESTADO DO SERVIÇO. Depois de algumas falhas seguidas, as próximas
+   consultas voltam na hora com "não consegui perguntar", sem sair para
+   a rede.
+
+   Meia janela depois ele deixa UMA consulta passar para sondar. Se ela
+   volta, o disjuntor fecha e tudo segue como antes; se falha, a janela
+   recomeça. Qualquer sucesso zera o contador — o estado normal é o
+   circuito fechado.
+   ------------------------------------------------------------------ */
+const FALHAS_PARA_ABRIR = 3;
+const JANELA_ABERTO_MS = 60 * 1000;
+
+const disjuntor = { falhasSeguidas: 0, abertoAte: 0 };
+
+/** true = nem tenta a rede, o serviço está reconhecidamente fora. */
+function circuitoAberto(agora: number): boolean {
+  return disjuntor.abertoAte > agora;
+}
+
+function registrarFalha(agora: number): void {
+  disjuntor.falhasSeguidas += 1;
+  if (disjuntor.falhasSeguidas >= FALHAS_PARA_ABRIR) {
+    disjuntor.abertoAte = agora + JANELA_ABERTO_MS;
+  }
+}
+
+function registrarSucesso(): void {
+  disjuntor.falhasSeguidas = 0;
+  disjuntor.abertoAte = 0;
+}
+
 export async function cepRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/:cep',
@@ -123,10 +167,24 @@ interface RespostaViaCep {
  * `'indisponivel'` = não deu para perguntar. São coisas diferentes, e
  * misturá-las fazia o sistema afirmar que um CEP válido não existia.
  */
+export async function consultarCepParaTeste(
+  cep: string,
+  log: { warn: (obj: unknown, msg: string) => void },
+): Promise<EnderecoDeCep | null | 'indisponivel'> {
+  return consultar(cep, log);
+}
+
 async function consultar(
   cep: string,
   log: { warn: (obj: unknown, msg: string) => void },
 ): Promise<EnderecoDeCep | null | 'indisponivel'> {
+  const agora = Date.now();
+
+  /* O SERVIÇO JÁ SE MOSTROU FORA. Responder na hora é melhor que fazer
+     a recepcionista esperar três segundos para chegar na mesma
+     conclusão — a tela dela já diz "preencha à mão". */
+  if (circuitoAberto(agora)) return 'indisponivel';
+
   let resposta: Response;
   try {
     resposta = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {
@@ -142,13 +200,29 @@ async function consultar(
     /* Serviço externo fora do ar não é erro DESTE sistema, e também não
        é "CEP inexistente". O cadastro segue sem ele — a pessoa digita o
        endereço à mão, que é o que faria de qualquer forma. */
-    log.warn({ erro: String(erro) }, 'consulta de CEP falhou');
+    registrarFalha(agora);
+    log.warn(
+      { erro: String(erro), falhasSeguidas: disjuntor.falhasSeguidas },
+      'consulta de CEP falhou',
+    );
     return 'indisponivel';
   }
 
   /* 5xx é problema deles; 404 no host inteiro também. Nenhum dos dois
      autoriza afirmar que o CEP não existe. */
-  if (!resposta.ok) return 'indisponivel';
+  if (!resposta.ok) {
+    registrarFalha(agora);
+    log.warn(
+      { status: resposta.status, falhasSeguidas: disjuntor.falhasSeguidas },
+      'consulta de CEP respondeu erro',
+    );
+    return 'indisponivel';
+  }
+
+  /* CHEGOU RESPOSTA: o serviço está de pé. Vale mesmo quando o CEP não
+     existe — "não existe" é uma resposta, e resposta é sinal de que o
+     circuito pode fechar. */
+  registrarSucesso();
 
   const corpo = (await resposta.json().catch(() => null)) as unknown;
   return interpretarViaCep(cep, corpo);
@@ -202,4 +276,11 @@ function texto(v: string | undefined): string | null {
 /* Exportado só para o teste poder limpar entre casos. */
 export function limparCacheDeCep(): void {
   cache.clear();
+  disjuntor.falhasSeguidas = 0;
+  disjuntor.abertoAte = 0;
+}
+
+/** Só para teste: o estado do disjuntor, que não tem rota própria. */
+export function estadoDoDisjuntorDeCep(): { falhasSeguidas: number; aberto: boolean } {
+  return { falhasSeguidas: disjuntor.falhasSeguidas, aberto: circuitoAberto(Date.now()) };
 }

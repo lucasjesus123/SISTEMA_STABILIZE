@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { interpretarViaCep } from './cep.routes.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  consultarCepParaTeste,
+  estadoDoDisjuntorDeCep,
+  interpretarViaCep,
+  limparCacheDeCep,
+} from './cep.routes.js';
 
 /**
  * A tradução da resposta do serviço externo.
@@ -89,5 +94,93 @@ describe('interpretarViaCep', () => {
       uf: 'RS',
     });
     expect(r?.cep).toBe('95900000');
+  });
+});
+
+/**
+ * O disjuntor — o comportamento quando os Correios estão fora do ar.
+ *
+ * Testado trocando o `fetch` global, e não a internet: o que importa
+ * provar é que depois de algumas falhas o sistema PARA DE SAIR para a
+ * rede, e que ele volta sozinho quando o serviço volta. Contar as
+ * chamadas ao `fetch` é a única forma de ver isso — pela resposta, a
+ * consulta bloqueada e a consulta que falhou são idênticas.
+ */
+describe('disjuntor de CEP', () => {
+  const fetchOriginal = globalThis.fetch;
+  const log = { warn: () => undefined };
+
+  /** Instala um `fetch` falso e conta quantas vezes foi chamado. */
+  function comFetch(impl: () => Promise<Response>): { chamadas: () => number } {
+    let n = 0;
+    globalThis.fetch = (async () => {
+      n += 1;
+      return impl();
+    }) as typeof globalThis.fetch;
+    return { chamadas: () => n };
+  }
+
+  const ok = (corpo: unknown): Promise<Response> =>
+    Promise.resolve(new Response(JSON.stringify(corpo), { status: 200 }));
+
+  beforeEach(() => limparCacheDeCep());
+  afterEach(() => {
+    globalThis.fetch = fetchOriginal;
+    limparCacheDeCep();
+  });
+
+  it('depois de três falhas seguidas, para de sair para a rede', async () => {
+    const espiao = comFetch(() => Promise.reject(new Error('sem rede')));
+
+    /* CEPs diferentes de propósito: o cache não pode ser o que segura a
+       quarta consulta — indisponibilidade não entra no cache. */
+    for (const cep of ['95900001', '95900002', '95900003']) {
+      expect(await consultarCepParaTeste(cep, log)).toBe('indisponivel');
+    }
+    expect(espiao.chamadas()).toBe(3);
+    expect(estadoDoDisjuntorDeCep().aberto).toBe(true);
+
+    // A quarta responde na hora, sem tocar na rede.
+    expect(await consultarCepParaTeste('95900004', log)).toBe('indisponivel');
+    expect(espiao.chamadas(), 'não devia ter saído para a rede').toBe(3);
+  });
+
+  it('duas falhas não abrem o circuito — instabilidade curta não conta', async () => {
+    const espiao = comFetch(() => Promise.reject(new Error('piscou')));
+    await consultarCepParaTeste('95900001', log);
+    await consultarCepParaTeste('95900002', log);
+    expect(estadoDoDisjuntorDeCep().aberto).toBe(false);
+    expect(espiao.chamadas()).toBe(2);
+  });
+
+  it('uma resposta boa zera o contador', async () => {
+    comFetch(() => Promise.reject(new Error('sem rede')));
+    await consultarCepParaTeste('95900001', log);
+    await consultarCepParaTeste('95900002', log);
+    expect(estadoDoDisjuntorDeCep().falhasSeguidas).toBe(2);
+
+    comFetch(() => ok({ localidade: 'Lajeado', uf: 'RS' }));
+    await consultarCepParaTeste('95900003', log);
+    expect(estadoDoDisjuntorDeCep().falhasSeguidas).toBe(0);
+    expect(estadoDoDisjuntorDeCep().aberto).toBe(false);
+  });
+
+  it('CEP inexistente NÃO conta como falha do serviço', async () => {
+    /* "Este CEP não existe" é uma resposta. Contá-la como falha abriria
+       o circuito para quem digitou três CEPs errados em sequência — e aí
+       o CEP certo do quarto aluno não seria nem consultado. */
+    comFetch(() => ok({ erro: true }));
+    for (const cep of ['99999991', '99999992', '99999993']) {
+      expect(await consultarCepParaTeste(cep, log)).toBeNull();
+    }
+    expect(estadoDoDisjuntorDeCep().aberto).toBe(false);
+  });
+
+  it('erro 5xx do serviço conta como falha', async () => {
+    comFetch(() => Promise.resolve(new Response('', { status: 502 })));
+    for (const cep of ['95900001', '95900002', '95900003']) {
+      expect(await consultarCepParaTeste(cep, log)).toBe('indisponivel');
+    }
+    expect(estadoDoDisjuntorDeCep().aberto).toBe(true);
   });
 });
