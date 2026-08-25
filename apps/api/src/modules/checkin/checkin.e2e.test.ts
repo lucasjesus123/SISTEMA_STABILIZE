@@ -199,7 +199,19 @@ suite('Check-in na recepção', () => {
       await c.query(
         `INSERT INTO finance_entries
            (tenant_id,direction,description,amount_cents,due_date,student_id)
-         VALUES ($1,'RECEIVABLE','Mensalidade atrasada',15000,current_date - 20,$2)`,
+         VALUES ($1,'RECEIVABLE','Mensalidade atrasada',15000,
+                   /* O DIA DA ACADEMIA, e nao o do servidor.
+                      current_date e a data do fuso da SESSAO — UTC no
+                      contêiner. O sistema conta o atraso em
+                      now() AT TIME ZONE do fuso da academia, que e o dia
+                      de quem opera a academia. Entre 21h e meia-noite no
+                      Brasil os dois discordam, e o teste falhava com
+                      "esperava 19, veio 20" toda noite — acusando o
+                      sistema por uma conta que o proprio teste fazia
+                      errado. */
+                   (SELECT (now() AT TIME ZONE t.timezone)::date - 20
+                      FROM tenants t WHERE t.id = $1),
+                   $2)`,
         [ids.tenant, ids.devendo],
       );
     });
@@ -400,7 +412,11 @@ suite('Check-in na recepção', () => {
       c.query(
         `INSERT INTO finance_entries
            (tenant_id,direction,description,amount_cents,due_date,student_id)
-         VALUES ($1,'RECEIVABLE','Nova pendência',9000,current_date - 20,$2)`,
+         VALUES ($1,'RECEIVABLE','Nova pendência',9000,
+                   /* Pelo relogio da academia, como na outra cobranca. */
+                   (SELECT (now() AT TIME ZONE t.timezone)::date - 20
+                      FROM tenants t WHERE t.id = $1),
+                   $2)`,
         [ids.tenant, ids.devendo],
       ),
     );

@@ -380,7 +380,16 @@ suite('Triagem de saúde: PAR-Q e termo', () => {
 
     await comTenant((c) =>
       c.query(
-        `UPDATE health_screenings SET valido_ate = current_date - 1 WHERE student_id = $1`,
+        /* ONTEM PELO RELÓGIO DA ACADEMIA. current_date é a data do fuso da
+           sessão (UTC no contêiner); o sistema julga a validade contra
+           (now() AT TIME ZONE fuso_da_academia)::date. Das 21h à meia-noite
+           no Brasil os dois discordam de um dia, e o "vencido ontem" do
+           teste ainda era o "hoje" da academia — a triagem seguia VÁLIDA e o
+           teste acusava o sistema por uma conta que ele mesmo fez errado. */
+        `UPDATE health_screenings h
+            SET valido_ate = (SELECT (now() AT TIME ZONE t.timezone)::date - 1
+                                FROM tenants t WHERE t.id = h.tenant_id)
+          WHERE h.student_id = $1`,
         [ids.vencido],
       ),
     );

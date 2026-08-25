@@ -81,6 +81,28 @@ async function tokenDe(email: string): Promise<string> {
 
 const como = (t: string) => ({ authorization: `Bearer ${t}` });
 
+/**
+ * O dia PELO RELÓGIO DA ACADEMIA, não pelo do servidor.
+ *
+ * O sistema resolve "hoje" como (now() AT TIME ZONE fuso_da_academia)::date,
+ * porque quem marca treino é o aluno, na cidade dele. Um teste que monta a
+ * data com new Date().toISOString() está usando UTC: das 21h à meia-noite no
+ * Brasil os dois discordam de um dia, e o "ontem" do teste vira o "hoje" da
+ * academia — colidindo com o registro que outro teste já criou e devolvendo
+ * 409. O teste passava de dia e quebrava de noite, acusando o sistema de um
+ * erro que era só dele.
+ */
+async function diaDaAcademia(deslocamento = 0): Promise<string> {
+  return comTenant(async (c) => {
+    const r = await c.query<{ dia: string }>(
+      `SELECT to_char((now() AT TIME ZONE t.timezone)::date + $2::int, 'YYYY-MM-DD') AS dia
+         FROM tenants t WHERE t.id = $1`,
+      [ids.tenant, deslocamento],
+    );
+    return r.rows[0]!.dia;
+  });
+}
+
 async function marcar(
   email: string,
   corpo: Record<string, unknown>,
@@ -234,9 +256,7 @@ suite('Diário de treino do aluno', () => {
   });
 
   it('ontem é aceito — quem esqueceu de marcar na terça marca na quarta', async () => {
-    const ontem = new Date();
-    ontem.setDate(ontem.getDate() - 1);
-    const iso = ontem.toISOString().slice(0, 10);
+    const iso = await diaDaAcademia(-1);
 
     const res = await marcar(ids.emailA, { dia: 'A', quando: iso });
     expect(res.statusCode).toBe(201);
