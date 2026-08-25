@@ -184,8 +184,21 @@ export default function App(): ReactNode {
            cliente enxerga — e é justamente por isso que precisa de um
            lembrete permanente na tela. */
         <div className="faixa-suporte" role="status">
-          Acesso de suporte como <strong>{principal.name}</strong> · registrado no histórico desta
-          academia · a sessão expira em 15 minutos
+          <span>
+            Acesso de suporte como <strong>{principal.name}</strong> · registrado no histórico desta
+            academia · a sessão expira em 15 minutos
+          </span>
+          {/* A SAÍDA FICA NA FAIXA, e não no menu de perfil. Quem entrou
+              por aqui não é usuário desta academia: sair pelo "Sair" do
+              menu encerraria a sessão de suporte e devolveria a tela de
+              login da academia — que é a última coisa que o operador
+              quer ver. Um `<a>` de verdade e não um botão: o painel abre
+              noutra aba, e quem quiser a de sempre usa o clique do meio.
+              O token de suporte vive só em memória; trocar de página o
+              descarta sozinho. */}
+          <a className="faixa-suporte-voltar" href="/plataforma">
+            Voltar ao painel
+          </a>
         </div>
       )}
       <Sistema principal={principal} aoSair={() => setPrincipal(null)} />

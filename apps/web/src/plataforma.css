@@ -383,6 +383,11 @@
   top: 0;
   z-index: 30;
   padding: 7px var(--e-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-4);
+  flex-wrap: wrap;
   text-align: center;
   font-size: var(--t-sm);
   background: var(--atencao);
@@ -390,6 +395,25 @@
 }
 .faixa-suporte strong {
   font-weight: 700;
+}
+
+/* A VOLTA PARA O PAINEL mora aqui porque é aqui que se lembra dela. O
+   contorno é da própria cor do texto sobre o âmbar da faixa: um botão
+   com fundo próprio viraria um segundo aviso, e a faixa já é o aviso. */
+.faixa-suporte-voltar {
+  flex: none;
+  padding: 3px 12px;
+  border: 1px solid rgba(28, 18, 3, 0.4);
+  border-radius: 999px;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.faixa-suporte-voltar:hover,
+.faixa-suporte-voltar:focus-visible {
+  background: rgba(28, 18, 3, 0.12);
+  border-color: currentColor;
 }
 
 /* O par sol/lua é `position: fixed` no topo da direita e passaria por
@@ -440,4 +464,166 @@ body:has(.faixa-suporte) .tema-troca {
     width: auto;
     white-space: nowrap;
   }
+}
+
+/* ---- janela de edição ----------------------------------------------
+   Uma janela por cima da lista, e não uma página nova: quem edita está
+   olhando para a academia e precisa continuar vendo onde estava. O fundo
+   escurece o que fica atrás porque o clique ali fecha — e um fundo que
+   fecha sem parecer clicável é uma armadilha.
+   ------------------------------------------------------------------- */
+.plt-janela-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--e-5) var(--e-4);
+  overflow-y: auto;
+  background: rgba(2, 10, 10, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.plt-janela {
+  width: min(56rem, 100%);
+  margin: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--raio-lg);
+  background: #0b1a19;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.plt-janela-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding: var(--e-5) var(--e-5) var(--e-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.plt-janela-topo h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.plt-janela-topo .plt-sub {
+  margin: 4px 0 0;
+}
+.plt-janela-corpo {
+  padding: var(--e-5);
+}
+
+/* O formulário do sistema é uma grade de seis colunas. Dentro da janela
+   ele é o mesmo — o que muda é só a largura disponível. */
+.plt-janela-corpo .formulario {
+  margin: 0;
+}
+
+/* Empurra o que vem depois para a direita: é o que separa "Gerar senha
+   provisória", que fica à esquerda, de Cancelar e Salvar. */
+.plt-espaco {
+  flex: 1 1 auto;
+}
+
+.plt-atencao {
+  color: var(--atencao);
+}
+
+/* Caixa de marcar dentro do formulário de seis colunas.
+   `.campo` é `display: block`, e num bloco o `gap` não faz nada: a caixa
+   ficava colada no rótulo. Daí o `display: flex` explícito. */
+.campo-caixa {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--e-3);
+  /* Sobe à linha dos outros campos: sem rótulo em cima, ela começaria
+     onde os outros ainda estão escrevendo o nome do campo. */
+  margin-top: 1.85rem;
+  cursor: pointer;
+}
+.campo-caixa input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.campo-caixa .campo-dica {
+  display: block;
+  margin-top: 2px;
+}
+
+/* ---- zona de risco --------------------------------------------------
+   Separada, no fim da página, com moldura própria. Excluir é a única
+   ação do sistema que destrói dado de cliente: ela não divide espaço com
+   "Suspender" no alto, onde a mão vai por hábito.
+   ------------------------------------------------------------------- */
+.plt-perigo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+  margin-top: var(--e-7);
+  padding: var(--e-4) var(--e-5);
+  border: 1px solid rgba(229, 96, 96, 0.32);
+  border-radius: var(--raio-lg);
+  background: rgba(229, 96, 96, 0.05);
+}
+.plt-perigo .plt-titulo {
+  margin: 0;
+}
+.plt-perigo .plt-sub {
+  margin: 4px 0 0;
+  max-width: 62ch;
+}
+
+.plt-perigo-aviso {
+  padding: var(--e-4);
+  border: 1px solid rgba(229, 96, 96, 0.32);
+  border-radius: var(--raio-md);
+  background: rgba(229, 96, 96, 0.07);
+}
+.plt-perigo-aviso p {
+  margin: 0 0 var(--e-2);
+  line-height: 1.55;
+}
+.plt-perigo-aviso p:last-child {
+  margin-bottom: 0;
+}
+
+/* O botão vermelho, e só ele no sistema inteiro. Cor de perigo usada em
+   mais de um lugar deixa de significar perigo. */
+.botao-perigo {
+  padding: 10px 18px;
+  border: 1px solid #e56060;
+  border-radius: var(--raio-md);
+  font: inherit;
+  font-weight: 600;
+  color: #ffe9e9;
+  background: #7a2020;
+  cursor: pointer;
+}
+.botao-perigo:hover:not(:disabled) {
+  background: #942828;
+}
+.botao-perigo:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Campo que existe para ser LIDO e não preenchido — o identificador da
+   academia na janela de edição. Sem isto ele fica igual aos editáveis e
+   quem tenta digitar nele leva um segundo para entender por que não
+   escreve. */
+.plt-janela input:disabled {
+  opacity: 0.62;
+  cursor: default;
+}
+
+/* Dentro do rótulo de confirmação, o slug é dado a ser copiado com o
+   olho — não um número de destaque. `.plt-destaque` sobe para 1.3rem, o
+   que aqui atropela a frase em volta. */
+.plt-janela .campo-rotulo .plt-destaque {
+  font-size: 1em;
 }
