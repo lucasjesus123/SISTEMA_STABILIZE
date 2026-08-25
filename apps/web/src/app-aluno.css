@@ -988,3 +988,24 @@ html.com-aplicativo body {
   color: #6ee7ef;
   font-size: 15px;
 }
+
+/* ---------------------------------------------------------------------
+   ALVO DE DEDO NO APLICATIVO DO ALUNO
+
+   O aluno abre isto SEMPRE no telefone — é o único aplicativo dos dois
+   que não tem versão de computador na prática. O botão de sair estava
+   em 36×37; o mínimo da Apple é 44.
+   ------------------------------------------------------------------ */
+@media (pointer: coarse) {
+  .app-sair {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .app-nav button,
+  .app-dia-chip,
+  .app-acao,
+  select,
+  input:not([type='checkbox']):not([type='radio']):not([type='file']) {
+    min-height: 44px;
+  }
+}

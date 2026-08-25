@@ -545,7 +545,7 @@
    que um off-canvas traz — e a faixa mostra tudo de uma vez.
    ------------------------------------------------------------------- */
 
-@media (max-width: 60rem) {
+@media (max-width: 47.9375rem), (max-height: 32rem) {
   .sistema {
     grid-template-columns: 1fr;
   }
@@ -768,7 +768,7 @@
 /* A faixa de menu em tela estreita rola na horizontal em vez de
    estourar a borda — com seis seções, "WhatsApp" ficaria fora da tela,
    inacessível e não apenas feio. */
-@media (max-width: 60rem) {
+@media (max-width: 47.9375rem), (max-height: 32rem) {
   .lateral-nav {
     scrollbar-width: none;
   }
@@ -1165,7 +1165,7 @@
 /* Em tela estreita a faixa do topo já ocupa o canto, e um botão fixo por
    cima cobriria o nome de quem está logado. Ele entra na própria faixa,
    que continua sendo o canto superior direito. */
-@media (max-width: 60rem) {
+@media (max-width: 47.9375rem), (max-height: 32rem) {
   .tema-troca {
     position: absolute;
     top: 10px;
@@ -3664,7 +3664,7 @@
   position: static !important;
 }
 
-@media (max-width: 60rem) {
+@media (max-width: 47.9375rem), (max-height: 32rem) {
   .topo {
     padding: var(--e-2) var(--e-4);
   }
@@ -7404,4 +7404,309 @@
   font-weight: 600;
   color: var(--texto);
   font-variant-numeric: tabular-nums;
+}
+
+/* =====================================================================
+   UM SISTEMA, QUATRO APARELHOS
+
+   iPhone, iPad, MacBook e monitor de mesa não são o mesmo problema, e
+   tratá-los como "desktop e mobile" deixa buraco justamente no meio —
+   que é onde o iPad mora.
+
+   O CASCO trocou de regra (linhas 548, 771, 1168 e 3667). A faixa de
+   menu no topo agora vale para TELA ESTREITA **ou TELA BAIXA**:
+
+       @media (max-width: 47.9375rem), (max-height: 32rem)
+
+   Por que as duas condições, e não só a largura:
+     · iPad em pé tem 768px. Pela regra antiga (60rem = 960px) ele caía
+       na faixa do topo, e os dez itens do menu somavam 1383px de
+       largura numa tela de 768 — metade do menu ficava fora da tela,
+       alcançável só arrastando, sem nada indicando que havia mais.
+       Num aparelho com 768px de largura sobra espaço para a coluna de
+       264px E para o conteúdo. Agora o iPad tem o menu inteiro à vista.
+     · Celular DEITADO tem 852px de largura, o que passaria pela regra
+       de largura — mas só 393px de altura. Uma coluna de menu de altura
+       cheia com dez itens não caberia. A condição de altura devolve a
+       faixa do topo para ele.
+
+   Resultado por aparelho:
+     iPhone em pé      393×852  → faixa no topo   (estreito)
+     iPhone deitado    852×393  → faixa no topo   (baixo)
+     iPad em pé        768×1024 → coluna lateral
+     iPad deitado     1024×768  → coluna lateral
+     MacBook / monitor          → coluna lateral
+   ------------------------------------------------------------------ */
+
+/* REDE DE SEGURANÇA DA COLUNA. Ela tem altura de tela cheia; num
+   aparelho baixo que ainda assim receba a coluna, os itens do fim do
+   menu precisam ser alcançáveis em vez de cortados. */
+.lateral-nav {
+  overflow-y: auto;
+}
+
+/* ---------------------------------------------------------------------
+   O ENTALHE DO iPHONE
+
+   O `manifest.webmanifest` pede `display: standalone` e o `index.html`
+   pede `viewport-fit=cover`. Instalado na tela de início do iPhone, o
+   sistema ocupa a tela INTEIRA — inclusive a faixa do relógio e a
+   barrinha de baixo. Sem isto, o nome de quem está logado nasce debaixo
+   do relógio e o rodapé fica atrás da barra de gestos.
+
+   O aplicativo do aluno já tratava disso (`app-aluno.css`); o sistema da
+   equipe não — e recepção e professores também instalam no telefone.
+
+   `viewport-fit=cover` vale para o documento todo, então as laterais
+   entram na conta no celular DEITADO, onde o entalhe come a borda
+   esquerda ou a direita conforme o lado para o qual se virou o aparelho.
+   ------------------------------------------------------------------ */
+@media (max-width: 47.9375rem), (max-height: 32rem) {
+  .lateral {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  .conteudo {
+    padding-left: max(var(--e-4), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--e-4), env(safe-area-inset-right, 0px));
+    padding-bottom: calc(var(--e-8) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------------------------------------------------------------------
+   DEDO NÃO É SETA DO MOUSE
+
+   `pointer: coarse` pergunta pelo APARELHO DE APONTAR, não pela largura
+   da tela — e é isso que resolve o iPad, que tem tela de computador e
+   entrada de celular. Uma regra por largura deixaria o iPad em paisagem
+   (1024px) com alvos de 30px para o dedo.
+
+   44 pixels é o número da Apple, e não é estética: abaixo disso o toque
+   erra o alvo e a pessoa culpa o sistema — ou pior, numa lista de
+   usuários, acerta "Desligar" quando queria "Editar".
+
+   As medidas de antes, tiradas do sistema rodando:
+     Sair            22×34      Editar        34×34
+     tema claro      30×30      Nova senha    66×34
+     ‹ e › do mês    30×30      Desligar      46×34
+   ------------------------------------------------------------------ */
+@media (pointer: coarse) {
+  /* `.tema-icone` NÃO entra aqui: ele ganha os 44px pelo `::after`
+     invisível mais abaixo, e uma altura mínima aqui esticaria a pílula
+     do tema de novo — que foi exatamente o que se corrigiu. */
+  .lateral-sair,
+  .botao-texto,
+  .botao-texto-perigo,
+  .fin-aba,
+  .ag-modo-botao,
+  .lateral-item {
+    min-height: 44px;
+  }
+
+  /* Os que também são estreitos demais: um botão de 22px de largura não
+     vira alvo só por ficar alto. */
+  .lateral-sair,
+  .botao-texto,
+  .botao-texto-perigo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* "Sair" tem quatro letras e dava 38px de largura. Largura mínima,
+       e não só altura: alvo estreito erra igual a alvo baixo — e este
+       fica encostado no link do crédito. */
+    min-width: 44px;
+    padding-inline: var(--e-2);
+    /* O recuo cresce para os lados; sem o negativo, o texto sairia do
+       alinhamento das colunas vizinhas. */
+    margin-inline: calc(var(--e-2) * -1);
+  }
+
+  /* ÁREA DE TOQUE CRESCE, DESENHO NÃO.
+
+     Subir o botão para 44×44 de verdade inchava a pílula do tema até
+     ela competir com o título da página — no iPad ficou o elemento mais
+     chamativo da tela, para uma preferência que se troca uma vez por
+     mês. O `::after` invisível dá os 44px ao DEDO e deixa o círculo com
+     os 30px que o OLHO precisa. É o mesmo truque para qualquer ícone
+     pequeno que precise de alvo grande. */
+  .tema-icone {
+    position: relative;
+  }
+  .tema-icone::after {
+    content: '';
+    position: absolute;
+    inset: -7px;
+  }
+
+  /* Setas de mês: quadradas e cheias, porque são o controle mais usado
+     do financeiro e o mais fácil de errar. */
+  .fin-mes .botao-secundario {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* O crédito do rodapé tinha 16px de altura. Não é botão importante,
+     mas alvo pequeno demais também é toque acidental. */
+  .lateral-rodape a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   DOIS ESTOUROS DE BORDA NO iPHONE
+
+   Medidos em 375, 393 e 430px: as abas do financeiro e a navegação da
+   agenda passavam da borda direita. A página não chegava a rolar de
+   lado — `overflow-x: clip` segura isso — mas o que passa da borda fica
+   INALCANÇÁVEL, que é pior que feio: em 375px, "A pagar" simplesmente
+   não podia ser tocado.
+
+   Rolagem horizontal dentro do próprio quadro, e não quebra de linha:
+   abas que quebram em duas fileiras mudam de altura conforme o texto e
+   empurram o conteúdo para baixo a cada troca de tela.
+   ------------------------------------------------------------------ */
+@media (max-width: 47.9375rem) {
+  .fin-abas,
+  .ag-navegacao {
+    overflow-x: auto;
+    /* É o que faz o `overflow-x` acima agir de verdade quando o pai é
+       grid ou flex — a largura mínima `auto` vale o tamanho do conteúdo.
+       Mesma armadilha da faixa de menu. */
+    min-width: 0;
+    scrollbar-width: none;
+  }
+  .fin-abas::-webkit-scrollbar,
+  .ag-navegacao::-webkit-scrollbar {
+    display: none;
+  }
+  .fin-aba,
+  .ag-navegacao > * {
+    flex: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   CORREÇÕES DA SEGUNDA MEDIÇÃO
+
+   Devolver a coluna lateral ao iPad estreitou o conteúdo de 768 para
+   ~490px, e isso trouxe de volta, no iPad, um estouro que só existia no
+   celular: a navegação da agenda empurrava a página para 883px numa
+   tela de 768. A correção estava presa a `47.9375rem` — largura de
+   celular — e o iPad ficou fora dela.
+
+   Agora ela acompanha as regras de CONTEÚDO estreito (60rem), que é o
+   que de fato descreve a situação: pouco espaço para o miolo, venha ele
+   de uma tela pequena ou de uma coluna de menu ocupando um terço dela.
+   ------------------------------------------------------------------ */
+@media (max-width: 60rem) {
+  .fin-abas,
+  .ag-navegacao {
+    overflow-x: auto;
+    min-width: 0;
+    scrollbar-width: none;
+  }
+  .fin-abas::-webkit-scrollbar,
+  .ag-navegacao::-webkit-scrollbar {
+    display: none;
+  }
+  .fin-aba,
+  .ag-navegacao > * {
+    flex: none;
+  }
+}
+
+@media (pointer: coarse) {
+  /* A LINHA DA AGENDA CRESCE NO TOQUE, e cresce pela variável — não pelo
+     botão. `.ag-vago` tem `height: var(--ag-linha)` e os atendimentos
+     são blocos posicionados em cima da mesma medida; mexer só na altura
+     do botão vago desencaixaria um do outro e a grade passaria a mentir
+     sobre o horário. Subindo a variável, os dois crescem juntos.
+
+     De 28px para 44: meia hora deixa de ser um alvo de 28px de altura
+     entre duas outras meias horas — que é como se marca no horário
+     errado. */
+  .ag-grade {
+    --ag-linha: 44px;
+  }
+
+  /* Campos e botões que ainda estavam entre 34 e 40px. */
+  select,
+  input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  .botao-primario,
+  .botao-secundario,
+  .botao-acao,
+  .botao-perigo {
+    min-height: 44px;
+  }
+
+  /* Marcação: 15×15 é menor que a ponta do dedo. O rótulo ao lado
+     continua sendo o alvo grande; a caixa deixa de ser um alfinete. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+@media (pointer: coarse) {
+  /* "Dar baixa" é o botão que registra o dinheiro entrando. Estava em
+     80×34 e não pegou nas regras acima porque tem classe própria. */
+  .fin-botao-baixa {
+    min-height: 44px;
+  }
+
+  /* A caixa de marcação já é o alvo menor de propósito — quem recebe o
+     toque é o rótulo ao lado. Só que o rótulo tinha a altura da caixa
+     (24px). Crescendo o rótulo, o alvo real fica com 44 e a caixa
+     continua do tamanho certo para o olho. */
+  .fin-chave label,
+  label:has(> input[type='checkbox']),
+  label:has(> input[type='radio']) {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   A COLUNA ENCOLHE NO TABLET EM PÉ
+
+   Com 768px de largura, uma coluna de 264px deixa ~490px para o miolo —
+   e a lista de alunos passou a cortar nome e quebrar telefone em duas
+   linhas. Nem tanto: no tablet a coluna vai a 13,5rem (216px), que ainda
+   mostra ícone e texto de todos os dez itens e devolve quase 50px ao
+   conteúdo. Acima de 56rem a coluna volta ao tamanho cheio.
+   ------------------------------------------------------------------ */
+@media (min-width: 48rem) and (max-width: 56rem) {
+  .sistema {
+    grid-template-columns: 13.5rem 1fr;
+  }
+  .lateral-marca,
+  .lateral-rodape {
+    padding-inline: var(--e-3);
+  }
+}
+
+@media (pointer: coarse) {
+  /* O BOTÃO DE ENTRAR é o primeiro alvo que qualquer pessoa toca no
+     sistema, e estava com 40px de altura. Errar o primeiro toque do dia
+     é a pior primeira impressão possível — e numa academia com duzentos
+     alunos ele é tocado duzentas vezes por dia. */
+  .botao-entrar {
+    min-height: 44px;
+  }
+
+  /* O crédito do rodapé: 70×15. `.lateral-rodape a` não o alcançava
+     porque ele mora dentro do parágrafo `.lateral-credito`. Um link de
+     15px de altura encostado no botão "Sair" é toque errado esperando
+     acontecer — sai do sistema quem só queria ver quem fez. */
+  .lateral-credito a,
+  .entrada-credito a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
 }
