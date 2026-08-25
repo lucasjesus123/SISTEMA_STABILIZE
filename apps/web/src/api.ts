@@ -1256,6 +1256,7 @@ export interface Sala {
 
 export const buscarSalas = () => api<{ data: Sala[] }>('/api/cadastros/salas');
 
+
 export const criarSala = (dados: {
   nome: string;
   descricao?: string | null;
@@ -1363,6 +1364,17 @@ export const marcarPresenca = (id: string, compareceu: boolean) =>
     method: 'POST',
     body: JSON.stringify({ compareceu }),
   });
+
+/* --------------------------------------------------------------------
+ * HORÁRIOS DE ATENDIMENTO
+ *
+ * ESTE CLIENTE FICOU ÓRFÃO POR MESES. As rotas existiam, a tabela
+ * `availability_rules` estava no esquema, a permissão no RBAC, o escopo
+ * no servidor — e NENHUMA TELA chamava nada disto. Na prática a academia
+ * não tinha onde dizer que a professora atende terça das 8 às 12, e sem
+ * isso o calendário não sabe o que é horário livre: marcar aluno virava
+ * acordo de boca.
+ * ------------------------------------------------------------------ */
 
 export interface FaixaDeHorario {
   diaDaSemana: number;

@@ -46,6 +46,26 @@ const NOME_DO_PAPEL: Record<string, string> = Object.fromEntries(
   PAPEIS.map((p) => [p.valor, p.nome]),
 );
 
+/** Segunda primeiro: a semana da academia começa quando o aluno volta. */
+const DIAS = [
+  { valor: 1, nome: 'Segunda' },
+  { valor: 2, nome: 'Terça' },
+  { valor: 3, nome: 'Quarta' },
+  { valor: 4, nome: 'Quinta' },
+  { valor: 5, nome: 'Sexta' },
+  { valor: 6, nome: 'Sábado' },
+  { valor: 0, nome: 'Domingo' },
+];
+
+/** Quantas horas há entre dois "HH:MM". */
+function horasEntre(inicio: string, fim: string): number {
+  const emMinutos = (t: string): number => {
+    const [h, m] = t.split(':').map(Number);
+    return (h ?? 0) * 60 + (m ?? 0);
+  };
+  return Math.max(0, emMinutos(fim) - emMinutos(inicio)) / 60;
+}
+
 /** A paleta oferecida para a agenda. Tons distinguíveis entre si, inclusive
     para quem não separa vermelho de verde. */
 const PALETA = [
@@ -366,6 +386,18 @@ function Formulario({
   const [senha, setSenha] = useState('');
   const [recortar, setRecortar] = useState(usuario?.areas != null);
   const [areas, setAreas] = useState<string[]>(usuario?.areas ?? []);
+  /* HORÁRIOS DE ATENDIMENTO. As rotas existiam desde o começo e nenhuma
+     tela as chamava: a academia não tinha onde dizer que a professora
+     atende terça das 8 às 12, e sem isso o calendário não sabe o que é
+     horário livre — marcar aluno virava acordo de boca.
+
+     MORAM AQUI, no cadastro da pessoa, e não numa tela à parte. É o
+     mesmo motivo da cor: é no momento de cadastrar o professor que se
+     sabe quando ele trabalha, e separar as duas coisas garante que
+     metade da equipe fique sem horário até alguém lembrar. */
+  const [horarios, setHorarios] = useState<api.FaixaDeHorario[]>([]);
+  const [salas, setSalas] = useState<api.Sala[]>([]);
+  const [horariosMudaram, setHorariosMudaram] = useState(false);
   /* "Eu mesmo monto o acesso." NÃO é derivável do par (papel, áreas):
      quem abre o modo manual e ainda não mexeu em nada continua com uma
      combinação que corresponde a uma função pronta, e fechar o painel
@@ -374,6 +406,52 @@ function Formulario({
   const [manual, setManual] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+
+  /* SÓ QUEM ATENDE tem horário de atendimento. Recepção e financeiro
+     trabalham em horários também, e o sistema não os usa para nada: o
+     calendário só oferece vaga de quem recebe aluno. Um campo que não
+     produz efeito é um campo que ensina a desconfiar da tela. */
+  const atende = papel === 'PROFESSIONAL';
+
+  useEffect(() => {
+    if (!atende) return;
+    void api
+      .buscarSalas()
+      .then((r) => setSalas(r.data))
+      .catch(() => undefined);
+  }, [atende]);
+
+  useEffect(() => {
+    if (usuario === null || !atende) return;
+    void api
+      .buscarHorarios(usuario.id)
+      .then((r) => setHorarios(r.data))
+      .catch(() => undefined);
+  }, [usuario, atende]);
+
+  const mexerNoHorario = (
+    indice: number,
+    campos: Partial<api.FaixaDeHorario>,
+  ): void => {
+    setHorariosMudaram(true);
+    setHorarios((atual) => atual.map((f, i) => (i === indice ? { ...f, ...campos } : f)));
+  };
+
+  const adicionarFaixa = (dia: number): void => {
+    setHorariosMudaram(true);
+    setHorarios((atual) => [
+      ...atual,
+      /* 08:00–12:00 e 60 minutos: é a manhã de quase toda academia, e
+         começar com o campo preenchido faz a diferença entre "escolher
+         o horário" e "montar um horário do zero". */
+      { diaDaSemana: dia, inicio: '08:00', fim: '12:00', duracaoMinutos: 60, salaId: null },
+    ]);
+  };
+
+  const removerFaixa = (indice: number): void => {
+    setHorariosMudaram(true);
+    setHorarios((atual) => atual.filter((_, i) => i !== indice));
+  };
 
   /* As seções que o PAPEL escolhido alcança. Mostrar as outras seria
      oferecer o que o servidor recusaria: a conta é interseção, e marcar
@@ -426,6 +504,10 @@ function Formulario({
       setErro('A senha precisa de pelo menos 10 caracteres.');
       return;
     }
+    if (atende && horarios.some((f) => f.fim <= f.inicio)) {
+      setErro('Há uma faixa de horário com o fim antes do início. Corrija antes de salvar.');
+      return;
+    }
     if (recortar && areas.length === 0) {
       setErro('Marque ao menos uma seção — ou deixe "tudo do papel" para não recortar.');
       return;
@@ -446,11 +528,33 @@ function Formulario({
           email: email.trim(),
           senha: senhaModo === 'definir' ? senha : null,
         });
+        /* OS HORÁRIOS SÓ PODEM SER GRAVADOS DEPOIS, porque antes do
+           POST a pessoa não tem id. Se esta segunda chamada falhar, o
+           usuário existe e a grade não — e é por isso que a falha é
+           dita em vez de engolida: o operador precisa saber que falta
+           voltar e preencher, e não descobrir na segunda-feira que o
+           professor não aparece no calendário. */
+        if (atende && horarios.length > 0) {
+          try {
+            await api.salvarHorarios(r.data.id, horarios);
+          } catch {
+            setErro(
+              `${nome} foi cadastrado, mas os horários não foram salvos. Abra "Editar" e tente de novo.`,
+            );
+            setEnviando(false);
+            return;
+          }
+        }
         /* A escolhida não volta do servidor — quem cadastrou acabou de
            digitá-la. Só a gerada precisa da tela que mostra uma vez. */
         aoSalvar(r.data.senhaProvisoria === null ? null : { nome, senha: r.data.senhaProvisoria });
       } else {
         await api.salvarUsuario(usuario.id, dados);
+        /* SÓ GRAVA SE MEXEU. Um PUT que substitui a semana inteira,
+           disparado a cada "Salvar", reescreveria a grade de quem só
+           veio trocar o telefone — e se a lista tivesse falhado ao
+           carregar, apagaria tudo. */
+        if (atende && horariosMudaram) await api.salvarHorarios(usuario.id, horarios);
         aoSalvar(null);
       }
     } catch (x) {
@@ -651,6 +755,149 @@ function Formulario({
                 </span>
               </label>
             )}
+          </fieldset>
+        )}
+
+        {/* ==================================================
+            HORÁRIOS DE ATENDIMENTO
+
+            É O QUE FAZ A AGENDA EXISTIR. O calendário não inventa vaga:
+            ele oferece o que estiver aqui. Sem uma faixa cadastrada, o
+            professor não tem horário livre nenhum — e a recepção
+            descobre isso na frente do aluno.
+
+            A GRADE É EDITADA INTEIRA e gravada de uma vez. O servidor
+            substitui a semana no `PUT`, então tirar a quinta-feira daqui
+            realmente tira a quinta-feira: um `PUT` que só acrescentasse
+            deixaria a faixa apagada valendo do lado de lá, e o
+            profissional continuaria recebendo aluno num dia que ele
+            achava que tinha fechado.
+            ================================================== */}
+        {atende && (
+          <fieldset className="campo campo-cheia eq-acessos">
+            <legend className="campo-rotulo">Horários de atendimento</legend>
+
+            {horarios.length === 0 ? (
+              <p className="campo-dica eq-sem-horario">
+                Nenhuma faixa cadastrada — este profissional não tem horário livre nenhum na
+                agenda. Adicione ao menos um dia para que a recepção consiga marcar aluno com ele.
+              </p>
+            ) : (
+              <p className="campo-dica eq-sem-horario">
+                {(() => {
+                  const total = horarios.reduce(
+                    (a, f) => a + horasEntre(f.inicio, f.fim),
+                    0,
+                  );
+                  const dias = new Set(horarios.map((f) => f.diaDaSemana)).size;
+                  return `${total.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}h por semana, em ${dias} ${dias === 1 ? 'dia' : 'dias'}.`;
+                })()}
+              </p>
+            )}
+
+            <div className="eq-semana">
+              {DIAS.map((d) => {
+                const doDia = horarios
+                  .map((f, i) => ({ f, i }))
+                  .filter(({ f }) => f.diaDaSemana === d.valor);
+
+                return (
+                  <div key={d.valor} className={`eq-dia ${doDia.length > 0 ? 'tem' : ''}`}>
+                    <div className="eq-dia-topo">
+                      <strong>{d.nome}</strong>
+                      <button
+                        type="button"
+                        className="botao-texto"
+                        onClick={() => adicionarFaixa(d.valor)}
+                      >
+                        + faixa
+                      </button>
+                    </div>
+
+                    {doDia.length === 0 ? (
+                      <span className="eq-dia-vazio">não atende</span>
+                    ) : (
+                      doDia.map(({ f, i }) => (
+                        <div key={i} className="eq-faixa">
+                          <label>
+                            <span className="apenas-leitor-de-tela">Início</span>
+                            <input
+                              type="time"
+                              value={f.inicio}
+                              onChange={(e) => mexerNoHorario(i, { inicio: e.target.value })}
+                            />
+                          </label>
+                          <span aria-hidden="true">às</span>
+                          <label>
+                            <span className="apenas-leitor-de-tela">Fim</span>
+                            <input
+                              type="time"
+                              value={f.fim}
+                              onChange={(e) => mexerNoHorario(i, { fim: e.target.value })}
+                            />
+                          </label>
+
+                          {/* A DURAÇÃO DA SESSÃO é o que fatia a faixa em
+                              vagas: das 8 às 12, de 60 em 60, são quatro
+                              horários oferecidos ao aluno. */}
+                          <label className="eq-faixa-duracao">
+                            <span className="apenas-leitor-de-tela">Duração de cada sessão</span>
+                            <select
+                              value={String(f.duracaoMinutos)}
+                              onChange={(e) =>
+                                mexerNoHorario(i, { duracaoMinutos: Number(e.target.value) })
+                              }
+                            >
+                              {[30, 45, 50, 60, 90, 120].map((m) => (
+                                <option key={m} value={String(m)}>
+                                  {m} min
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          {salas.length > 0 && (
+                            <label className="eq-faixa-sala">
+                              <span className="apenas-leitor-de-tela">Espaço</span>
+                              <select
+                                value={f.salaId ?? ''}
+                                onChange={(e) =>
+                                  mexerNoHorario(i, {
+                                    salaId: e.target.value === '' ? null : e.target.value,
+                                  })
+                                }
+                              >
+                                <option value="">Qualquer espaço</option>
+                                {salas.map((sa) => (
+                                  <option key={sa.id} value={sa.id}>
+                                    {sa.nome}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+
+                          <button
+                            type="button"
+                            className="botao-texto-perigo eq-faixa-fora"
+                            onClick={() => removerFaixa(i)}
+                            aria-label={`Remover a faixa de ${d.nome}`}
+                          >
+                            remover
+                          </button>
+
+                          {f.fim <= f.inicio && (
+                            <span className="eq-faixa-erro">
+                              O fim precisa ser depois do início.
+                            </span>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </fieldset>
         )}
 
