@@ -359,7 +359,24 @@ suite('Reserva de espaço', () => {
     const serieId = crypto.randomUUID();
     /* Uma ocorrência ontem e duas nas próximas semanas, montadas direto
        no banco: a rota recusaria criar reserva no passado, e é o passado
-       que este teste precisa ter. */
+       que este teste precisa ter.
+
+       SALA PRÓPRIA, E NÃO A SALA DE BIKE. Os períodos aqui saem de
+       `now()`, então a hora em que a suíte roda entra na conta: rodando
+       entre 21h e 22h UTC, `now() + 7 dias` caía em cima do "Spinning"
+       que outro teste deste mesmo arquivo reservou na bike, e a
+       restrição de exclusão recusava o INSERT. O teste quebrava pelo
+       relógio da máquina, não pelo código — o pior tipo de teste
+       vermelho, porque ensina a ignorar teste vermelho. Uma sala só
+       deste teste não disputa horário com ninguém. */
+    const sala = await comTenant((c) =>
+      c.query<{ id: string }>(
+        `INSERT INTO rooms (tenant_id,name,capacity) VALUES ($1,'Sala da Série',8) RETURNING id`,
+        [ids.tenant],
+      ),
+    );
+    const salaId = sala.rows[0]!.id;
+
     await comTenant((c) =>
       c.query(
         `INSERT INTO availability_blocks (tenant_id, room_id, period, reason, serie_id)
@@ -367,7 +384,7 @@ suite('Reserva de espaço', () => {
            ($1,$2, tstzrange(now() - interval '1 day', now() - interval '23 hours','[)'),'Antiga',$3),
            ($1,$2, tstzrange(now() + interval '7 days', now() + interval '7 days 1 hour','[)'),'Antiga',$3),
            ($1,$2, tstzrange(now() + interval '14 days', now() + interval '14 days 1 hour','[)'),'Antiga',$3)`,
-        [ids.tenant, ids.bike, serieId],
+        [ids.tenant, salaId, serieId],
       ),
     );
 
