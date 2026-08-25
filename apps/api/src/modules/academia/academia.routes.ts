@@ -100,7 +100,14 @@ export async function academiaRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * PUT /api/academia
    * ---------------------------------------------------------------- */
-  app.put('/', { preHandler: [app.authorize('user:write')] }, async (request) => {
+  /* `tenant:settings`, E NÃO `user:write`. A identidade da academia — nome,
+   endereço, telefone do rodapé, logo — não é cadastro de gente, e usar a
+   permissão de mexer em usuário aqui tinha uma consequência concreta:
+   quem recebe SÓ a área "A academia" ganha `tenant:settings` e não ganha
+   `user:write`, então levava 403 em tudo o que essa área existe para
+   fazer. A área era inteiramente inútil, e ninguém tinha como saber por
+   quê — o menu também a escondia. */
+  app.put('/', { preHandler: [app.authorize('tenant:settings')] }, async (request) => {
     const corpo = identidadeSchema.parse(request.body);
 
     return inTenant(request, async (client, principal) => {
@@ -137,7 +144,7 @@ export async function academiaRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * POST /api/academia/logo   (multipart)
    * ---------------------------------------------------------------- */
-  app.post('/logo', { preHandler: [app.authorize('user:write')] }, async (request, reply) => {
+  app.post('/logo', { preHandler: [app.authorize('tenant:settings')] }, async (request, reply) => {
     const parte = await request.file();
     if (parte === undefined) throw badRequest('Nenhuma imagem enviada.');
 
@@ -239,7 +246,7 @@ export async function academiaRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * DELETE /api/academia/logo
    * ---------------------------------------------------------------- */
-  app.delete('/logo', { preHandler: [app.authorize('user:write')] }, async (request, reply) => {
+  app.delete('/logo', { preHandler: [app.authorize('tenant:settings')] }, async (request, reply) => {
     const anterior = await inTenant(request, async (client, principal) => {
       const atual = await chaveDoLogo(client);
       if (atual === null) return null;

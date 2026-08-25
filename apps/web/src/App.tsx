@@ -471,7 +471,12 @@ function Sistema({
       id: 'whatsapp',
       nome: 'WhatsApp',
       icone: <IconeWhatsapp />,
-      visivel: pode('user:write'),
+      /* `whatsapp:manage`, E NÃO `user:write`. É o que TODA rota de
+         WhatsApp exige, e é o que a área "WhatsApp" concede. Com a
+         condição errada, a pessoa cuja única função é cuidar do WhatsApp
+         nunca via a aba — o recurso existia e era inalcançável para
+         exatamente quem foi cadastrado para usá-lo. */
+      visivel: pode('whatsapp:manage'),
       grupo: 'Administração',
     },
     /* SEMPRE VISÍVEL, e é a única assim. As outras seções dependem de
@@ -481,14 +486,28 @@ function Sistema({
       id: 'interessados',
       nome: 'Interessados',
       icone: <IconeInteressados />,
-      visivel: pode('student:write'),
+      /* A PERMISSÃO DA ABA É A DA TELA, e não uma parecida. Aqui estava
+         `student:write` — que o PROFISSIONAL tem — enquanto toda rota do
+         CRM exige `crm:write`, que ele não tem. O resultado, medido: o
+         professor via "Interessados" no menu, clicava, e a tela batia em
+         403. Oferecer a porta e depois dizer que ela não abre é pior do
+         que não oferecer.
+
+         `crm:read` e `crm:write` são sempre concedidas juntas (dono,
+         administrador, recepção e a área "interessados"), então a
+         condição descreve exatamente quem consegue usar a tela. */
+      visivel: pode('crm:read'),
       grupo: 'Operação',
     },
     {
       id: 'academia',
       nome: 'A academia',
       icone: <IconeAcademia />,
-      visivel: pode('user:write'),
+      /* `tenant:settings` — a permissão que a área "A academia" concede e
+         que as rotas de identidade passaram a exigir. Antes eram duas
+         coisas desencontradas: o menu pedia `user:write` e a área dava
+         `tenant:settings`, então a área não abria nada. */
+      visivel: pode('tenant:settings') || pode('pricing:write') || pode('room:write'),
       grupo: 'Administração',
     },
     /* SEMPRE VISÍVEL, e é a única assim. As outras seções dependem de

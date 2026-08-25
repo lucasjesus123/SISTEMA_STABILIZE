@@ -102,14 +102,39 @@ BEGIN
   END;
 
   -- Tentar gravar um registro carimbado com o tenant da outra empresa.
+  --
+  -- O TESTE PROVA O RESULTADO, E NÃO O CÓDIGO DO ERRO. A versão
+  -- anterior capturava `insufficient_privilege OR check_violation` — os
+  -- dois jeitos de a RLS recusar — e ABORTAVA quando a recusa vinha por
+  -- um terceiro caminho. Foi o que aconteceu: o gatilho
+  -- `atribuir_codigo_aluno` (migração 009, escrita depois deste teste)
+  -- dispara ANTES da política, não enxerga a empresa da outra academia,
+  -- e levanta a própria exceção. A proteção ficou mais forte e o teste
+  -- passou a falhar — e um teste de isolamento que aborta na metade
+  -- prova metade.
+  --
+  -- Agora ele captura qualquer recusa e, em seguida, VAI CONFERIR do
+  -- lado da B se a linha entrou. É o que realmente importa, e não
+  -- quebra na próxima vez que alguém puser um gatilho no caminho.
   ok := false;
   BEGIN
     INSERT INTO students (tenant_id, full_name) VALUES (t_b, 'Plantado por A');
-  EXCEPTION WHEN insufficient_privilege OR check_violation THEN
+  EXCEPTION WHEN OTHERS THEN
     ok := true;
   END;
+
+  -- A conferência é feita do CONTEXTO DA B: de dentro da A, a RLS
+  -- esconderia a linha plantada e o teste diria "não entrou" mesmo se
+  -- tivesse entrado — exatamente o falso negativo mais perigoso aqui.
+  PERFORM set_config('app.tenant_id', t_b::text, true);
+  SELECT count(*) INTO visiveis FROM students WHERE full_name = 'Plantado por A';
+  PERFORM set_config('app.tenant_id', t_a::text, true);
+
+  IF visiveis > 0 THEN
+    RAISE EXCEPTION 'FALHA 2c: A gravou registro no tenant da B (% linha(s))', visiveis;
+  END IF;
   IF NOT ok THEN
-    RAISE EXCEPTION 'FALHA 2c: A gravou registro no tenant da B';
+    RAISE EXCEPTION 'FALHA 2c: o INSERT cruzado não levantou erro nenhum';
   END IF;
 
   RAISE NOTICE 'OK 2 — escrita cruzada bloqueada (update, delete e insert)';
