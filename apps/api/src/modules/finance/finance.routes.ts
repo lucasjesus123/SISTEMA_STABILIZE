@@ -5,12 +5,17 @@ import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { writeAudit } from '../../audit/audit.js';
 import { notFound, unprocessable } from '../../http/errors.js';
 import { calcularComissao } from './commission.js';
+import { gerarContasFixasDaEmpresa } from './contas-fixas.js';
 import {
+  alterarContaFixa,
   baseDeComissao,
+  criarContaFixa,
   criarLancamento,
+  excluirContaFixa,
   estornarPagamento,
   fluxoPorMes,
   inadimplentes,
+  listarContasFixas,
   listarLancamentos,
   listarRecorrencias,
   porCategoria,
@@ -422,6 +427,210 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
         data: linhas.map((r) => ({ ...r, valorFormatado: formatCents(r.valorCentavos) })),
       };
     }),
+  );
+
+  /* ------------------------------------------------------------------
+   * CONTAS FIXAS — o aluguel do dia 20
+   *
+   * SÃO AS DUAS DIREÇÕES no mesmo cadastro, e não uma tela para
+   * despesa e outra para receita. O molde é o mesmo objeto — descrição,
+   * valor, dia, ciclo, de quem ou para quem —, e a direção é um campo
+   * dele. Duplicar a tela duplicaria a regra de geração junto, que é a
+   * parte que não pode divergir.
+   *
+   * A PERMISSÃO JÁ EXISTIA: `finance:recurring:write` está declarada no
+   * RBAC desde o começo, concedida a OWNER, a ADMIN e à área do
+   * financeiro — e nenhuma rota a exigia, porque não havia o que
+   * recorrer. Ela é separada de `receivable:write` de propósito:
+   * cadastrar uma conta fixa é lançar as próximas doze de uma vez, e
+   * quem pode digitar uma despesa não necessariamente pode agendar um
+   * ano delas.
+   * ---------------------------------------------------------------- */
+
+  const contaFixaSchema = z.object({
+    direcao: z.enum(['RECEIVABLE', 'PAYABLE']),
+    descricao: z.string().trim().min(1).max(300),
+    categoria: z.string().trim().max(80).optional(),
+    valor: valorSchema,
+    ciclo: z.enum(['MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL']),
+    /* O TETO É 28, e é o mesmo da coluna. Não é preguiça de tratar o
+       dia 31: é que "todo dia 31" não existe em fevereiro, e qualquer
+       resposta que o sistema desse — dia 28, dia 1º do mês seguinte,
+       pular o mês — seria uma decisão dele sobre o contrato de outra
+       pessoa. Recusar na entrada faz quem cadastra escolher. */
+    diaDeCobranca: z.coerce.number().int().min(1).max(28),
+    studentId: idSchema.optional(),
+    contraparte: z.string().trim().max(160).optional(),
+    inicio: z.coerce.date(),
+    fim: z.coerce.date().optional(),
+  });
+
+  app.get(
+    '/contas-fixas',
+    { preHandler: [app.authorize('finance:report:read')] },
+    async (request) => {
+      const { direcao } = z
+        .object({ direcao: z.enum(['RECEIVABLE', 'PAYABLE']).optional() })
+        .parse(request.query);
+
+      return inTenant(request, async (client) => {
+        const linhas = await listarContasFixas(client, direcao);
+        return {
+          data: linhas.map((c) => ({ ...c, valorFormatado: formatCents(c.valorCentavos) })),
+        };
+      });
+    },
+  );
+
+  app.post(
+    '/contas-fixas',
+    { preHandler: [app.authorize('finance:recurring:write')] },
+    async (request, reply) => {
+      const body = contaFixaSchema.parse(request.body);
+
+      if (body.fim !== undefined && body.fim < body.inicio) {
+        throw unprocessable('A data de término precisa ser depois do início.');
+      }
+      /* A receber PRECISA dizer de quem — é um CHECK do banco sobre o
+         lançamento gerado, e descobrir isso só quando o agendador roda
+         seria uma conta que nunca nasce, sem ninguém saber por quê. */
+      if (
+        body.direcao === 'RECEIVABLE' &&
+        body.studentId === undefined &&
+        (body.contraparte ?? '') === ''
+      ) {
+        throw unprocessable('Diga de quem você vai receber: um aluno ou um nome.');
+      }
+
+      return inTenant(request, async (client, principal) => {
+        const criada = await criarContaFixa(client, principal.tenantId, {
+          direcao: body.direcao,
+          descricao: body.descricao,
+          categoria: body.categoria,
+          valorCentavos: body.valor,
+          ciclo: body.ciclo,
+          diaDeCobranca: body.diaDeCobranca,
+          studentId: body.studentId,
+          contraparte: body.contraparte,
+          inicio: body.inicio,
+          fim: body.fim,
+        });
+
+        /* GERA NA HORA, e não só no próximo tique do agendador. Quem
+           acabou de cadastrar "aluguel, dia 20, começou em maio" espera
+           ver maio, junho e julho na lista — e se não vir, cadastra de
+           novo achando que não salvou. */
+        const geradas = await gerarContasFixasDaEmpresa(client);
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'finance.recurrence.create',
+          resourceType: 'finance_recurrence',
+          resourceId: criada.id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: {
+            direcao: body.direcao,
+            valorCentavos: body.valor,
+            ciclo: body.ciclo,
+            dia: body.diaDeCobranca,
+            geradas,
+          },
+        });
+
+        void reply.status(201);
+        return { data: { id: criada.id, geradas } };
+      });
+    },
+  );
+
+  app.patch(
+    '/contas-fixas/:id',
+    { preHandler: [app.authorize('finance:recurring:write')] },
+    async (request) => {
+      const { id } = z.object({ id: idSchema }).parse(request.params);
+      const body = z
+        .object({
+          descricao: z.string().trim().min(1).max(300).optional(),
+          categoria: z.string().trim().max(80).nullable().optional(),
+          valor: valorSchema.optional(),
+          ciclo: z.enum(['MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL']).optional(),
+          diaDeCobranca: z.coerce.number().int().min(1).max(28).optional(),
+          contraparte: z.string().trim().max(160).nullable().optional(),
+          fim: z.coerce.date().nullable().optional(),
+          ativa: z.boolean().optional(),
+        })
+        .parse(request.body);
+
+      return inTenant(request, async (client, principal) => {
+        const ok = await alterarContaFixa(client, id, {
+          ...(body.descricao !== undefined && { descricao: body.descricao }),
+          ...(body.categoria !== undefined && { categoria: body.categoria }),
+          ...(body.valor !== undefined && { valorCentavos: body.valor }),
+          ...(body.ciclo !== undefined && { ciclo: body.ciclo }),
+          ...(body.diaDeCobranca !== undefined && { diaDeCobranca: body.diaDeCobranca }),
+          ...(body.contraparte !== undefined && { contraparte: body.contraparte }),
+          ...(body.fim !== undefined && { fim: body.fim }),
+          ...(body.ativa !== undefined && { ativa: body.ativa }),
+        });
+        if (!ok) throw notFound('Conta fixa');
+
+        /* Reativar precisa correr atrás do que não nasceu enquanto ela
+           estava parada; alterar valor ou dia não gera nada de novo
+           (a idempotência é por competência), então chamar sempre é
+           barato e fecha o buraco sem um caso especial. */
+        if (body.ativa === true) await gerarContasFixasDaEmpresa(client);
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'finance.recurrence.update',
+          resourceType: 'finance_recurrence',
+          resourceId: id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: { campos: Object.keys(body) },
+        });
+
+        return { ok: true };
+      });
+    },
+  );
+
+  app.delete(
+    '/contas-fixas/:id',
+    { preHandler: [app.authorize('finance:recurring:write')] },
+    async (request) => {
+      const { id } = z.object({ id: idSchema }).parse(request.params);
+
+      return inTenant(request, async (client, principal) => {
+        const ok = await excluirContaFixa(client, id);
+        if (!ok) throw notFound('Conta fixa');
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'finance.recurrence.delete',
+          resourceType: 'finance_recurrence',
+          resourceId: id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+        });
+
+        return { ok: true };
+      });
+    },
+  );
+
+  /* Materializar sob demanda. O agendador já faz de hora em hora; este
+     botão existe para quem acabou de cadastrar e quer ver agora, e para
+     quando a academia ficou dias sem o serviço no ar. */
+  app.post(
+    '/contas-fixas/gerar',
+    { preHandler: [app.authorize('finance:recurring:write')] },
+    async (request) =>
+      inTenant(request, async (client, principal) => {
+        const geradas = await gerarContasFixasDaEmpresa(client);
+        return { data: { geradas } };
+      }),
   );
 
   /* ------------------------------------------------------------------

@@ -253,7 +253,7 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
       {painel === 'comissoes' ? (
         <Comissoes mes={mes} principal={principal} />
       ) : painel === 'recorrencias' ? (
-        <Recorrencias />
+        <Recorrencias podeEscrever={principal.permissions.includes('finance:recurring:write')} />
       ) : painel === 'relatorios' ? (
         <Relatorios de={de} ate={ate} />
       ) : (
@@ -1145,117 +1145,610 @@ const NOME_DO_CICLO: Record<string, string> = {
  * lançamentos mostra o que já foi emitido; sem esta, o previsto do mês
  * seguinte é uma conta que alguém faz de cabeça — e ninguém faz.
  */
-function Recorrencias(): ReactNode {
-  const [linhas, setLinhas] = useState<api.Recorrencia[] | null>(null);
+const CICLOS_FIXOS: { valor: string; nome: string; porAno: number }[] = [
+  { valor: 'MONTHLY', nome: 'Todo mês', porAno: 12 },
+  { valor: 'QUARTERLY', nome: 'A cada 3 meses', porAno: 4 },
+  { valor: 'SEMIANNUAL', nome: 'A cada 6 meses', porAno: 2 },
+  { valor: 'ANNUAL', nome: 'Uma vez por ano', porAno: 1 },
+];
+
+/** O que este molde representa por MÊS, para poder somar tudo junto. */
+function porMesDoCiclo(valorCentavos: number, ciclo: string): number {
+  const c = CICLOS_FIXOS.find((x) => x.valor === ciclo);
+  return c === undefined ? 0 : Math.round((valorCentavos * c.porAno) / 12);
+}
+
+/**
+ * A aba das coisas que se repetem.
+ *
+ * SÃO DUAS FONTES DIFERENTES, e a tela mostra as duas porque a pergunta
+ * de quem abre aqui é uma só — *o que nasce sozinho* — e ela não separa
+ * por origem:
+ *
+ *   CONTAS FIXAS  → cadastradas aqui. Aluguel, energia, contador, a sala
+ *     que a academia subloca. Direção livre: sai ou entra.
+ *   MENSALIDADES  → nascem do CONTRATO do aluno, que mora no cadastro
+ *     dele. São mostradas, não editadas: mexer no valor da mensalidade
+ *     por esta tela seria mexer no contrato pelas costas de quem o
+ *     assinou.
+ *
+ * O QUE ESTA ABA ERA. Só a segunda lista, sem cadastro nenhum. A tabela
+ * `finance_recurrences` existia no banco desde o primeiro dia e nunca
+ * teve uma linha: o aluguel era digitado à mão todo mês, e no mês em que
+ * alguém esquecia, o "a pagar" mentia.
+ */
+function Recorrencias({ podeEscrever }: { podeEscrever: boolean }): ReactNode {
+  const [fixas, setFixas] = useState<api.ContaFixa[] | null>(null);
+  const [contratos, setContratos] = useState<api.Recorrencia[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [editando, setEditando] = useState<api.ContaFixa | 'nova' | null>(null);
+  const [versao, setVersao] = useState(0);
+
+  const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
     let vivo = true;
-    api
-      .buscarRecorrencias()
-      .then((r) => vivo && setLinhas(r.data))
+    void Promise.all([
+      api.buscarContasFixas().then((r) => r.data),
+      api.buscarRecorrencias().then((r) => r.data),
+    ])
+      .then(([f, c]) => {
+        if (!vivo) return;
+        setFixas(f);
+        setContratos(c);
+        setErro(null);
+      })
       .catch((e: unknown) => {
         if (!vivo) return;
-        setLinhas([]);
+        setFixas([]);
+        setContratos([]);
         setErro(e instanceof api.ApiError ? e.message : 'Falha ao carregar.');
       });
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [versao]);
 
-  const mensais = (linhas ?? []).filter((r) => r.ciclo === 'MONTHLY');
-  const previsto = mensais
-    .filter((r) => !r.encerrandoNoFim)
-    .reduce((a, r) => a + r.valorCentavos, 0);
+  if (editando !== null) {
+    return (
+      <FormularioDeContaFixa
+        conta={editando === 'nova' ? null : editando}
+        aoSair={() => setEditando(null)}
+        aoSalvar={(geradas) => {
+          setEditando(null);
+          setAviso(
+            geradas > 0
+              ? `Pronto. ${geradas} lançamento${geradas === 1 ? '' : 's'} ${geradas === 1 ? 'já entrou' : 'já entraram'} nas contas do período.`
+              : 'Pronto. O próximo lançamento nasce na data combinada.',
+          );
+          recarregar();
+        }}
+      />
+    );
+  }
+
+  const ativas = (fixas ?? []).filter((f) => f.ativa);
+  const saiPorMes = ativas
+    .filter((f) => f.direcao === 'PAYABLE')
+    .reduce((a, f) => a + porMesDoCiclo(f.valorCentavos, f.ciclo), 0);
+  const entraPorMes =
+    ativas
+      .filter((f) => f.direcao === 'RECEIVABLE')
+      .reduce((a, f) => a + porMesDoCiclo(f.valorCentavos, f.ciclo), 0) +
+    (contratos ?? [])
+      .filter((c) => c.ciclo === 'MONTHLY' && !c.encerrandoNoFim)
+      .reduce((a, c) => a + c.valorCentavos, 0);
 
   return (
     <>
       {erro !== null && <Erro mensagem={erro} />}
-      {linhas === null ? (
-        <Carregando rotulo="Carregando as recorrências" />
-      ) : linhas.length === 0 ? (
+      {aviso !== null && (
+        <p className="fin-aviso" role="status">
+          {aviso}
+        </p>
+      )}
+
+      {/* O SALDO DO QUE SE REPETE, antes das listas. É a única pergunta
+          que ninguém consegue responder olhando as linhas: quanto desta
+          academia já está comprometido antes de o mês começar. */}
+      <div className="fin-kpis fin-kpis-largo">
+        <Kpi
+          rotulo="Entra por mês"
+          valor={entraPorMes}
+          nota="mensalidades dos contratos e receitas fixas"
+        />
+        <Kpi rotulo="Sai por mês" valor={saiPorMes} nota="aluguel, energia e o resto do fixo" />
+        <div className="fin-kpi">
+          <span className="fin-kpi-rotulo">Sobra antes do resto</span>
+          <strong className={`fin-kpi-valor ${entraPorMes - saiPorMes < 0 ? 'negativo' : ''}`}>
+            {formatCents(entraPorMes - saiPorMes)}
+          </strong>
+          <span className="fin-kpi-nota">
+            {/* O ciclo é normalizado para o mês: um contador trimestral
+                de R$ 900 pesa R$ 300 por mês. Somar o valor cheio de um
+                anual junto com um mensal daria um número que não é
+                despesa de mês nenhum. */}
+            só o que se repete, já rateado por mês
+          </span>
+        </div>
+      </div>
+
+      <div className="secao-cabecalho linha-cabecalho fin-fixas-topo">
+        <div>
+          <h2 className="plt-titulo">Contas fixas</h2>
+          <p className="rel-apoio">
+            O que nasce sozinho na data combinada — de um lado e do outro do caixa. Mudar o valor
+            vale do próximo em diante; o que já foi lançado não muda.
+          </p>
+        </div>
+        {podeEscrever && (
+          <button type="button" className="botao-acao" onClick={() => setEditando('nova')}>
+            <span aria-hidden="true">+</span> Nova conta fixa
+          </button>
+        )}
+      </div>
+
+      {fixas === null ? (
+        <Carregando rotulo="Carregando as contas fixas" />
+      ) : fixas.length === 0 ? (
+        <Vazio
+          titulo="Nenhuma conta fixa ainda."
+          descricao="Aluguel, energia, internet, contador. Cadastre uma vez e ela aparece em “A pagar” todo mês, na data certa, sem ninguém lembrar."
+        />
+      ) : (
+        <div className="fix-grade">
+          {fixas.map((f) => (
+            <CartaoDeContaFixa
+              key={f.id}
+              conta={f}
+              podeEscrever={podeEscrever}
+              aoEditar={() => setEditando(f)}
+              aoMudar={recarregar}
+              aoFalhar={setErro}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ==================================================
+          AS MENSALIDADES, embaixo e sem botão de editar.
+          Elas nascem do contrato do aluno; esta tela mostra o
+          resultado, e quem muda o contrato é o cadastro dele.
+          ================================================== */}
+      <h2 className="plt-titulo fix-titulo-contratos">Mensalidades dos alunos</h2>
+      <p className="rel-apoio">
+        Nascem do contrato de cada aluno, que fica no cadastro dele. Aqui é só para conferir o que
+        vai entrar.
+      </p>
+
+      {contratos === null ? (
+        <Carregando rotulo="Carregando os contratos" />
+      ) : contratos.length === 0 ? (
         <Vazio
           titulo="Nenhum contrato ativo."
           descricao="O plano do aluno é definido no cadastro dele. É o contrato que faz a mensalidade nascer sozinha todo mês."
         />
       ) : (
-        <>
-          <div className="fin-kpis fin-kpis-largo">
-            <Kpi
-              rotulo="Previsto por mês"
-              valor={previsto}
-              /* "mensais", não "mensalis": o plural de mensal troca o
-                 -l por -is. Concatenar sufixo cegamente produz a forma
-                 errada em toda palavra terminada em -al. */
-              nota={
-                mensais.length === 1
-                  ? '1 contrato mensal'
-                  : `${mensais.length} contratos mensais`
-              }
-            />
-            <div className="fin-kpi">
-              <span className="fin-kpi-rotulo">Saindo</span>
-              <strong className="fin-kpi-valor">
-                {linhas.filter((r) => r.encerrandoNoFim).length}
-              </strong>
-              <span className="fin-kpi-nota">pediram para encerrar no fim do período</span>
-            </div>
-            <div className="fin-kpi">
-              <span className="fin-kpi-rotulo">Com atraso</span>
-              <strong className="fin-kpi-valor">
-                {linhas.filter((r) => r.vencidasAbertas > 0).length}
-              </strong>
-              <span className="fin-kpi-nota">têm cobrança vencida em aberto</span>
-            </div>
-          </div>
-
-          <div className="rolo">
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th scope="col">Aluno</th>
-                  <th scope="col">Plano</th>
-                  <th scope="col" className="fin-col-num">Valor</th>
-                  <th scope="col">Cobra dia</th>
-                  <th scope="col">Situação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {linhas.map((r) => (
-                  <tr key={r.contratoId}>
-                    <td>
-                      <span className="celula-forte">{r.aluno}</span>
-                      <span className="celula-apoio">
-                        {r.profissional ?? 'sem professor'} · desde {r.desde.slice(0, 7)}
+        <div className="rolo">
+          <table className="tabela">
+            <thead>
+              <tr>
+                <th scope="col">Aluno</th>
+                <th scope="col">Plano</th>
+                <th scope="col" className="fin-col-num">
+                  Valor
+                </th>
+                <th scope="col">Cobra dia</th>
+                <th scope="col">Situação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {contratos.map((r) => (
+                <tr key={r.contratoId}>
+                  <td>
+                    <span className="celula-forte">{r.aluno}</span>
+                    <span className="celula-apoio">
+                      {r.profissional ?? 'sem professor'} · desde {r.desde.slice(0, 7)}
+                    </span>
+                  </td>
+                  <td className="plt-secundario">{NOME_DO_CICLO[r.ciclo] ?? r.ciclo}</td>
+                  <td className="fin-col-num">
+                    <span className="dinheiro">{r.valorFormatado}</span>
+                  </td>
+                  <td className="tabular">{r.diaDeCobranca ?? '—'}</td>
+                  <td>
+                    {r.encerrandoNoFim ? (
+                      <span className="pilula apagada">encerrando</span>
+                    ) : r.vencidasAbertas > 0 ? (
+                      /* O NÚMERO, e não só "em atraso": três vencidas
+                         é um aluno a ligar hoje, uma é um boleto que
+                         venceu ontem. */
+                      <span className="pilula atrasada">
+                        {r.vencidasAbertas} vencida{r.vencidasAbertas === 1 ? '' : 's'}
                       </span>
-                    </td>
-                    <td className="plt-secundario">{NOME_DO_CICLO[r.ciclo] ?? r.ciclo}</td>
-                    <td className="fin-col-num">
-                      <span className="dinheiro">{r.valorFormatado}</span>
-                    </td>
-                    <td className="tabular">{r.diaDeCobranca ?? '—'}</td>
-                    <td>
-                      {r.encerrandoNoFim ? (
-                        <span className="pilula apagada">encerrando</span>
-                      ) : r.vencidasAbertas > 0 ? (
-                        /* O NÚMERO, e não só "em atraso": três vencidas
-                           é um aluno a ligar hoje, uma é um boleto que
-                           venceu ontem. */
-                        <span className="pilula atrasada">
-                          {r.vencidasAbertas} vencida{r.vencidasAbertas === 1 ? '' : 's'}
-                        </span>
-                      ) : (
-                        <span className="pilula viva">em dia</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+                    ) : (
+                      <span className="pilula viva">em dia</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
+    </>
+  );
+}
+
+/**
+ * Uma conta fixa, como cartão.
+ *
+ * CARTÃO E NÃO LINHA DE TABELA. Uma conta fixa tem sete campos que
+ * importam juntos — o que é, para quem, quanto, quando, desde quando,
+ * quantas já nasceram, quantas estão vencidas — e uma tabela com sete
+ * colunas obriga a rolar na horizontal para ler uma linha inteira. São
+ * poucas por academia: cabem lado a lado.
+ */
+function CartaoDeContaFixa({
+  conta: f,
+  podeEscrever,
+  aoEditar,
+  aoMudar,
+  aoFalhar,
+}: {
+  conta: api.ContaFixa;
+  podeEscrever: boolean;
+  aoEditar: () => void;
+  aoMudar: () => void;
+  aoFalhar: (m: string) => void;
+}): ReactNode {
+  const [ocupado, setOcupado] = useState(false);
+  const sai = f.direcao === 'PAYABLE';
+
+  const agir = async (fn: () => Promise<unknown>): Promise<void> => {
+    setOcupado(true);
+    try {
+      await fn();
+      aoMudar();
+    } catch (e) {
+      aoFalhar(e instanceof api.ApiError ? e.message : 'Não foi possível concluir.');
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <article className={`fix-cartao ${f.ativa ? '' : 'pausada'} ${sai ? 'sai' : 'entra'}`}>
+      <header className="fix-cabeca">
+        {/* A DIREÇÃO É A PRIMEIRA COISA e não uma cor só: numa lista
+            misturada, confundir uma receita fixa com uma despesa fixa
+            inverte o sinal da conta que a pessoa está fazendo de
+            cabeça. */}
+        <span className={`pilula ${sai ? 'atrasada' : 'viva'}`}>{sai ? 'Sai' : 'Entra'}</span>
+        {!f.ativa && <span className="pilula apagada">pausada</span>}
+        {f.vencidasAbertas > 0 && (
+          <span className="pilula atrasada">
+            {f.vencidasAbertas} vencida{f.vencidasAbertas === 1 ? '' : 's'}
+          </span>
+        )}
+      </header>
+
+      <h3 className="fix-nome">{f.descricao}</h3>
+      <p className="fix-quem">
+        {f.aluno ?? f.contraparte ?? (sai ? 'sem fornecedor' : 'sem pagador')}
+        {f.categoria !== null && f.categoria !== '' && ` · ${f.categoria}`}
+      </p>
+
+      <p className="fix-valor">
+        <strong className="dinheiro">{f.valorFormatado}</strong>
+        <span>
+          {CICLOS_FIXOS.find((c) => c.valor === f.ciclo)?.nome ?? f.ciclo}, dia {f.diaDeCobranca}
+        </span>
+      </p>
+
+      <dl className="fix-fatos">
+        <div>
+          <dt>Já lançadas</dt>
+          <dd className="tabular">{f.geradas}</dd>
+        </div>
+        <div>
+          <dt>Desde</dt>
+          <dd className="tabular">{f.inicio.slice(0, 7).split('-').reverse().join('/')}</dd>
+        </div>
+        <div>
+          <dt>{f.fim === null ? 'Até' : 'Encerra em'}</dt>
+          <dd className="tabular">
+            {f.fim === null ? 'sem prazo' : f.fim.split('-').reverse().join('/')}
+          </dd>
+        </div>
+      </dl>
+
+      {podeEscrever && (
+        <footer className="fix-acoes">
+          <button type="button" className="botao-texto" onClick={aoEditar} disabled={ocupado}>
+            Editar
+          </button>
+          <button
+            type="button"
+            className="botao-texto"
+            disabled={ocupado}
+            onClick={() => void agir(() => api.alterarContaFixa(f.id, { ativa: !f.ativa }))}
+          >
+            {f.ativa ? 'Pausar' : 'Retomar'}
+          </button>
+          <button
+            type="button"
+            className="botao-texto-perigo"
+            disabled={ocupado}
+            onClick={() => {
+              /* O AVISO DIZ O QUE *NÃO* ACONTECE. O medo de quem clica
+                 aqui é apagar o histórico junto; dizer que ele fica é o
+                 que transforma "não vou mexer" em "pode excluir". */
+              if (
+                window.confirm(
+                  `Excluir "${f.descricao}"?\n\nEla para de nascer. Os ${f.geradas} lançamento${f.geradas === 1 ? '' : 's'} que já ${f.geradas === 1 ? 'nasceu' : 'nasceram'} continua${f.geradas === 1 ? '' : 'm'} no financeiro, com o histórico de pagamento.`,
+                )
+              ) {
+                void agir(() => api.excluirContaFixa(f.id));
+              }
+            }}
+          >
+            Excluir
+          </button>
+        </footer>
+      )}
+    </article>
+  );
+}
+
+/**
+ * Cadastrar ou alterar uma conta fixa.
+ *
+ * O QUE NÃO MUDA NA EDIÇÃO: a direção e a data de início. Ambas já
+ * produziram lançamentos, e trocá-las não reescreveria o passado —
+ * deixaria o molde descrevendo uma coisa e o extrato mostrando outra.
+ * Quem errou a direção exclui e cadastra de novo, que é honesto.
+ */
+function FormularioDeContaFixa({
+  conta,
+  aoSair,
+  aoSalvar,
+}: {
+  conta: api.ContaFixa | null;
+  aoSair: () => void;
+  aoSalvar: (geradas: number) => void;
+}): ReactNode {
+  const nova = conta === null;
+  const [direcao, setDirecao] = useState<api.DirecaoLancamento>(conta?.direcao ?? 'PAYABLE');
+  const [descricao, setDescricao] = useState(conta?.descricao ?? '');
+  const [valor, setValor] = useState(
+    conta === null ? '' : (conta.valorCentavos / 100).toFixed(2).replace('.', ','),
+  );
+  const [ciclo, setCiclo] = useState(conta?.ciclo ?? 'MONTHLY');
+  const [dia, setDia] = useState(String(conta?.diaDeCobranca ?? 10));
+  const [contraparte, setContraparte] = useState(conta?.contraparte ?? '');
+  const [categoria, setCategoria] = useState(conta?.categoria ?? '');
+  const [inicio, setInicio] = useState(() => {
+    if (conta !== null) return conta.inicio;
+    const h = new Date();
+    return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [fim, setFim] = useState(conta?.fim ?? '');
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  const sai = direcao === 'PAYABLE';
+
+  const enviar = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setErro(null);
+
+    if (contraparte.trim() === '' && !sai) {
+      setErro('Diga de quem você vai receber.');
+      return;
+    }
+    setEnviando(true);
+    try {
+      if (nova) {
+        const r = await api.criarContaFixa({
+          direcao,
+          descricao: descricao.trim(),
+          valor,
+          ciclo,
+          diaDeCobranca: Number(dia),
+          inicio,
+          ...(categoria.trim() !== '' ? { categoria: categoria.trim() } : {}),
+          ...(contraparte.trim() !== '' ? { contraparte: contraparte.trim() } : {}),
+          ...(fim !== '' ? { fim } : {}),
+        });
+        aoSalvar(r.data.geradas);
+      } else {
+        await api.alterarContaFixa(conta.id, {
+          descricao: descricao.trim(),
+          valor,
+          ciclo,
+          diaDeCobranca: Number(dia),
+          categoria: categoria.trim() === '' ? null : categoria.trim(),
+          contraparte: contraparte.trim() === '' ? null : contraparte.trim(),
+          fim: fim === '' ? null : fim,
+        });
+        aoSalvar(0);
+      }
+    } catch (x) {
+      setErro(x instanceof api.ApiError ? x.message : 'Não foi possível salvar.');
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <>
+      <button type="button" className="botao-voltar" onClick={aoSair}>
+        ← Voltar
+      </button>
+      <div className="secao-cabecalho">
+        <h1>{nova ? 'Nova conta fixa' : `Editar ${conta.descricao}`}</h1>
+        <p>
+          {nova
+            ? 'Cadastre uma vez e ela nasce sozinha na data combinada, todo período, até você mandar parar.'
+            : 'A alteração vale do próximo lançamento em diante. O que já nasceu fica como está.'}
+        </p>
+      </div>
+
+      <form className="formulario" onSubmit={(e) => void enviar(e)} noValidate>
+        {/* A DIREÇÃO PRIMEIRO e como escolha visível, não como um select
+            no meio do formulário: ela muda o rótulo de metade dos campos
+            abaixo, e descobrir isso depois de preencher é refazer. */}
+        <fieldset className="campo campo-cheia fix-direcao" disabled={!nova}>
+          <legend className="campo-rotulo">Esta conta</legend>
+          <div className="fix-direcao-opcoes">
+            <label className={`fix-opcao ${sai ? 'ativa' : ''}`}>
+              <input
+                type="radio"
+                name="direcao"
+                checked={sai}
+                onChange={() => setDirecao('PAYABLE')}
+              />
+              <span>
+                <strong>Sai da academia</strong>
+                <span className="campo-dica">Aluguel, energia, internet, contador.</span>
+              </span>
+            </label>
+            <label className={`fix-opcao ${sai ? '' : 'ativa'}`}>
+              <input
+                type="radio"
+                name="direcao"
+                checked={!sai}
+                onChange={() => setDirecao('RECEIVABLE')}
+              />
+              <span>
+                <strong>Entra na academia</strong>
+                <span className="campo-dica">Sublocação de sala, parceria, patrocínio.</span>
+              </span>
+            </label>
+          </div>
+          {!nova && (
+            <span className="campo-dica">
+              A direção não muda depois de cadastrada — ela já gerou lançamentos.
+            </span>
+          )}
+        </fieldset>
+
+        <label className="campo campo-cheia">
+          <span className="campo-rotulo">O que é</span>
+          <input
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            required
+            autoFocus
+            maxLength={200}
+            placeholder={sai ? 'Aluguel do salão' : 'Sublocação da sala 2'}
+          />
+          <span className="campo-dica">
+            O mês entra no fim sozinho: “{descricao.trim() === '' ? 'Aluguel do salão' : descricao.trim()} 08/2026”.
+          </span>
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Valor</span>
+          <input
+            inputMode="decimal"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            required
+            placeholder="2.500,00"
+          />
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">{sai ? 'Para quem' : 'De quem'}</span>
+          <input
+            value={contraparte}
+            onChange={(e) => setContraparte(e.target.value)}
+            maxLength={160}
+            placeholder={sai ? 'Imobiliária Central' : 'Studio vizinho'}
+          />
+          {!sai && (
+            <span className="campo-dica">Obrigatório: toda conta a receber tem devedor.</span>
+          )}
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Repete</span>
+          <select value={ciclo} onChange={(e) => setCiclo(e.target.value)}>
+            {CICLOS_FIXOS.map((c) => (
+              <option key={c.valor} value={c.valor}>
+                {c.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Vence no dia</span>
+          <select value={dia} onChange={(e) => setDia(e.target.value)}>
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={String(d)}>
+                {d}
+              </option>
+            ))}
+          </select>
+          {/* O TETO DE 28 É EXPLICADO, e não só imposto: quem procura o
+              31 precisa saber por que ele não está lá, senão conclui que
+              o campo está quebrado. */}
+          <span className="campo-dica">
+            Até 28 — é o maior dia que existe em todo mês, inclusive fevereiro.
+          </span>
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Começou em</span>
+          <input
+            type="date"
+            value={inicio}
+            onChange={(e) => setInicio(e.target.value)}
+            required
+            disabled={!nova}
+          />
+          <span className="campo-dica">
+            {nova
+              ? 'Se for uma data passada, os meses que faltam entram agora, de uma vez.'
+              : 'Não muda: os lançamentos anteriores já saíram daqui.'}
+          </span>
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Encerra em (opcional)</span>
+          <input type="date" value={fim} onChange={(e) => setFim(e.target.value)} />
+          <span className="campo-dica">
+            {fim === '' ? 'Em branco, repete para sempre.' : (dataPorExtenso(fim) ?? '')}
+          </span>
+        </label>
+
+        <label className="campo campo-meia">
+          <span className="campo-rotulo">Categoria (opcional)</span>
+          <input
+            value={categoria}
+            onChange={(e) => setCategoria(e.target.value)}
+            maxLength={80}
+            placeholder={sai ? 'Ocupação, pessoal…' : 'Parceria…'}
+          />
+        </label>
+
+        {erro !== null && (
+          <p className="mensagem-erro campo-cheia" role="alert">
+            {erro}
+          </p>
+        )}
+
+        <div className="formulario-acoes campo-cheia">
+          <button type="button" className="botao-secundario" onClick={aoSair}>
+            Cancelar
+          </button>
+          <button type="submit" className="botao-acao" disabled={enviando}>
+            {enviando ? 'Salvando…' : nova ? 'Cadastrar' : 'Salvar'}
+          </button>
+        </div>
+      </form>
     </>
   );
 }

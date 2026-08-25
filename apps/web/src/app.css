@@ -6194,3 +6194,178 @@
   font-size: var(--t-sm);
   font-weight: 600;
 }
+
+/* ---------------------------------------------------------------------
+   CONTAS FIXAS — o que nasce sozinho
+
+   CARTÃO E NÃO LINHA. Uma conta fixa tem sete campos que só fazem
+   sentido juntos, e sete colunas de tabela obrigam a rolar de lado para
+   ler uma linha inteira. São poucas por academia — cabem lado a lado.
+   ------------------------------------------------------------------- */
+.fin-fixas-topo {
+  margin-top: var(--e-5);
+}
+.fin-aviso {
+  margin: var(--e-3) 0 0;
+  padding: 10px var(--e-3);
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
+  border-radius: var(--raio-md);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  font-size: var(--t-sm);
+  color: var(--texto);
+}
+
+.fix-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--e-3);
+  margin-top: var(--e-3);
+}
+
+.fix-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+  transition: border-color var(--rapido) var(--saida);
+}
+.fix-cartao:hover {
+  border-color: var(--fio-forte);
+}
+/* PAUSADA CONTINUA LEGÍVEL. Apagar o cartão até o limite economizaria
+   contraste onde ele custa caro: quem procura a conta que parou de
+   nascer é justamente quem precisa lê-la. */
+.fix-cartao.pausada {
+  opacity: 0.72;
+  border-style: dashed;
+}
+
+.fix-cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.fix-nome {
+  margin: 0;
+  font-family: var(--fonte-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--texto);
+  text-wrap: balance;
+}
+.fix-quem {
+  margin: -4px 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+.fix-valor {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: var(--e-1) 0 0;
+}
+.fix-valor strong {
+  font-family: var(--fonte-display);
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+.fix-valor span {
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+/* Os três fatos secundários em fileira: são conferência, não leitura —
+   o olho procura um deles de cada vez. */
+.fix-fatos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--e-2);
+  margin: var(--e-2) 0 0;
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--fio);
+}
+.fix-fatos dt {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-apoio);
+}
+.fix-fatos dd {
+  margin: 2px 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto);
+}
+
+.fix-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+  margin-top: auto;
+  padding-top: var(--e-3);
+}
+
+.fix-titulo-contratos {
+  margin-top: var(--e-6);
+}
+
+/* ---- a escolha da direção, no formulário -------------------------- */
+.fix-direcao {
+  display: grid;
+  gap: var(--e-2);
+  padding: 0;
+  border: 0;
+}
+.fix-direcao-opcoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--e-2);
+}
+.fix-opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  padding: var(--e-3);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.fix-opcao:hover {
+  border-color: var(--fio-forte);
+}
+.fix-opcao.ativa {
+  border-color: color-mix(in srgb, var(--teal) 55%, transparent);
+  background: color-mix(in srgb, var(--teal) 8%, transparent);
+}
+.fix-opcao input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.fix-opcao strong {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--texto);
+}
+.fix-opcao .campo-dica {
+  display: block;
+  margin-top: 1px;
+}
+.fix-direcao:disabled .fix-opcao {
+  cursor: default;
+  opacity: 0.85;
+}

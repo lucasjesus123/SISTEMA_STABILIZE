@@ -546,3 +546,202 @@ export async function listarRecorrencias(client: TenantClient): Promise<Recorren
     vencidasAbertas: r.vencidas,
   }));
 }
+
+/* --------------------------------------------------------------------
+ * Contas fixas — o molde que faz o lançamento nascer sozinho
+ *
+ * A tabela `finance_recurrences` existe desde o primeiro esquema e
+ * nunca teve uma linha: o financeiro só sabia o que alguém tinha
+ * digitado à mão naquele mês. As funções abaixo são o CRUD dela; quem
+ * materializa os lançamentos é `contas-fixas.ts`.
+ * ------------------------------------------------------------------ */
+
+export interface ContaFixa {
+  id: string;
+  direcao: Direcao;
+  descricao: string;
+  categoria: string | null;
+  valorCentavos: number;
+  ciclo: string;
+  diaDeCobranca: number;
+  aluno: string | null;
+  studentId: string | null;
+  contraparte: string | null;
+  inicio: string;
+  fim: string | null;
+  ativa: boolean;
+  /** Quantos lançamentos já nasceram deste molde. */
+  geradas: number;
+  /** Deste molde, quantos venceram e continuam abertos. */
+  vencidasAbertas: number;
+  /** A próxima data em que ela vence, se ainda houver uma. */
+  proximoVencimento: string | null;
+}
+
+export async function listarContasFixas(
+  client: TenantClient,
+  direcao?: Direcao,
+): Promise<ContaFixa[]> {
+  const { rows } = await client.query<{
+    id: string;
+    direcao: Direcao;
+    descricao: string;
+    categoria: string | null;
+    valor: string;
+    ciclo: string;
+    dia: number;
+    aluno: string | null;
+    student_id: string | null;
+    contraparte: string | null;
+    inicio: string;
+    fim: string | null;
+    ativa: boolean;
+    geradas: number;
+    vencidas: number;
+    proximo: string | null;
+  }>(
+    `WITH hoje AS (
+       SELECT (now() AT TIME ZONE t.timezone)::date AS d
+         FROM tenants t WHERE t.id = current_tenant_id()
+     )
+     SELECT r.id, r.direction AS direcao, r.description AS descricao,
+            r.category AS categoria, r.amount_cents::text AS valor,
+            r.cycle::text AS ciclo, r.billing_day AS dia,
+            s.full_name AS aluno, r.student_id,
+            r.supplier_name AS contraparte,
+            r.starts_on::text AS inicio, r.ends_on::text AS fim,
+            r.is_active AS ativa,
+            (SELECT count(*) FROM finance_entries e
+              WHERE e.recurrence_id = r.id AND e.cancelled_at IS NULL)::int AS geradas,
+            (SELECT count(*) FROM finance_entries e
+              WHERE e.recurrence_id = r.id AND e.cancelled_at IS NULL
+                AND e.status <> 'PAID' AND e.due_date < (SELECT d FROM hoje))::int AS vencidas,
+            (SELECT min(e.due_date)::text FROM finance_entries e
+              WHERE e.recurrence_id = r.id AND e.cancelled_at IS NULL
+                AND e.status <> 'PAID') AS proximo
+       FROM finance_recurrences r
+       LEFT JOIN students s ON s.id = r.student_id
+      WHERE ($1::text IS NULL OR r.direction::text = $1)
+      ORDER BY r.is_active DESC, r.billing_day, r.description`,
+    [direcao ?? null],
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    direcao: r.direcao,
+    descricao: r.descricao,
+    categoria: r.categoria,
+    valorCentavos: Number(r.valor),
+    ciclo: r.ciclo,
+    diaDeCobranca: r.dia,
+    aluno: r.aluno,
+    studentId: r.student_id,
+    contraparte: r.contraparte,
+    inicio: r.inicio,
+    fim: r.fim,
+    ativa: r.ativa,
+    geradas: r.geradas,
+    vencidasAbertas: r.vencidas,
+    proximoVencimento: r.proximo,
+  }));
+}
+
+export interface CriarContaFixaInput {
+  readonly direcao: Direcao;
+  readonly descricao: string;
+  readonly categoria?: string | undefined;
+  readonly valorCentavos: Cents;
+  readonly ciclo: string;
+  readonly diaDeCobranca: number;
+  readonly studentId?: string | undefined;
+  readonly contraparte?: string | undefined;
+  readonly inicio: Date;
+  readonly fim?: Date | undefined;
+}
+
+export async function criarContaFixa(
+  client: TenantClient,
+  tenantId: string,
+  input: CriarContaFixaInput,
+): Promise<{ id: string }> {
+  const r = await client.query<{ id: string }>(
+    `INSERT INTO finance_recurrences
+       (tenant_id, direction, description, category, amount_cents, cycle,
+        billing_day, student_id, supplier_name, starts_on, ends_on)
+     VALUES ($1,$2,$3,$4,$5,$6::billing_cycle,$7,$8,$9,$10,$11)
+     RETURNING id`,
+    [
+      tenantId,
+      input.direcao,
+      input.descricao,
+      input.categoria ?? null,
+      input.valorCentavos,
+      input.ciclo,
+      input.diaDeCobranca,
+      input.studentId ?? null,
+      input.contraparte ?? null,
+      input.inicio,
+      input.fim ?? null,
+    ],
+  );
+  return r.rows[0]!;
+}
+
+/**
+ * Altera o molde. O que já nasceu dele NÃO muda.
+ *
+ * É a decisão que evita reescrever história: subir o aluguel de 2.500
+ * para 2.700 vale do mês que vem em diante, e não faz o mês passado —
+ * que já foi pago — virar outro número no extrato.
+ */
+export async function alterarContaFixa(
+  client: TenantClient,
+  id: string,
+  campos: Partial<{
+    descricao: string;
+    categoria: string | null;
+    valorCentavos: Cents;
+    ciclo: string;
+    diaDeCobranca: number;
+    contraparte: string | null;
+    fim: Date | null;
+    ativa: boolean;
+  }>,
+): Promise<boolean> {
+  const sets: string[] = [];
+  const values: unknown[] = [id];
+  const põe = (coluna: string, valor: unknown, molde = ''): void => {
+    values.push(valor);
+    sets.push(`${coluna} = $${values.length}${molde}`);
+  };
+
+  if (campos.descricao !== undefined) põe('description', campos.descricao);
+  if (campos.categoria !== undefined) põe('category', campos.categoria);
+  if (campos.valorCentavos !== undefined) põe('amount_cents', campos.valorCentavos);
+  if (campos.ciclo !== undefined) põe('cycle', campos.ciclo, '::billing_cycle');
+  if (campos.diaDeCobranca !== undefined) põe('billing_day', campos.diaDeCobranca);
+  if (campos.contraparte !== undefined) põe('supplier_name', campos.contraparte);
+  if (campos.fim !== undefined) põe('ends_on', campos.fim);
+  if (campos.ativa !== undefined) põe('is_active', campos.ativa);
+
+  if (sets.length === 0) return true;
+
+  const r = await client.query(
+    `UPDATE finance_recurrences SET ${sets.join(', ')} WHERE id = $1`,
+    values,
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Apaga o molde.
+ *
+ * Os lançamentos já gerados FICAM — a FK é `ON DELETE SET NULL`, então
+ * eles perdem o vínculo e continuam sendo contas normais. Apagar o
+ * aluguel do cadastro não pode fazer sumir do caixa os seis meses que já
+ * foram pagos.
+ */
+export async function excluirContaFixa(client: TenantClient, id: string): Promise<boolean> {
+  const r = await client.query('DELETE FROM finance_recurrences WHERE id = $1', [id]);
+  return (r.rowCount ?? 0) > 0;
+}

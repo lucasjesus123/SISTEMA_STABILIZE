@@ -3,6 +3,7 @@ import { enviarAniversariosDoDia } from './aniversarios.js';
 import { esvaziarFila } from './fila.js';
 import { envelhecerCobrancas } from '../finance/vencimento.js';
 import { gerarCobrancasDoMes } from '../finance/cobranca-recorrente.js';
+import { gerarContasFixasDoMes } from '../finance/contas-fixas.js';
 
 /**
  * Agendador de tarefas de fundo.
@@ -101,6 +102,18 @@ export function registrarAgendador(app: FastifyInstance): void {
       }
     } catch (erro) {
       app.log.error({ err: erro }, 'tarefa de cobrança recorrente falhou');
+    }
+
+    /* EM UM `try` PRÓPRIO, e não junto com a mensalidade do aluno. São
+       duas tarefas independentes: um contrato com dado estranho não
+       pode impedir o aluguel de nascer, nem o contrário. */
+    try {
+      const fixas = await gerarContasFixasDoMes(app.log);
+      if (fixas.geradas > 0) {
+        app.log.info({ contasFixas: fixas }, 'contas fixas geradas a partir das recorrências');
+      }
+    } catch (erro) {
+      app.log.error({ err: erro }, 'tarefa de contas fixas falhou');
     }
 
     try {

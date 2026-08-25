@@ -1528,6 +1528,84 @@ export interface Recorrencia {
 
 export const buscarRecorrencias = () => api<{ data: Recorrencia[] }>('/api/finance/recorrencias');
 
+/* --------------------------------------------------------------------
+ * Contas fixas — o aluguel do dia 20
+ *
+ * A DIREÇÃO É UM CAMPO, e não duas telas: o molde de uma despesa fixa e
+ * o de uma receita fixa são o mesmo objeto, e a regra que faz o
+ * lançamento nascer é a mesma. Separar em dois cadastros duplicaria essa
+ * regra, que é a parte que não pode divergir.
+ * ------------------------------------------------------------------ */
+
+export interface ContaFixa {
+  id: string;
+  direcao: 'RECEIVABLE' | 'PAYABLE';
+  descricao: string;
+  categoria: string | null;
+  valorCentavos: number;
+  valorFormatado: string;
+  ciclo: string;
+  diaDeCobranca: number;
+  aluno: string | null;
+  studentId: string | null;
+  /** De quem se recebe, ou para quem se paga. */
+  contraparte: string | null;
+  inicio: string;
+  fim: string | null;
+  ativa: boolean;
+  geradas: number;
+  vencidasAbertas: number;
+  proximoVencimento: string | null;
+}
+
+export interface DadosDeContaFixa {
+  direcao: 'RECEIVABLE' | 'PAYABLE';
+  descricao: string;
+  categoria?: string;
+  valor: string;
+  ciclo: string;
+  diaDeCobranca: number;
+  studentId?: string;
+  contraparte?: string;
+  inicio: string;
+  fim?: string;
+}
+
+export const buscarContasFixas = (direcao?: 'RECEIVABLE' | 'PAYABLE') =>
+  api<{ data: ContaFixa[] }>(
+    `/api/finance/contas-fixas${direcao === undefined ? '' : `?direcao=${direcao}`}`,
+  );
+
+export const criarContaFixa = (dados: DadosDeContaFixa) =>
+  api<{ data: { id: string; geradas: number } }>('/api/finance/contas-fixas', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const alterarContaFixa = (
+  id: string,
+  campos: Partial<{
+    descricao: string;
+    categoria: string | null;
+    valor: string;
+    ciclo: string;
+    diaDeCobranca: number;
+    contraparte: string | null;
+    fim: string | null;
+    ativa: boolean;
+  }>,
+) =>
+  api<{ ok: true }>(`/api/finance/contas-fixas/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(campos),
+  });
+
+export const excluirContaFixa = (id: string) =>
+  api<{ ok: true }>(`/api/finance/contas-fixas/${id}`, { method: 'DELETE' });
+
+export const gerarContasFixas = () =>
+  api<{ data: { geradas: number } }>('/api/finance/contas-fixas/gerar', { method: 'POST' });
+
 /** Baixa o CSV do período. O contador do cliente sempre pede. */
 export async function baixarCsvDoFinanceiro(de: Date, ate: Date): Promise<void> {
   await baixarRelatorio(

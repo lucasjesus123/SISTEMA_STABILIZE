@@ -57,6 +57,9 @@ export type AuditAction =
   | 'finance.payment.create'
   | 'finance.payment.delete'
   | 'finance.report.read'
+  | 'finance.recurrence.create'
+  | 'finance.recurrence.update'
+  | 'finance.recurrence.delete'
   | 'commission.read'
   | 'commission.settle'
   // perfil próprio — quem mudou o próprio contato, e quando. Entra na
