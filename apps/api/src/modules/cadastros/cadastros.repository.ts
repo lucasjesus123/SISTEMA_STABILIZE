@@ -492,3 +492,65 @@ export async function papelDe(client: TenantClient, id: string): Promise<string 
   );
   return rows[0]?.role ?? null;
 }
+
+/* --------------------------------------------------------------------
+ * Funções da academia
+ *
+ * Uma função é um NOME para um par (papel, áreas). Ela não concede nada:
+ * quem decide o acesso continua sendo o par, e a conta é a interseção
+ * feita pelo `scopeComAreas`. O que a academia cria aqui é vocabulário.
+ * ------------------------------------------------------------------ */
+
+export interface FuncaoDaAcademia {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  papel: string;
+  areas: string[] | null;
+}
+
+export async function listarFuncoes(client: TenantClient): Promise<FuncaoDaAcademia[]> {
+  const { rows } = await client.query<{
+    id: string;
+    nome: string;
+    descricao: string | null;
+    papel: string;
+    areas: string[] | null;
+  }>(
+    `SELECT id, nome, descricao, papel::text AS papel, areas
+       FROM tenant_funcoes
+      ORDER BY nome`,
+  );
+  return rows;
+}
+
+export async function criarFuncao(
+  client: TenantClient,
+  tenantId: string,
+  entrada: {
+    nome: string;
+    descricao: string | null;
+    papel: string;
+    areas: string[] | null;
+    criadaPor: string;
+  },
+): Promise<FuncaoDaAcademia> {
+  const { rows } = await client.query<{
+    id: string;
+    nome: string;
+    descricao: string | null;
+    papel: string;
+    areas: string[] | null;
+  }>(
+    `INSERT INTO tenant_funcoes (tenant_id, nome, descricao, papel, areas, criada_por)
+     VALUES ($1,$2,$3,$4::user_role,$5,$6)
+     RETURNING id, nome, descricao, papel::text AS papel, areas`,
+    [tenantId, entrada.nome, entrada.descricao, entrada.papel, entrada.areas, entrada.criadaPor],
+  );
+  return rows[0]!;
+}
+
+export async function excluirFuncao(client: TenantClient, id: string): Promise<boolean> {
+  const r = await client.query('DELETE FROM tenant_funcoes WHERE id = $1', [id]);
+  return (r.rowCount ?? 0) > 0;
+}

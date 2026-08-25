@@ -1417,6 +1417,41 @@ export interface UsuarioDaEquipe {
 
 export const buscarEquipe = () => api<{ data: UsuarioDaEquipe[] }>('/api/cadastros/usuarios');
 
+/* --------------------------------------------------------------------
+ * FUNÇÕES DA ACADEMIA
+ *
+ * A lista pronta é a mesma para todo mundo; os cargos são de cada
+ * academia. O que se cria aqui é VOCABULÁRIO, não poder: uma função é um
+ * nome para um par (papel, áreas) que já existia, e não escapa do teto
+ * do papel.
+ * ------------------------------------------------------------------ */
+
+export interface FuncaoDaAcademia {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  papel: PapelDaEquipe;
+  /** `null` = tudo o que o papel permite. */
+  areas: string[] | null;
+}
+
+export const buscarFuncoesDaAcademia = () =>
+  api<{ data: FuncaoDaAcademia[] }>('/api/cadastros/funcoes');
+
+export const criarFuncaoDaAcademia = (dados: {
+  nome: string;
+  descricao?: string;
+  papel: PapelDaEquipe;
+  areas: string[] | null;
+}) =>
+  api<{ data: FuncaoDaAcademia }>('/api/cadastros/funcoes', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+export const excluirFuncaoDaAcademia = (id: string) =>
+  api<{ ok: true }>(`/api/cadastros/funcoes/${id}`, { method: 'DELETE' });
+
 export interface DadosDeUsuario {
   nome: string;
   papel: PapelDaEquipe;

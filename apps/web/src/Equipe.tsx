@@ -3,6 +3,7 @@ import * as api from './api.js';
 import { Carregando, Erro, Vazio } from './ui.jsx';
 import type { Principal } from './api.js';
 import { normalizarCor, tintaSobre } from './cor.js';
+import type { Funcao } from '@stabilize/shared';
 import {
   AREAS,
   AREA_DESCRICOES,
@@ -46,6 +47,47 @@ const NOME_DO_PAPEL: Record<string, string> = Object.fromEntries(
   PAPEIS.map((p) => [p.valor, p.nome]),
 );
 
+/**
+ * Duas listas de áreas dizem a mesma coisa? Ordem não importa, e `null`
+ * é o mesmo que lista vazia — os dois significam "tudo o que o papel
+ * permite".
+ *
+ * REPETE A LÓGICA DO PACOTE COMPARTILHADO de propósito: lá ela é privada
+ * a `funcaoDe`, que só conhece as funções fixas. Aqui a comparação
+ * precisa valer também para as funções que a academia criou, que o
+ * pacote não tem como conhecer.
+ */
+function mesmoRecorte(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  const va = a === null || a.length === 0;
+  const vb = b === null || b.length === 0;
+  if (va || vb) return va && vb;
+  if (a!.length !== b!.length) return false;
+  const ordenada = [...b!].sort();
+  return [...a!].sort().every((v, i) => v === ordenada[i]);
+}
+
+/**
+ * O nome da função de alguém, considerando também as que a ACADEMIA
+ * criou.
+ *
+ * `funcaoDe` do pacote compartilhado só conhece a lista fixa — usá-lo
+ * sozinho escreve "Administrador · acesso personalizado" para quem foi
+ * cadastrado como Nutricionista, que é dizer duas coisas erradas de uma
+ * vez. As próprias vêm ANTES: um cargo da casa que coincida com uma
+ * função pronta ganha o nome que a academia escolheu.
+ */
+function nomeDaFuncao(
+  papel: string,
+  areas: readonly string[] | null,
+  proprias: readonly api.FuncaoDaAcademia[],
+): string | null {
+  const propria = proprias.find(
+    (f) => f.papel === papel && mesmoRecorte(f.areas, areas ?? null),
+  );
+  if (propria !== undefined) return propria.nome;
+  return funcaoDe(papel as api.PapelDaEquipe, areas ?? null)?.nome ?? null;
+}
+
 /** Segunda primeiro: a semana da academia começa quando o aluno volta. */
 const DIAS = [
   { valor: 1, nome: 'Segunda' },
@@ -85,8 +127,23 @@ export function Equipe({ principal }: { principal: Principal }): ReactNode {
   const [editando, setEditando] = useState<api.UsuarioDaEquipe | 'novo' | null>(null);
   const [senhaNova, setSenhaNova] = useState<{ nome: string; senha: string } | null>(null);
   const [versao, setVersao] = useState(0);
+  /* AS FUNÇÕES DA ACADEMIA SÃO CARREGADAS AQUI, e não só no formulário,
+     porque a LISTA precisa delas: sem elas a pílula lê o par (papel,
+     áreas) contra a lista fixa, não acha, e escreve "Administrador ·
+     acesso personalizado" para quem foi cadastrado como Nutricionista.
+     O rótulo tem de dizer o cargo que a academia escolheu. */
+  const [proprias, setProprias] = useState<api.FuncaoDaAcademia[]>([]);
 
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
+
+  const recarregarFuncoes = useCallback(() => {
+    void api
+      .buscarFuncoesDaAcademia()
+      .then((r) => setProprias(r.data))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(recarregarFuncoes, [recarregarFuncoes]);
 
   useEffect(() => {
     let vivo = true;
@@ -114,6 +171,8 @@ export function Equipe({ principal }: { principal: Principal }): ReactNode {
       <Formulario
         usuario={editando === 'novo' ? null : editando}
         souDono={souDono}
+        proprias={proprias}
+        aoMudarFuncoes={recarregarFuncoes}
         eEuMesmo={editando !== 'novo' && editando.id === principal.id}
         aoSair={() => setEditando(null)}
         aoSalvar={(senha) => {
@@ -175,6 +234,7 @@ export function Equipe({ principal }: { principal: Principal }): ReactNode {
                 <Linha
                   key={u.id}
                   usuario={u}
+                  proprias={proprias}
                   eEuMesmo={u.id === principal.id}
                   souDono={souDono}
                   aoEditar={() => setEditando(u)}
@@ -194,6 +254,7 @@ export function Equipe({ principal }: { principal: Principal }): ReactNode {
 
 function Linha({
   usuario: u,
+  proprias,
   eEuMesmo,
   souDono,
   aoEditar,
@@ -201,6 +262,7 @@ function Linha({
   aoGerarSenha,
 }: {
   usuario: api.UsuarioDaEquipe;
+  proprias: api.FuncaoDaAcademia[];
   eEuMesmo: boolean;
   souDono: boolean;
   aoEditar: () => void;
@@ -265,9 +327,9 @@ function Linha({
               financeiro seria dizer, na lista inteira, uma coisa que não
               é verdade sobre metade da equipe. */}
           <span className={`pilula papel-${u.papel.toLowerCase()}`}>
-            {funcaoDe(u.papel, u.areas)?.nome ?? NOME_DO_PAPEL[u.papel] ?? u.papel}
+            {nomeDaFuncao(u.papel, u.areas, proprias) ?? NOME_DO_PAPEL[u.papel] ?? u.papel}
           </span>
-          {funcaoDe(u.papel, u.areas) === null && u.areas !== null && (
+          {nomeDaFuncao(u.papel, u.areas, proprias) === null && u.areas !== null && (
             <span className="eq-nota">acesso personalizado</span>
           )}
         </td>
@@ -356,12 +418,16 @@ function Linha({
 function Formulario({
   usuario,
   souDono,
+  proprias,
+  aoMudarFuncoes,
   eEuMesmo,
   aoSair,
   aoSalvar,
 }: {
   usuario: api.UsuarioDaEquipe | null;
   souDono: boolean;
+  proprias: api.FuncaoDaAcademia[];
+  aoMudarFuncoes: () => void;
   eEuMesmo: boolean;
   aoSair: () => void;
   aoSalvar: (senha: { nome: string; senha: string } | null) => void;
@@ -404,6 +470,12 @@ function Formulario({
      debaixo da mão de quem acabou de abri-lo seria o pior momento
      possível para fazê-lo. */
   const [manual, setManual] = useState(false);
+  /* AS FUNÇÕES QUE A ACADEMIA CRIOU. A lista pronta é a mesma para todo
+     mundo; os cargos são de cada casa — estagiário, nutricionista,
+     coordenador de turma. Elas entram no MESMO seletor das prontas, e
+     não numa lista separada: para quem cadastra, "Nutricionista" e
+     "Recepção" são a mesma espécie de escolha. */
+  const [criandoFuncao, setCriandoFuncao] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -477,8 +549,34 @@ function Formulario({
      acreditaria no rótulo. Aqui o rótulo não tem como mentir: ou o par
      (papel, áreas) corresponde a uma função pronta, ou a resposta é
      "personalizado". */
-  const funcoesOferecidas = FUNCOES.filter((f) => f.papel !== 'OWNER' || souDono);
-  const funcaoAtual = manual ? null : funcaoDe(papel, recortar ? areas : null);
+  /* AS PRÓPRIAS PRIMEIRO, e as prontas depois. Quem criou "Estagiário"
+     criou porque cadastra estagiário toda semana; deixá-lo no fim de uma
+     lista de nove é fazer procurar o que se usa mais. */
+  const funcoesOferecidas: Funcao[] = [
+    ...proprias.map((f) => ({
+      id: f.id,
+      nome: f.nome,
+      descricao: f.descricao ?? 'Função criada por esta academia.',
+      papel: f.papel as Funcao['papel'],
+      areas: (f.areas ?? null) as Funcao['areas'],
+    })),
+    ...FUNCOES,
+  ].filter((f) => f.papel !== 'OWNER' || souDono);
+
+  /* A FUNÇÃO É LIDA do par (papel, áreas), e agora as próprias entram na
+     mesma leitura: uma pessoa cadastrada como "Estagiário" volta a
+     aparecer como "Estagiário" na lista da equipe, e não como
+     "Personalizado" — que é o que aconteceria se a busca olhasse só a
+     lista fixa. `find` para na primeira, e as próprias vêm antes: um
+     cargo da casa que coincida com uma função pronta ganha o nome que a
+     academia escolheu. */
+  const funcaoAtual = manual
+    ? null
+    : (funcoesOferecidas.find(
+        (f) =>
+          f.papel === papel &&
+          mesmoRecorte(f.areas ?? null, recortar ? areas : null),
+      ) ?? null);
   const valorDaFuncao = funcaoAtual?.id ?? 'personalizado';
 
   /* Escolher a função preenche PAPEL E ÁREAS de uma vez — é o atalho
@@ -486,6 +584,10 @@ function Formulario({
      precisa saber que por baixo isso é um administrador com uma seção
      marcada. */
   const escolherFuncao = (id: string): void => {
+    if (id === 'nova') {
+      setCriandoFuncao(true);
+      return;
+    }
     if (id === 'personalizado') {
       setManual(true);
       return;
@@ -577,7 +679,20 @@ function Formulario({
         </p>
       </div>
 
-      <form className="formulario" onSubmit={(e) => void enviar(e)} noValidate>
+      {/* O `submit` é BLOQUEADO enquanto o painel de criar função está
+          aberto: um Enter no campo do nome da função salvaria o usuário
+          pela metade, com a função ainda não criada. */}
+      <form
+        className="formulario"
+        onSubmit={(e) => {
+          if (criandoFuncao) {
+            e.preventDefault();
+            return;
+          }
+          void enviar(e);
+        }}
+        noValidate
+      >
         <label className="campo campo-meia">
           <span className="campo-rotulo">Nome completo</span>
           <input value={nome} onChange={(e) => setNome(e.target.value)} required autoFocus />
@@ -634,6 +749,12 @@ function Formulario({
               </option>
             ))}
             <option value="personalizado">Personalizado…</option>
+            {/* CRIAR UMA FUNÇÃO A PARTIR DAQUI, e não numa tela de
+                configuração. O momento em que se descobre que falta o
+                cargo "Estagiário" é exatamente este: com o cadastro do
+                estagiário aberto na frente. Mandar a pessoa para outra
+                tela é fazê-la perder o que já digitou. */}
+            <option value="nova">+ Criar uma função…</option>
           </select>
           {/* O QUE A FUNÇÃO SIGNIFICA, embaixo do seletor. Sem isto, quem
               cadastra escolhe pelo nome e descobre o alcance depois —
@@ -654,6 +775,24 @@ function Formulario({
             </span>
           )}
         </label>
+
+        {criandoFuncao && (
+          <NovaFuncao
+            souDono={souDono}
+            aoFechar={() => setCriandoFuncao(false)}
+            aoCriar={(f) => {
+              setCriandoFuncao(false);
+              aoMudarFuncoes();
+              /* JÁ ESCOLHIDA. Quem criou a função criou para usá-la
+                 agora — obrigar a abrir o seletor de novo e procurá-la
+                 seria pedir duas vezes a mesma decisão. */
+              setManual(false);
+              setPapel(f.papel);
+              setRecortar(f.areas !== null);
+              setAreas(f.areas === null ? [] : [...f.areas]);
+            }}
+          />
+        )}
 
         <fieldset className="campo campo-cheia eq-paleta">
           <legend className="campo-rotulo">Cor na agenda</legend>
@@ -1041,5 +1180,195 @@ function SenhaProvisoria({
         Já anotei
       </button>
     </div>
+  );
+}
+
+/* ==================================================================== */
+
+/**
+ * Criar uma função da academia.
+ *
+ * APARECE DENTRO DO CADASTRO DA PESSOA, e não numa tela de configuração.
+ * O momento em que se descobre que falta o cargo "Estagiário" é
+ * exatamente aquele: com o cadastro do estagiário aberto na frente.
+ * Mandar a pessoa para outra tela é fazê-la perder o que já digitou.
+ *
+ * O QUE SE CRIA AQUI É VOCABULÁRIO, NÃO PODER — e o painel diz isso em
+ * voz alta. Uma função é um NOME para um par (papel, seções) que já
+ * existia: ela não inventa acesso, não soma permissão e não escapa do
+ * teto do papel. Sem essa frase, "criar função" soa como criar um nível
+ * novo de privilégio, e quem cadastra fica com medo de usar.
+ */
+function NovaFuncao({
+  souDono,
+  aoFechar,
+  aoCriar,
+}: {
+  souDono: boolean;
+  aoFechar: () => void;
+  aoCriar: (f: api.FuncaoDaAcademia) => void;
+}): ReactNode {
+  const [nome, setNome] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [papel, setPapel] = useState<api.PapelDaEquipe>('ADMIN');
+  const [recortar, setRecortar] = useState(true);
+  const [areas, setAreas] = useState<string[]>([]);
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  const opcoes = PAPEIS.filter((p) => p.valor !== 'OWNER' || souDono);
+  const escolhido = PAPEIS.find((p) => p.valor === papel);
+
+  const permitidas = permissionsOf(papel);
+  const areasDoPapel = AREAS.filter((a) =>
+    AREA_PERMISSIONS[a].some((x) => permitidas.includes(x)),
+  );
+
+  const alternar = (a: string): void =>
+    setAreas((atual) => (atual.includes(a) ? atual.filter((x) => x !== a) : [...atual, a]));
+
+  const enviar = (): void => {
+    if (nome.trim().length < 2) {
+      setErro('Dê um nome à função — é como ela vai aparecer na lista da equipe.');
+      return;
+    }
+    if (recortar && areas.length === 0) {
+      setErro('Marque ao menos uma seção — ou escolha "tudo o que o papel permite".');
+      return;
+    }
+    setErro(null);
+    setEnviando(true);
+    void api
+      .criarFuncaoDaAcademia({
+        nome: nome.trim(),
+        ...(descricao.trim() !== '' ? { descricao: descricao.trim() } : {}),
+        papel,
+        areas: recortar ? areas : null,
+      })
+      .then((r) => aoCriar(r.data))
+      .catch((e: unknown) => {
+        setErro(e instanceof api.ApiError ? e.message : 'Não foi possível criar a função.');
+        setEnviando(false);
+      });
+  };
+
+  return (
+    <fieldset className="campo campo-cheia eq-acessos eq-nova-funcao">
+      <legend className="campo-rotulo">Criar uma função</legend>
+
+      <p className="campo-dica eq-nova-aviso">
+        Uma função é um <strong>nome</strong> para uma combinação de papel e seções que já existe.
+        Ela não cria acesso novo nem passa do que o papel permite — serve para a lista da equipe
+        dizer o cargo de verdade em vez de “Administrador” para todo mundo.
+      </p>
+
+      <div className="eq-nova-campos">
+        <label className="campo">
+          <span className="campo-rotulo">Nome da função</span>
+          <input
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            maxLength={40}
+            autoFocus
+            placeholder="Estagiário, Nutricionista, Coordenador…"
+          />
+        </label>
+
+        <label className="campo">
+          <span className="campo-rotulo">Papel base</span>
+          <select
+            value={papel}
+            onChange={(e) => {
+              setPapel(e.target.value as api.PapelDaEquipe);
+              /* AS SEÇÕES MARCADAS SÃO LIMPAS ao trocar o papel: elas
+                 pertenciam ao papel anterior, e uma marcada fora do
+                 alcance do novo não daria acesso nenhum — daria uma
+                 caixa marcada sem efeito, que é pior. */
+              setAreas([]);
+            }}
+          >
+            {opcoes.map((p) => (
+              <option key={p.valor} value={p.valor}>
+                {p.nome}
+              </option>
+            ))}
+          </select>
+          <span className="campo-dica">{escolhido?.descricao}</span>
+        </label>
+
+        <label className="campo eq-nova-descricao">
+          <span className="campo-rotulo">Explicação (opcional)</span>
+          <input
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            maxLength={200}
+            placeholder="Uma frase para quem for cadastrar alguém com esta função."
+          />
+        </label>
+      </div>
+
+      <label className="eq-tudo">
+        <input
+          type="radio"
+          name="nova-recorte"
+          checked={!recortar}
+          onChange={() => setRecortar(false)}
+        />
+        <span>
+          <strong>Tudo o que o papel permite</strong>
+          <span className="campo-dica">{escolhido?.descricao}</span>
+        </span>
+      </label>
+
+      <label className="eq-tudo">
+        <input
+          type="radio"
+          name="nova-recorte"
+          checked={recortar}
+          onChange={() => setRecortar(true)}
+        />
+        <span>
+          <strong>Só as seções que eu marcar</strong>
+          <span className="campo-dica">
+            O resto some do menu e deixa de responder, mesmo pelo endereço direto.
+          </span>
+        </span>
+      </label>
+
+      {recortar && (
+        <div className="eq-areas">
+          {areasDoPapel.map((a) => (
+            <label key={a} className={`eq-area ${areas.includes(a) ? 'ativa' : ''}`}>
+              <input type="checkbox" checked={areas.includes(a)} onChange={() => alternar(a)} />
+              <span>
+                <strong>{AREA_LABELS[a]}</strong>
+                <span className="campo-dica">{AREA_DESCRICOES[a]}</span>
+              </span>
+            </label>
+          ))}
+          {areasDoPapel.length === 0 && (
+            <p className="campo-dica">Este papel não tem seções para recortar.</p>
+          )}
+        </div>
+      )}
+
+      {erro !== null && (
+        <p className="mensagem-erro" role="alert">
+          {erro}
+        </p>
+      )}
+
+      {/* BOTÕES, E NÃO UM `submit`. Este painel vive DENTRO do formulário
+          do usuário: um `type="submit"` aqui salvaria a pessoa em vez de
+          criar a função, e um Enter no campo do nome faria o mesmo. */}
+      <div className="eq-nova-acoes">
+        <button type="button" className="botao-secundario" onClick={aoFechar}>
+          Cancelar
+        </button>
+        <button type="button" className="botao-acao" disabled={enviando} onClick={enviar}>
+          {enviando ? 'Criando…' : 'Criar função'}
+        </button>
+      </div>
+    </fieldset>
   );
 }

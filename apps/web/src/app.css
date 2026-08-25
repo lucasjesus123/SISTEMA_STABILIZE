@@ -7014,3 +7014,32 @@
   font-size: var(--t-xs);
   color: var(--erro);
 }
+
+/* ---------------------------------------------------------------------
+   CRIAR UMA FUNÇÃO, de dentro do cadastro da pessoa
+   ------------------------------------------------------------------- */
+.eq-nova-funcao {
+  border-color: color-mix(in srgb, var(--teal) 45%, transparent);
+  background: color-mix(in srgb, var(--teal) 5%, transparent);
+}
+/* O AVISO VEM ANTES DOS CAMPOS. "Criar função" soa como criar um nível
+   novo de privilégio; sem a frase, quem cadastra fica com medo de usar. */
+.eq-nova-aviso {
+  margin: 0;
+  max-width: 72ch;
+}
+.eq-nova-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--e-3);
+}
+.eq-nova-descricao {
+  grid-column: 1 / -1;
+}
+.eq-nova-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--e-3);
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--fio);
+}

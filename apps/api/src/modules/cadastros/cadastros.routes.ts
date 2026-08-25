@@ -490,6 +490,118 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
    * Espaços
    * ================================================================ */
 
+  /* ==================================================================
+   * FUNÇÕES DA ACADEMIA
+   *
+   * A lista pronta — Proprietário, Administrador, Financeiro, Gerente,
+   * Recepção, Profissional — é a mesma para todo mundo, e cada academia
+   * tem os cargos dela: estagiário, nutricionista, coordenador de turma,
+   * sócio que só olha o caixa. Sem um lugar para criá-los, quem cadastra
+   * escolhe o mais parecido e o cargo de verdade não fica escrito em
+   * lugar nenhum.
+   *
+   * O QUE SE CRIA AQUI É VOCABULÁRIO, NÃO PODER. Uma função é um NOME
+   * para um par (papel, áreas) que já existia; ela não inventa acesso,
+   * não soma permissão e não escapa do teto do papel. A conta continua
+   * sendo a interseção, feita no servidor, exatamente como para as
+   * funções prontas.
+   *
+   * A PERMISSÃO É `user:write`, e não uma nova: criar uma função é
+   * decidir que combinação de acesso vai existir na academia — quem não
+   * pode cadastrar gente não pode inventar cargo para ela.
+   * ================================================================ */
+
+  const areasDaFuncaoSchema = z
+    .array(z.string())
+    .min(1, 'Marque ao menos uma seção — ou deixe em branco para o papel inteiro.')
+    .max(20)
+    .refine((lista) => lista.every((a) => ehArea(a)), { message: 'Seção desconhecida.' })
+    .nullable();
+
+  app.get('/funcoes', { preHandler: [app.authorize('user:read')] }, async (request) =>
+    inTenant(request, async (client) => {
+      const linhas = await repo.listarFuncoes(client);
+      return { data: linhas };
+    }),
+  );
+
+  app.post('/funcoes', { preHandler: [app.authorize('user:write')] }, async (request, reply) => {
+    const body = z
+      .object({
+        nome: z.string().trim().min(2).max(40),
+        descricao: z.string().trim().max(200).optional(),
+        papel: z.enum(['OWNER', 'ADMIN', 'PROFESSIONAL', 'RECEPTION']),
+        areas: areasDaFuncaoSchema.optional().transform((v) => v ?? null),
+      })
+      .parse(request.body);
+
+    return inTenant(request, async (client, principal) => {
+      /* SÓ UM DONO CRIA FUNÇÃO DE DONO. É a mesma regra de criar
+         usuário, repetida aqui porque a função é o caminho pelo qual
+         alguém viraria dono depois: sem esta linha, um administrador
+         criaria "Sócio" com papel OWNER e usaria a própria função para
+         se promover. */
+      if (body.papel === 'OWNER' && principal.role !== 'OWNER') {
+        throw forbidden('Só o proprietário cria uma função de proprietário.');
+      }
+
+      try {
+        const criada = await repo.criarFuncao(client, principal.tenantId, {
+          nome: body.nome,
+          descricao: body.descricao ?? null,
+          papel: body.papel,
+          areas: body.areas,
+          criadaPor: principal.userId,
+        });
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'user.update',
+          resourceType: 'tenant_funcao',
+          resourceId: criada.id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: { nome: body.nome, papel: body.papel, areas: body.areas ?? 'todas' },
+        });
+
+        void reply.status(201);
+        return { data: criada };
+      } catch (erro) {
+        /* `funcao_nome_unico`. A mensagem do banco fala de restrição; a
+           daqui fala do que a pessoa acabou de digitar. */
+        if (typeof erro === 'object' && erro !== null && 'code' in erro && erro.code === '23505') {
+          throw conflict(`Já existe uma função chamada "${body.nome}".`);
+        }
+        throw erro;
+      }
+    });
+  });
+
+  app.delete('/funcoes/:id', { preHandler: [app.authorize('user:write')] }, async (request) => {
+    const { id } = idParam.parse(request.params);
+
+    return inTenant(request, async (client, principal) => {
+      const ok = await repo.excluirFuncao(client, id);
+      if (!ok) throw notFound('Função');
+
+      /* NINGUÉM PERDE ACESSO AO EXCLUIR. A função é um rótulo lido de
+         volta do par (papel, áreas) — apagá-la não toca em usuário
+         nenhum. Quem tinha aquele recorte continua com ele; o que muda
+         é a lista passar a dizer o nome do papel em vez do cargo. */
+      await writeAudit(client, principal.tenantId, {
+        action: 'user.update',
+        resourceType: 'tenant_funcao',
+        resourceId: id,
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+        metadata: { excluida: true },
+      });
+
+      return { ok: true };
+    });
+  });
+
   app.get('/salas', { preHandler: [app.authorize('room:read')] }, async (request) =>
     inTenant(request, async (client) => {
       const linhas = await repo.listarSalas(client);
