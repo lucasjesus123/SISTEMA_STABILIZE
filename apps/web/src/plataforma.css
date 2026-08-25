@@ -129,11 +129,32 @@
 .plt-entrada-caixa {
   width: min(26rem, 100%);
   display: grid;
+  /* UMA COLUNA, DITA EM VOZ ALTA.
+     Sem esta linha o grid não tem colunas declaradas, e os `.campo-cheia`
+     de dentro — que pedem `grid-column: 1 / -1` — fazem o navegador
+     inventar trilhas implícitas. O resultado era o cabeçalho inteiro
+     lado a lado: marca, "Painel da plataforma", "Operação do serviço" e
+     a frase de explicação espremida numa coluna de uma palavra por
+     linha. Um grid que não declara as colunas deixa quem está dentro
+     decidir por ele. */
+  grid-template-columns: 1fr;
   gap: var(--e-3);
   padding: var(--e-6);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: var(--raio-lg);
   background: #0b1a19;
+}
+
+/* E TUDO DENTRO OCUPA A COLUNA INTEIRA.
+   Declarar uma coluna não bastou: os campos reusam as classes de
+   formulário do sistema, e `.campo-cheia` pede `grid-column: span 6`.
+   Um filho que pede seis colunas faz o navegador CRIAR as cinco que
+   faltam — foi assim que a caixa do login apareceu com seis trilhas
+   (85px, 85px, 104px, 64px, 0, 0), com a marca, o título e a frase de
+   explicação lado a lado, e a frase espremida em 64 px: uma palavra
+   por linha. Aqui não há formulário de seis colunas; há uma pilha. */
+.plt-entrada-caixa > * {
+  grid-column: 1 / -1;
 }
 .plt-entrada-caixa .marca {
   color: #eaf7f8;
