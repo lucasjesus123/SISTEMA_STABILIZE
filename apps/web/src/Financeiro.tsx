@@ -255,7 +255,7 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
       ) : painel === 'recorrencias' ? (
         <Recorrencias podeEscrever={principal.permissions.includes('finance:recurring:write')} />
       ) : painel === 'relatorios' ? (
-        <Relatorios de={de} ate={ate} />
+        <Relatorios de={de} ate={ate} mes={mes} />
       ) : (
         <Lancamentos
           direcao={painel === 'receber' ? 'RECEIVABLE' : 'PAYABLE'}
@@ -1944,9 +1944,215 @@ function FormularioDeContaFixa({
  * Relatórios
  * ================================================================== */
 
-function Relatorios({ de, ate }: { de: Date; ate: Date }): ReactNode {
+/**
+ * O gráfico de caixa — doze meses de entrada, saída e saldo.
+ *
+ * SVG E NÃO UMA PILHA DE `div`s COM ALTURA EM PORCENTAGEM. A versão
+ * anterior desenhava duas caixas por mês e mais nada: sem eixo, sem
+ * escala, sem o saldo. Dava para ver que um mês era maior que o outro e
+ * não dava para dizer quanto — o que faz o gráfico ocupar meia tela para
+ * responder menos do que a tabela ao lado.
+ *
+ * O SALDO É UMA LINHA POR CIMA DAS BARRAS, e é a informação que
+ * ninguém consegue montar de cabeça: entrou e saiu são dois números, e
+ * a pergunta é sobre a diferença entre eles ao longo do tempo. Com a
+ * linha, um mês que virou negativo salta; sem ela, é preciso comparar
+ * duas alturas mês a mês.
+ *
+ * A LINHA DO ZERO É DESENHADA SEMPRE, mesmo quando nada fica abaixo
+ * dela. É o que dá sentido à altura de tudo o mais — um gráfico de
+ * dinheiro sem o zero visível deixa a impressão de que a menor barra é
+ * "nada", quando ela pode ser oito mil reais.
+ */
+function GraficoDeCaixa({
+  fluxo,
+  mesEmFoco,
+}: {
+  fluxo: api.Relatorios['fluxo'];
+  mesEmFoco: string;
+}): ReactNode {
+  const L = 62; /* espaço da escala, à esquerda */
+  const R = 8;
+  const T = 12;
+  const B = 26; /* espaço dos nomes dos meses, embaixo */
+  const LARG = 760;
+  const ALT = 250;
+  const util = LARG - L - R;
+  const alturaUtil = ALT - T - B;
+
+  const maiorBarra = Math.max(...fluxo.map((m) => Math.max(m.recebidoCentavos, m.pagoCentavos)), 0);
+  const menorSaldo = Math.min(...fluxo.map((m) => m.saldoCentavos), 0);
+  const teto = Math.max(maiorBarra, ...fluxo.map((m) => m.saldoCentavos), 1);
+  const piso = Math.min(menorSaldo, 0);
+  const faixa = teto - piso || 1;
+
+  /* Um valor em centavos vira uma coordenada vertical. Tudo o que é
+     desenhado passa por aqui — barra, linha do saldo e a régua —, então
+     a escala não tem como divergir entre as três. */
+  const y = (centavos: number): number => T + alturaUtil * (1 - (centavos - piso) / faixa);
+  const passo = util / Math.max(fluxo.length, 1);
+  const meio = (i: number): number => L + passo * i + passo / 2;
+
+  /* Três marcas: o teto, o meio e o zero. Mais linhas não ajudam a ler
+     dinheiro — ajudam a poluir. */
+  const reguas = [teto, (teto + piso) / 2, 0].filter(
+    (v, i, a) => a.indexOf(v) === i && v <= teto && v >= piso,
+  );
+
+  const curto = (centavos: number): string => {
+    const reais = centavos / 100;
+    if (Math.abs(reais) >= 1000) return `${Math.round(reais / 1000)}k`;
+    return String(Math.round(reais));
+  };
+
+  const vazio = fluxo.every((m) => m.recebidoCentavos === 0 && m.pagoCentavos === 0);
+
+  if (vazio) {
+    /* O GRÁFICO VAZIO ERA O PIOR RESULTADO POSSÍVEL: doze tocos de dois
+       pixels, que parecem um defeito de desenho e não uma academia sem
+       baixa lançada. Dizer o que falta é a única leitura útil aqui. */
+    return (
+      <div className="rel-vazio">
+        <p>
+          <strong>Nenhum pagamento registrado nos últimos 12 meses.</strong>
+        </p>
+        <p>
+          O gráfico é feito de BAIXAS, não de cobranças: uma mensalidade lançada aparece em “A
+          receber”, e só entra aqui quando alguém clica em “Dar baixa”. É o que separa o previsto do
+          que realmente entrou no caixa.
+        </p>
+      </div>
+    );
+  }
+
+  const linhaDoSaldo = fluxo
+    .map((m, i) => `${i === 0 ? 'M' : 'L'} ${meio(i).toFixed(1)} ${y(m.saldoCentavos).toFixed(1)}`)
+    .join(' ');
+
+  return (
+    <figure className="rel-grafico">
+      <svg
+        viewBox={`0 0 ${LARG} ${ALT}`}
+        role="img"
+        aria-label={`Entradas, saídas e saldo dos últimos ${fluxo.length} meses`}
+      >
+        {reguas.map((v) => (
+          <g key={v}>
+            <line
+              x1={L}
+              x2={LARG - R}
+              y1={y(v)}
+              y2={y(v)}
+              className={v === 0 ? 'rel-zero' : 'rel-regua'}
+            />
+            <text x={L - 8} y={y(v) + 3.5} className="rel-escala" textAnchor="end">
+              {v === 0 ? '0' : `R$ ${curto(v)}`}
+            </text>
+          </g>
+        ))}
+
+        {fluxo.map((m, i) => {
+          const larguraBarra = Math.min(13, passo * 0.3);
+          const base = y(0);
+          const foco = m.mes === mesEmFoco;
+          return (
+            <g key={m.mes} className={foco ? 'rel-col foco' : 'rel-col'}>
+              {foco && (
+                /* O MÊS QUE A TELA ESTÁ MOSTRANDO, marcado. Sem isto, o
+                   gráfico e os números acima dele falam de períodos
+                   diferentes sem avisar. */
+                <rect x={L + passo * i} y={T} width={passo} height={alturaUtil} className="rel-foco" />
+              )}
+              <rect
+                x={meio(i) - larguraBarra - 1}
+                y={y(m.recebidoCentavos)}
+                width={larguraBarra}
+                height={Math.max(1, base - y(m.recebidoCentavos))}
+                className="rel-b-entrou"
+              >
+                <title>{`${m.mes}: entrou ${formatCents(m.recebidoCentavos)}`}</title>
+              </rect>
+              <rect
+                x={meio(i) + 1}
+                y={y(m.pagoCentavos)}
+                width={larguraBarra}
+                height={Math.max(1, base - y(m.pagoCentavos))}
+                className="rel-b-saiu"
+              >
+                <title>{`${m.mes}: saiu ${formatCents(m.pagoCentavos)}`}</title>
+              </rect>
+            </g>
+          );
+        })}
+
+        <path d={linhaDoSaldo} className="rel-linha-saldo" fill="none" />
+        {fluxo.map((m, i) => (
+          <circle
+            key={m.mes}
+            cx={meio(i)}
+            cy={y(m.saldoCentavos)}
+            r={2.6}
+            className={`rel-ponto ${m.saldoCentavos < 0 ? 'negativo' : ''}`}
+          >
+            <title>{`${m.mes}: saldo ${formatCents(m.saldoCentavos)}`}</title>
+          </circle>
+        ))}
+
+        {fluxo.map((m, i) => (
+          <text
+            key={m.mes}
+            x={meio(i)}
+            y={ALT - 8}
+            className={`rel-mes-eixo ${m.mes === mesEmFoco ? 'foco' : ''}`}
+            textAnchor="middle"
+          >
+            {m.mes.slice(5)}
+          </text>
+        ))}
+      </svg>
+
+      <figcaption className="rel-legenda">
+        <span className="rel-chave entrou">entrou</span>
+        <span className="rel-chave saiu">saiu</span>
+        <span className="rel-chave saldo">saldo do mês</span>
+      </figcaption>
+    </figure>
+  );
+}
+
+/** A variação de um número contra o anterior, em pontos percentuais. */
+function variacao(agora: number, antes: number): { texto: string; tom: string } | null {
+  if (antes === 0) return null;
+  const pct = Math.round(((agora - antes) / Math.abs(antes)) * 100);
+  if (pct === 0) return { texto: 'igual ao mês anterior', tom: 'neutro' };
+  return {
+    texto: `${pct > 0 ? '+' : ''}${pct}% vs. o mês anterior`,
+    tom: pct > 0 ? 'sobe' : 'desce',
+  };
+}
+
+/**
+ * Relatórios.
+ *
+ * A ORDEM DAS PERGUNTAS É A DA CONVERSA DO FIM DO MÊS, e não a do
+ * modelo de dados:
+ *
+ *   1. como foi o mês?          → o resumo, com a comparação
+ *   2. estou melhorando?        → o gráfico de doze meses
+ *   3. para onde vai o dinheiro?→ as categorias
+ *   4. quem eu cobro hoje?      → a inadimplência, por faixa de atraso
+ *   5. o que eu levo impresso?  → os PDFs
+ *
+ * OS PDFs FICAM POR ÚLTIMO e não em primeiro, que é onde estavam. Eles
+ * são o que se leva PARA a reunião, e ninguém pede o papel antes de
+ * olhar o número: a fileira de três botões abrindo a aba empurrava todo
+ * o conteúdo para baixo da dobra e fazia a tela parecer uma gaveta de
+ * downloads.
+ */
+function Relatorios({ de, ate, mes }: { de: Date; ate: Date; mes: Date }): ReactNode {
   const [dados, setDados] = useState<api.Relatorios | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [baixandoCsv, setBaixandoCsv] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -1966,134 +2172,256 @@ function Relatorios({ de, ate }: { de: Date; ate: Date }): ReactNode {
   if (erro !== null) return <Erro mensagem={erro} />;
   if (dados === null) return <Carregando rotulo="Calculando os relatórios" />;
 
-  const maior = Math.max(
-    1,
-    ...dados.fluxo.map((m) => Math.max(m.recebidoCentavos, m.pagoCentavos)),
+  const chaveDoMes = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, '0')}`;
+  const indice = dados.fluxo.findIndex((m) => m.mes === chaveDoMes);
+  const atual = dados.fluxo[indice] ?? { recebidoCentavos: 0, pagoCentavos: 0, saldoCentavos: 0 };
+  const anterior = indice > 0 ? dados.fluxo[indice - 1] : undefined;
+
+  const recebido = atual.recebidoCentavos;
+  const pago = atual.pagoCentavos;
+  const saldo = atual.saldoCentavos;
+
+  /* A MÉDIA DE DOZE MESES ao lado do mês: um mês sozinho não diz se foi
+     bom. R$ 12 mil é ótimo numa academia que faz 9 e ruim numa que faz
+     15, e a tela é a mesma nos dois casos. */
+  const mesesComMovimento = dados.fluxo.filter(
+    (m) => m.recebidoCentavos > 0 || m.pagoCentavos > 0,
   );
+  const mediaRecebido =
+    mesesComMovimento.length === 0
+      ? 0
+      : Math.round(
+          mesesComMovimento.reduce((a, m) => a + m.recebidoCentavos, 0) / mesesComMovimento.length,
+        );
+
+  const entrouPorCategoria = dados.categorias.filter((c) => c.direcao === 'RECEIVABLE');
+  const saiuPorCategoria = dados.categorias.filter((c) => c.direcao === 'PAYABLE');
+
+  /* FAIXAS DE ATRASO, e não uma lista ordenada por dias. Quem deve há
+     cinco dias esqueceu o boleto; quem deve há noventa é outra conversa,
+     e provavelmente outro telefonema. Separar em três blocos é o que
+     transforma a tabela numa lista de tarefas. */
+  const faixas = [
+    { nome: 'Até 30 dias', teto: 30, apoio: 'lembrete resolve na maioria' },
+    { nome: '31 a 60 dias', teto: 60, apoio: 'ligar, não mandar mensagem' },
+    { nome: 'Mais de 60 dias', teto: Infinity, apoio: 'decidir: renegociar ou encerrar' },
+  ].map((f, i, todas) => {
+    const chao = i === 0 ? 0 : todas[i - 1]!.teto;
+    const lista = dados.inadimplentes.filter(
+      (d) => d.diasDeAtraso > chao && d.diasDeAtraso <= f.teto,
+    );
+    return { ...f, lista, total: lista.reduce((a, d) => a + d.devendoCentavos, 0) };
+  });
 
   return (
     <>
-      <div className="fin-barra">
-        <p className="rel-apoio">
-          Entradas e saídas contadas pela data do PAGAMENTO — é a pergunta sobre caixa. Uma
-          mensalidade de janeiro paga em março entrou em março.
-        </p>
+      {/* ==================================================
+          1. COMO FOI O MÊS
+          ================================================== */}
+      <div className="rel-barra-topo">
+        <div>
+          <h2 className="plt-titulo">Como foi o mês</h2>
+          <p className="rel-apoio">
+            Contado pela data do <strong>pagamento</strong> — é a pergunta sobre caixa. Uma
+            mensalidade de janeiro paga em março entrou em março.
+          </p>
+        </div>
         <button
           type="button"
           className="botao-secundario"
-          onClick={() => void api.baixarCsvDoFinanceiro(de, ate)}
+          disabled={baixandoCsv}
+          onClick={() => {
+            setBaixandoCsv(true);
+            void api.baixarCsvDoFinanceiro(de, ate).finally(() => setBaixandoCsv(false));
+          }}
         >
-          Exportar CSV
+          {baixandoCsv ? 'Gerando…' : 'Exportar CSV'}
         </button>
       </div>
 
-      <PapelTimbrado de={de} ate={ate} />
-
-      {/* ---- 1. estou melhorando? ---- */}
-      <h2 className="plt-titulo">Entrou e saiu, mês a mês</h2>
-      <div className="rel-barras" role="img" aria-label="Entradas e saídas dos últimos meses">
-        {dados.fluxo.map((m) => (
-          <div key={m.mes} className="rel-mes">
-            <div className="rel-par">
-              <span
-                className="rel-barra entrou"
-                style={{ height: `${(m.recebidoCentavos / maior) * 100}%` }}
-                title={`Entrou ${formatCents(m.recebidoCentavos)}`}
-              />
-              <span
-                className="rel-barra saiu"
-                style={{ height: `${(m.pagoCentavos / maior) * 100}%` }}
-                title={`Saiu ${formatCents(m.pagoCentavos)}`}
-              />
-            </div>
-            <span className="rel-mes-nome">{m.mes.slice(5)}</span>
-          </div>
-        ))}
+      <div className="rel-resumo">
+        <CartaoDeResumo
+          rotulo="Entrou"
+          valor={recebido}
+          tom="entrou"
+          variacao={anterior === undefined ? null : variacao(recebido, anterior.recebidoCentavos)}
+          apoio={
+            mediaRecebido === 0
+              ? undefined
+              : `média de 12 meses: ${formatCents(mediaRecebido)}`
+          }
+        />
+        <CartaoDeResumo
+          rotulo="Saiu"
+          valor={pago}
+          tom="saiu"
+          variacao={anterior === undefined ? null : variacao(pago, anterior.pagoCentavos)}
+        />
+        <CartaoDeResumo
+          rotulo="Saldo"
+          valor={saldo}
+          tom={saldo < 0 ? 'negativo' : 'saldo'}
+          variacao={anterior === undefined ? null : variacao(saldo, anterior.saldoCentavos)}
+          apoio={
+            recebido === 0
+              ? undefined
+              : `${Math.round((saldo / recebido) * 100)}% do que entrou sobrou`
+          }
+        />
+        <CartaoDeResumo
+          rotulo="Em atraso agora"
+          valor={dados.totalDevendoCentavos}
+          tom={dados.totalDevendoCentavos > 0 ? 'negativo' : 'saldo'}
+          variacao={null}
+          apoio={
+            dados.inadimplentes.length === 0
+              ? 'ninguém devendo'
+              : `${dados.inadimplentes.length} aluno${dados.inadimplentes.length === 1 ? '' : 's'} · posição de hoje, não do período`
+          }
+        />
       </div>
-      <p className="rel-legenda">
-        <span className="fin-entrou">entrou</span>
-        <span className="fin-saiu">saiu</span>
-      </p>
 
-      {/* ---- 2. para onde vai o dinheiro? ---- */}
-      <h2 className="plt-titulo">Por categoria</h2>
+      {/* ==================================================
+          2. ESTOU MELHORANDO
+          ================================================== */}
+      <h2 className="plt-titulo rel-secao">Doze meses de caixa</h2>
+      <GraficoDeCaixa fluxo={dados.fluxo} mesEmFoco={chaveDoMes} />
+
+      {/* ==================================================
+          3. PARA ONDE VAI O DINHEIRO
+          ================================================== */}
+      <h2 className="plt-titulo rel-secao">Para onde vai o dinheiro</h2>
       {dados.categorias.length === 0 ? (
-        <p className="rel-apoio">Nenhum pagamento no período.</p>
+        <p className="rel-apoio">Nenhum pagamento no período — nada a separar por categoria.</p>
       ) : (
         <div className="rel-categorias">
-          {(['RECEIVABLE', 'PAYABLE'] as const).map((direcao) => {
-            const doLado = dados.categorias.filter((c) => c.direcao === direcao);
-            if (doLado.length === 0) return null;
-            const total = doLado.reduce((a, c) => a + c.totalCentavos, 0);
-            return (
-              <section key={direcao} className="rel-lado">
-                <h3>{direcao === 'RECEIVABLE' ? 'Entrou' : 'Saiu'}</h3>
-                {doLado.map((c) => (
-                  <div key={c.categoria} className="rel-categoria">
-                    <div className="rel-categoria-topo">
-                      <span>{c.categoria}</span>
-                      <span className="dinheiro">{c.totalFormatado}</span>
-                    </div>
-                    {/* A barra proporcional responde "quanto disso é
-                        isso" sem o leitor dividir dois números de cabeça. */}
-                    <span
-                      className={`rel-fatia ${direcao === 'RECEIVABLE' ? 'entrou' : 'saiu'}`}
-                      style={{ width: `${Math.max(2, (c.totalCentavos / total) * 100)}%` }}
-                    />
-                  </div>
-                ))}
-              </section>
-            );
-          })}
+          <ColunaDeCategorias titulo="Entrou" linhas={entrouPorCategoria} direcao="RECEIVABLE" />
+          <ColunaDeCategorias titulo="Saiu" linhas={saiuPorCategoria} direcao="PAYABLE" />
         </div>
       )}
 
-      {/* ---- 3. quem eu cobro hoje? ---- */}
-      <h2 className="plt-titulo">
+      {/* ==================================================
+          4. QUEM EU COBRO HOJE
+          ================================================== */}
+      <h2 className="plt-titulo rel-secao">
         Quem está devendo{' '}
         <span className="rel-total">{formatCents(dados.totalDevendoCentavos)}</span>
       </h2>
       {dados.inadimplentes.length === 0 ? (
         <p className="rel-apoio">Ninguém em atraso. Raro e bom.</p>
       ) : (
-        <div className="rolo">
-          <table className="tabela">
-            <thead>
-              <tr>
-                <th scope="col">Aluno</th>
-                <th scope="col">Contato</th>
-                <th scope="col" className="fin-col-num">Deve</th>
-                <th scope="col" className="fin-col-num">Cobranças</th>
-                <th scope="col" className="fin-col-num">Atraso</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dados.inadimplentes.map((i) => (
-                <tr key={i.studentId}>
-                  <td className="celula-forte">{i.nome}</td>
-                  <td className="tabular plt-secundario">{i.telefone ?? '—'}</td>
-                  <td className="fin-col-num">
-                    <span className="dinheiro">{i.devendoFormatado}</span>
-                  </td>
-                  <td className="fin-col-num tabular">{i.cobrancas}</td>
-                  <td className="fin-col-num">
-                    {/* ORDENADO POR DIAS, não por valor: quem deve R$ 200
-                        há seis meses é um problema diferente de quem deve
-                        R$ 800 desde ontem. */}
-                    <span className={`pilula ${i.diasDeAtraso > 60 ? 'atrasada' : 'apagada'}`}>
-                      {i.diasDeAtraso} dias
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rel-faixas">
+          {faixas.map((f) => (
+            <section key={f.nome} className="rel-faixa">
+              <header>
+                <h3>{f.nome}</h3>
+                <strong className="dinheiro">{formatCents(f.total)}</strong>
+                <span className="rel-apoio">
+                  {f.lista.length === 0
+                    ? 'ninguém'
+                    : `${f.lista.length} aluno${f.lista.length === 1 ? '' : 's'} · ${f.apoio}`}
+                </span>
+              </header>
+              {f.lista.length > 0 && (
+                <ul className="rel-devedores">
+                  {f.lista.map((d) => (
+                    <li key={d.studentId}>
+                      <span className="rel-devedor-nome">
+                        <strong>{d.nome}</strong>
+                        <span className="celula-apoio">
+                          {d.telefone ?? 'sem telefone'} · {d.cobrancas} cobrança
+                          {d.cobrancas === 1 ? '' : 's'} · {d.diasDeAtraso} dias
+                        </span>
+                      </span>
+                      <span className="dinheiro">{d.devendoFormatado}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ))}
         </div>
       )}
+
+      {/* ==================================================
+          5. O QUE EU LEVO IMPRESSO
+          ================================================== */}
+      <PapelTimbrado de={de} ate={ate} mes={mes} />
     </>
   );
 }
 
+function CartaoDeResumo({
+  rotulo,
+  valor,
+  tom,
+  variacao: v,
+  apoio,
+}: {
+  rotulo: string;
+  valor: number;
+  tom: string;
+  variacao: { texto: string; tom: string } | null;
+  apoio?: string | undefined;
+}): ReactNode {
+  return (
+    <div className={`rel-cartao ${tom}`}>
+      <span className="rel-cartao-rotulo">{rotulo}</span>
+      <strong className="rel-cartao-valor">{formatCents(valor)}</strong>
+      {v !== null && <span className={`rel-variacao ${v.tom}`}>{v.texto}</span>}
+      {apoio !== undefined && <span className="rel-cartao-apoio">{apoio}</span>}
+    </div>
+  );
+}
+
+function ColunaDeCategorias({
+  titulo,
+  linhas,
+  direcao,
+}: {
+  titulo: string;
+  linhas: api.Relatorios['categorias'];
+  direcao: api.DirecaoLancamento;
+}): ReactNode {
+  const total = linhas.reduce((a, c) => a + c.totalCentavos, 0);
+
+  return (
+    <section className="rel-lado">
+      <header className="rel-lado-topo">
+        <h3>{titulo}</h3>
+        <strong className="dinheiro">{formatCents(total)}</strong>
+      </header>
+      {linhas.length === 0 ? (
+        <p className="rel-apoio">Nada neste período.</p>
+      ) : (
+        linhas.map((c) => {
+          const parte = total === 0 ? 0 : (c.totalCentavos / total) * 100;
+          return (
+            <div key={c.categoria} className="rel-categoria">
+              <div className="rel-categoria-topo">
+                <span>{c.categoria}</span>
+                {/* O PERCENTUAL ESCRITO, e não só a largura da barra. A
+                    barra responde "qual é a maior" de relance; o número
+                    é o que se leva para a conversa. */}
+                <span className="rel-categoria-num">
+                  <span className="dinheiro">{c.totalFormatado}</span>
+                  <span className="rel-pct">{parte.toFixed(0)}%</span>
+                </span>
+              </div>
+              <span
+                className={`rel-fatia ${direcao === 'RECEIVABLE' ? 'entrou' : 'saiu'}`}
+                style={{ width: `${Math.max(2, parte)}%` }}
+              />
+              <span className="rel-categoria-qtd">
+                {c.quantidade} lançamento{c.quantidade === 1 ? '' : 's'}
+              </span>
+            </div>
+          );
+        })
+      )}
+    </section>
+  );
+}
 
 /**
  * Os relatórios em PDF timbrado.
@@ -2102,6 +2430,11 @@ function Relatorios({ de, ate }: { de: Date; ate: Date }): ReactNode {
  * nasce: quem está olhando o fechamento do mês é quem precisa levar o
  * papel para a reunião. Uma aba "Relatórios" separada seria mais
  * arrumada e menos usada.
+ *
+ * E FICAM NO FIM DA ABA, não no começo. Ninguém pede o papel antes de
+ * olhar o número — a fileira de botões abrindo a tela empurrava o
+ * conteúdo todo para baixo da dobra e fazia a aba parecer uma gaveta de
+ * downloads.
  *
  * O PERÍODO É O MESMO da tela — os botões herdam o filtro que já está
  * na barra de cima. Repetir dois campos de data aqui abriria a
@@ -2113,40 +2446,91 @@ function Relatorios({ de, ate }: { de: Date; ate: Date }): ReactNode {
  * o sistema não sabe responder — o saldo de uma cobrança é o de hoje,
  * não o daquele dia.
  */
-function PapelTimbrado({ de, ate }: { de: Date; ate: Date }): ReactNode {
+function PapelTimbrado({ de, ate, mes }: { de: Date; ate: Date; mes: Date }): ReactNode {
   const [equipe, setEquipe] = useState<api.Profissional[]>([]);
   const [profissional, setProfissional] = useState('');
+  const [paraFechamento, setParaFechamento] = useState('');
   const [baixando, setBaixando] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     let vivo = true;
     void api
       .buscarProfissionais()
-      .then((r) => vivo && setEquipe(r.data.filter((p) => p.ativo)))
+      .then((r) => {
+        if (!vivo) return;
+        const ativos = r.data.filter((p) => p.ativo);
+        setEquipe(ativos);
+        setParaFechamento((q) => q || (ativos[0]?.id ?? ''));
+      })
       .catch(() => undefined);
     return () => {
       vivo = false;
     };
   }, []);
 
-  const baixar = async (qual: string, fn: () => Promise<void>): Promise<void> => {
+  const baixar = (qual: string, fn: () => Promise<void>): void => {
     setBaixando(qual);
-    try {
-      await fn();
-    } finally {
-      setBaixando(null);
-    }
+    setErro(null);
+    void fn()
+      .catch((e: unknown) =>
+        setErro(e instanceof api.ApiError ? e.message : 'Não foi possível gerar o PDF.'),
+      )
+      .finally(() => setBaixando(null));
   };
 
   return (
     <section className="rel-pdf">
-      <h2 className="plt-titulo">Relatórios em PDF</h2>
+      <h2 className="plt-titulo rel-secao">Para levar impresso</h2>
       <p className="rel-apoio">
         Saem timbrados com a marca e o endereço da academia — o que estiver preenchido em{' '}
-        <strong>A academia</strong>.
+        <strong>A academia</strong>. O período é o que está selecionado lá em cima.
       </p>
 
+      {erro !== null && <Erro mensagem={erro} />}
+
       <div className="rel-pdf-grade">
+        {/* O FECHAMENTO VEM PRIMEIRO. É o único destes papéis que sai da
+            academia para a mão de outra pessoa, e é o que tem data
+            marcada: todo dia 5, alguém precisa dele. */}
+        <div className="rel-pdf-item destaque">
+          <h3>Fechamento do profissional</h3>
+          <p>
+            O que ele fez no mês, quanto entrou por ele, o percentual e o valor a receber — com a
+            memória de cálculo linha a linha. É o papel que vai junto com o pagamento.
+          </p>
+          <div className="rel-pdf-acoes">
+            <select
+              value={paraFechamento}
+              onChange={(e) => setParaFechamento(e.target.value)}
+              aria-label="Profissional do fechamento"
+            >
+              {equipe.length === 0 && <option value="">Nenhum profissional ativo</option>}
+              {equipe.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="botao-acao"
+              disabled={baixando !== null || paraFechamento === ''}
+              onClick={() =>
+                baixar('fechamento', () =>
+                  api.baixarFechamentoDoProfissional(paraFechamento, mes),
+                )
+              }
+            >
+              {baixando === 'fechamento' ? 'Gerando…' : 'Baixar'}
+            </button>
+          </div>
+          <p className="rel-pdf-nota">
+            Se o mês ainda não foi fechado em <strong>Comissões</strong>, o PDF sai marcado como
+            prévia.
+          </p>
+        </div>
+
         <div className="rel-pdf-item">
           <h3>Presença no período</h3>
           <p>Quem veio e quem faltou, com a taxa de comparecimento de cada aluno.</p>
@@ -2167,9 +2551,7 @@ function PapelTimbrado({ de, ate }: { de: Date; ate: Date }): ReactNode {
               type="button"
               className="botao-secundario"
               disabled={baixando !== null}
-              onClick={() =>
-                void baixar('presenca', () => api.baixarPresenca(de, ate, profissional))
-              }
+              onClick={() => baixar('presenca', () => api.baixarPresenca(de, ate, profissional))}
             >
               {baixando === 'presenca' ? 'Gerando…' : 'Baixar'}
             </button>
@@ -2184,7 +2566,7 @@ function PapelTimbrado({ de, ate }: { de: Date; ate: Date }): ReactNode {
               type="button"
               className="botao-secundario"
               disabled={baixando !== null}
-              onClick={() => void baixar('ocupacao', () => api.baixarOcupacao(de, ate))}
+              onClick={() => baixar('ocupacao', () => api.baixarOcupacao(de, ate))}
             >
               {baixando === 'ocupacao' ? 'Gerando…' : 'Baixar'}
             </button>
@@ -2199,7 +2581,7 @@ function PapelTimbrado({ de, ate }: { de: Date; ate: Date }): ReactNode {
               type="button"
               className="botao-secundario"
               disabled={baixando !== null}
-              onClick={() => void baixar('inadimplencia', () => api.baixarInadimplencia())}
+              onClick={() => baixar('inadimplencia', () => api.baixarInadimplencia())}
             >
               {baixando === 'inadimplencia' ? 'Gerando…' : 'Baixar'}
             </button>

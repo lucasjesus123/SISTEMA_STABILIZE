@@ -3711,66 +3711,327 @@
   max-width: 66ch;
 }
 
-/* Barras em CSS puro, sem biblioteca de gráfico. Doze meses e dois
-   valores por mês não justificam trezentos kilobytes de JavaScript —
-   e uma barra que é um `<span>` com altura em porcentagem responde à
-   mesma pergunta com o mesmo rigor. */
-.rel-barras {
+/* ---------------------------------------------------------------------
+   O GRÁFICO DE CAIXA — SVG desenhado à mão, sem biblioteca
+
+   A versão anterior era uma pilha de `div`s com altura em porcentagem:
+   duas caixas por mês e mais nada. Sem eixo e sem escala, o gráfico
+   ocupava meia tela para dizer menos do que a tabela ao lado — e numa
+   academia sem baixa lançada virava doze tocos de dois pixels, que
+   parecem defeito de desenho.
+
+   Continua sem dependência: doze meses e três séries não justificam
+   trezentos kilobytes de JavaScript.
+   ------------------------------------------------------------------- */
+.rel-grafico {
+  margin: var(--e-3) 0 0;
+  padding: var(--e-4) var(--e-4) var(--e-2);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.rel-grafico svg {
+  display: block;
+  width: 100%;
+  /* ESCALA UNIFORME. Com `preserveAspectRatio: none` e uma altura fixa,
+     uma tela larga estica o desenho na horizontal — e o que estica junto
+     é o TEXTO dos rótulos, que sai achatado e visivelmente errado. Com
+     `height: auto` o SVG guarda a própria proporção e cresce inteiro. */
+  height: auto;
+}
+
+.rel-regua {
+  stroke: var(--fio);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+/* O ZERO É SÓLIDO e mais forte que as outras réguas: ele não é uma
+   marca de escala, é a fronteira entre sobrar e faltar. */
+.rel-zero {
+  stroke: var(--fio-forte);
+  stroke-width: 1;
+}
+.rel-escala {
+  font-size: 10px;
+  fill: var(--texto-apoio);
+  font-variant-numeric: tabular-nums;
+}
+.rel-foco {
+  fill: color-mix(in srgb, var(--teal) 7%, transparent);
+}
+.rel-b-entrou {
+  fill: var(--teal);
+}
+.rel-b-saiu {
+  fill: color-mix(in srgb, var(--texto-apoio) 55%, transparent);
+}
+.rel-linha-saldo {
+  stroke: var(--texto);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.rel-ponto {
+  fill: var(--superficie-alta);
+  stroke: var(--texto);
+  stroke-width: 1.6;
+}
+.rel-ponto.negativo {
+  stroke: var(--erro);
+  fill: var(--erro);
+}
+.rel-mes-eixo {
+  font-size: 10px;
+  fill: var(--texto-apoio);
+  font-variant-numeric: tabular-nums;
+}
+.rel-mes-eixo.foco {
+  fill: var(--texto);
+  font-weight: 600;
+}
+
+.rel-legenda {
   display: flex;
-  align-items: flex-end;
-  gap: var(--e-2);
-  height: 11rem;
-  padding: var(--e-3) 0 0;
-  border-bottom: 1px solid var(--fio-forte);
-  margin-bottom: var(--e-2);
+  flex-wrap: wrap;
+  gap: var(--e-4);
+  margin: var(--e-3) 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
 }
-/* FLEX E NÃO GRADE, e é o motivo de o gráfico ter nascido achatado:
-   `height: 100%` dentro de uma linha de grade de altura automática
-   resolve contra "auto" e vira zero. Com flex-column e `flex: 1` na
-   área das barras, a altura passa a ser o espaço que sobra de verdade
-   — e aí a porcentagem de cada barra tem contra o que medir. */
-.rel-mes {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: var(--e-2);
-  min-width: 0;
-  height: 100%;
+.rel-chave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.rel-par {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 2px;
-  min-height: 0;
-}
-.rel-barra {
-  width: 45%;
-  max-width: 1.1rem;
-  min-height: 2px;
-  border-radius: 2px 2px 0 0;
-  transition: height var(--medio) var(--saida);
-}
-.rel-barra.entrou {
+.rel-chave::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
   background: var(--teal);
 }
-.rel-barra.saiu {
+.rel-chave.saiu::before {
   background: color-mix(in srgb, var(--texto-apoio) 55%, transparent);
 }
-.rel-mes-nome {
-  text-align: center;
+.rel-chave.saldo::before {
+  width: 14px;
+  height: 2px;
+  border-radius: 0;
+  background: var(--texto);
+}
+
+/* O gráfico sem dado nenhum diz O QUE FALTA, e não desenha o nada. */
+.rel-vazio {
+  margin: var(--e-3) 0 0;
+  padding: var(--e-5);
+  border: 1px dashed var(--fio-forte);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.rel-vazio p {
+  margin: 0;
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  color: var(--texto-apoio);
+  max-width: 68ch;
+}
+.rel-vazio p + p {
+  margin-top: var(--e-2);
+}
+.rel-vazio strong {
+  color: var(--texto);
+}
+
+/* ---- o resumo do mês, com a comparação --------------------------- */
+.rel-barra-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-3);
+  margin-top: var(--e-4);
+}
+.rel-secao {
+  margin-top: var(--e-7);
+}
+
+.rel-resumo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--e-3);
+  margin-top: var(--e-3);
+}
+.rel-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+  /* A COR ENTRA NA BORDA DE CIMA, e não no fundo do cartão inteiro.
+     Quatro cartões com fundo colorido ensinam o olho a ignorar a cor —
+     e aí o vermelho que importa passa despercebido. */
+  border-top: 3px solid var(--fio-forte);
+}
+.rel-cartao.entrou {
+  border-top-color: var(--teal);
+}
+.rel-cartao.saiu {
+  border-top-color: color-mix(in srgb, var(--texto-apoio) 55%, transparent);
+}
+.rel-cartao.saldo {
+  border-top-color: var(--ok);
+}
+.rel-cartao.negativo {
+  border-top-color: var(--erro);
+}
+.rel-cartao-rotulo {
   font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-apoio);
+}
+.rel-cartao-valor {
+  font-family: var(--fonte-display);
+  font-size: clamp(1.3rem, 2vw, 1.65rem);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rel-cartao.negativo .rel-cartao-valor {
+  color: var(--erro);
+}
+.rel-variacao {
+  margin-top: 3px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--texto-apoio);
+}
+/* SUBIR NÃO É SEMPRE BOM — o "Saiu" que sobe 40% é uma má notícia. Por
+   isso o tom é neutro nos dois sentidos: a seta diz a direção, e quem
+   lê sabe se aquilo é bom no cartão em que está. */
+.rel-variacao.sobe::before {
+  content: '▲ ';
+}
+.rel-variacao.desce::before {
+  content: '▼ ';
+}
+.rel-cartao-apoio {
+  margin-top: 2px;
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+  line-height: 1.4;
+}
+
+/* ---- inadimplência por faixa de atraso --------------------------- */
+.rel-faixas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  gap: var(--e-3);
+  margin-top: var(--e-3);
+}
+.rel-faixa {
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.rel-faixa header h3 {
+  margin: 0;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-apoio);
+}
+.rel-faixa header strong {
+  display: block;
+  margin: 2px 0 1px;
+  font-family: var(--fonte-display);
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+.rel-faixa header .rel-apoio {
+  font-size: var(--t-xs);
+}
+.rel-devedores {
+  list-style: none;
+  margin: var(--e-3) 0 0;
+  padding: var(--e-3) 0 0;
+  border-top: 1px solid var(--fio);
+  display: grid;
+  gap: var(--e-2);
+}
+.rel-devedores li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+.rel-devedor-nome {
+  min-width: 0;
+}
+.rel-devedor-nome strong {
+  display: block;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto);
+}
+.rel-devedores .dinheiro {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- categorias --------------------------------------------------- */
+.rel-lado-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-3);
+  margin-bottom: var(--e-3);
+}
+.rel-lado-topo strong {
+  font-variant-numeric: tabular-nums;
+}
+.rel-categoria-num {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--e-2);
+}
+.rel-pct {
+  min-width: 2.4rem;
+  text-align: right;
+  font-size: var(--t-xs);
+  font-weight: 600;
   color: var(--texto-apoio);
   font-variant-numeric: tabular-nums;
 }
-.rel-legenda {
-  display: flex;
-  gap: var(--e-4);
-  margin: 0 0 var(--e-6);
-  font-size: var(--t-sm);
+.rel-categoria-qtd {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-xs);
   color: var(--texto-apoio);
+}
+
+/* O fechamento é o único destes papéis que sai da academia para a mão
+   de outra pessoa — e o único com data marcada. */
+.rel-pdf-item.destaque {
+  border-color: color-mix(in srgb, var(--teal) 45%, transparent);
+  background: color-mix(in srgb, var(--teal) 5%, transparent);
+}
+.rel-pdf-nota {
+  margin: var(--e-2) 0 0;
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+  line-height: 1.45;
 }
 
 .rel-categorias {
