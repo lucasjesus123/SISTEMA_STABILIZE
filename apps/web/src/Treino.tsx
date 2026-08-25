@@ -16,6 +16,7 @@ import {
   type ItemTreino,
   type Treino,
 } from './api.js';
+import { prepararImagem } from './imagem.js';
 
 /**
  * Prescrição de treino.
@@ -872,10 +873,17 @@ function QuadroDaFoto({
     setErro(null);
     setEnviando(true);
     try {
-      await enviarFotoDoExercicio(exercicio.id, arquivo);
+      /* Diminuída e convertida aqui — ver `prepararImagem`. Foto de
+         exercício costuma vir da galeria do celular, com 4000 px de
+         largura, e aparece na tela com 200. */
+      await enviarFotoDoExercicio(exercicio.id, await prepararImagem(arquivo, { lado: 800 }));
       aoEnviar();
     } catch (x) {
-      setErro(x instanceof ApiError ? x.message : 'Não foi possível enviar a imagem.');
+      setErro(
+        x instanceof ApiError || x instanceof Error
+          ? x.message
+          : 'Não foi possível enviar a imagem.',
+      );
     } finally {
       setEnviando(false);
     }
@@ -884,7 +892,7 @@ function QuadroDaFoto({
   const campo = (
     <input
       type="file"
-      accept="image/jpeg,image/png,image/webp"
+      accept="image/*"
       onChange={(e) => void escolher(e)}
       disabled={enviando}
     />

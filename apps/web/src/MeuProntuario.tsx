@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import * as api from './api.js';
+import { prepararImagem } from './imagem.js';
 import { FormularioDaTriagem } from './Triagem.jsx';
 import { Cartao } from './Carteirinha.jsx';
 
@@ -164,10 +165,15 @@ function Envio({
     setErro(null);
     setEnviando(true);
     try {
-      await api.enviarMinhaFoto(arquivo);
+      /* Vem da CÂMERA do celular, então é a maior de todas: diminuir
+         antes de subir é a diferença entre esperar e não esperar numa
+         conexão de rua. */
+      await api.enviarMinhaFoto(await prepararImagem(arquivo, { lado: 640 }));
       aoEnviar();
     } catch (x) {
-      setErro(x instanceof api.ApiError ? x.message : 'Não foi possível enviar.');
+      setErro(
+        x instanceof api.ApiError || x instanceof Error ? x.message : 'Não foi possível enviar.',
+      );
     } finally {
       setEnviando(false);
     }
@@ -298,7 +304,9 @@ function MeusExames(): ReactNode {
       setDescricao('');
       setVersao((v) => v + 1);
     } catch (x) {
-      setErro(x instanceof api.ApiError ? x.message : 'Não foi possível enviar.');
+      setErro(
+        x instanceof api.ApiError || x instanceof Error ? x.message : 'Não foi possível enviar.',
+      );
     } finally {
       setEnviando(false);
     }

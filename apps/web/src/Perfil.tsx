@@ -12,6 +12,7 @@ import {
 import { Carregando, Erro } from './ui.jsx';
 import { e164ParaMascara, mascararCep, mascararTelefone, telefoneParaE164 } from '@stabilize/shared';
 import { mesclarEndereco, useBuscaDeCep } from './endereco.js';
+import { prepararImagem } from './imagem.js';
 
 /**
  * O perfil de quem está usando o sistema.
@@ -413,9 +414,14 @@ function RetratoDoPerfil({
   const escolher = async (arquivo: File | undefined): Promise<void> => {
     if (arquivo === undefined) return;
     setErro(null);
+    setFalhou(false);
     setOcupado(true);
     try {
-      await enviarFotoPerfil(arquivo);
+      /* Diminuída e convertida ANTES de subir — ver `prepararFoto`. O
+         que vai para o servidor é o que este navegador acabou de
+         desenhar, então não existe mais o caso de a imagem subir e
+         voltar sem conseguir ser mostrada. */
+      await enviarFotoPerfil(await prepararImagem(arquivo, { lado: 512 }));
       /* `versao` força a rebusca mesmo quando `temFoto` já era `true` —
          sem ela o efeito não reexecuta e a tela segue mostrando a imagem
          antiga depois de um envio bem-sucedido.
@@ -427,7 +433,11 @@ function RetratoDoPerfil({
       aoMudar(true);
       setVersao((v) => v + 1);
     } catch (e) {
-      setErro(e instanceof ApiError ? e.message : 'Não foi possível enviar a imagem.');
+      setErro(
+        e instanceof ApiError || e instanceof Error
+          ? e.message
+          : 'Não foi possível enviar a imagem.',
+      );
     } finally {
       setOcupado(false);
       /* Limpa o input: sem isso, escolher O MESMO arquivo de novo (para
@@ -477,12 +487,20 @@ function RetratoDoPerfil({
 
       <div className="retrato-acoes">
         <p className="retrato-titulo">Foto</p>
-        <p className="retrato-dica">JPG, PNG ou WebP, até 8 MB.</p>
+        <p className="retrato-dica">
+          Qualquer foto serve — ela é ajustada e recortada aqui mesmo, sem você precisar mexer.
+        </p>
 
         <input
           ref={entrada}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          /* QUALQUER IMAGEM. A lista estreita escondia do seletor de
+             arquivos exatamente as fotos que a pessoa tem no celular —
+             HEIC do iPhone, à frente — e a mensagem que sobrava era "meu
+             arquivo nem aparece". O navegador decodifica o que sabe
+             abrir, e `prepararFoto` entrega um JPEG padrão; o que ele
+             não abre é recusado na hora, com o motivo. */
+          accept="image/*"
           className="retrato-entrada"
           id="foto-do-perfil"
           onChange={(e) => void escolher(e.target.files?.[0])}

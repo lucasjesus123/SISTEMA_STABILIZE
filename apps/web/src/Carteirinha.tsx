@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import * as api from './api.js';
 import type { FichaAluno } from './api.js';
+import { prepararImagem } from './imagem.js';
 import { Marca } from './Marca.jsx';
 
 /**
@@ -18,7 +19,6 @@ import { Marca } from './Marca.jsx';
  * uma segunda fonte da verdade para o mesmo desenho.
  */
 
-const TAMANHO_MAXIMO_MB = 8;
 
 export function AbaCarteirinha({
   ficha,
@@ -96,18 +96,23 @@ export function AbaCarteirinha({
     const arquivo = e.target.files?.[0];
     e.target.value = '';
     if (arquivo === undefined) return;
-    if (arquivo.size > TAMANHO_MAXIMO_MB * 1024 * 1024) {
-      setErro(`A imagem tem mais de ${TAMANHO_MAXIMO_MB} MB. Envie uma menor.`);
-      return;
-    }
     setErro(null);
     setOcupado(true);
     try {
-      await api.enviarFotoDoAluno(ficha.id, arquivo);
+      /* SEM CONFERIR TAMANHO ANTES. A imagem é diminuída aqui — ver
+         `prepararImagem` —, então recusar por "tem mais de 8 MB" era
+         mandar a pessoa resolver do lado dela um problema que o sistema
+         resolve sozinho. Foto de celular passa dos 8 MB com frequência,
+         e é justamente a foto que se quer na carteirinha. */
+      await api.enviarFotoDoAluno(ficha.id, await prepararImagem(arquivo, { lado: 640 }));
       setVersao((v) => v + 1);
       aoMudar();
     } catch (x) {
-      setErro(x instanceof api.ApiError ? x.message : 'Não foi possível enviar a foto.');
+      setErro(
+        x instanceof api.ApiError || x instanceof Error
+          ? x.message
+          : 'Não foi possível enviar a foto.',
+      );
     } finally {
       setOcupado(false);
     }
@@ -150,7 +155,7 @@ export function AbaCarteirinha({
               {ocupado ? 'Enviando…' : foto === null ? 'Adicionar foto' : 'Trocar a foto'}
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/*"
                 onChange={(e) => void enviarFoto(e)}
                 disabled={ocupado}
               />

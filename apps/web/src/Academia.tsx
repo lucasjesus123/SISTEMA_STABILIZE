@@ -13,6 +13,7 @@ import {
   salvarAcademia,
   type Academia as AcademiaDados,
 } from './api.js';
+import { prepararImagem } from './imagem.js';
 import { Carregando, Erro } from './ui.jsx';
 import {
   e164ParaMascara,
@@ -39,7 +40,6 @@ import { mesclarEndereco, useBuscaDeCep } from './endereco.js';
  * mesmos separadores.
  */
 
-const TAMANHO_MAXIMO_MB = 2;
 
 interface Formulario {
   nome: string;
@@ -387,14 +387,14 @@ function LogoDaAcademia({
     const arquivo = e.target.files?.[0];
     e.target.value = '';
     if (arquivo === undefined) return;
-    if (arquivo.size > TAMANHO_MAXIMO_MB * 1024 * 1024) {
-      setErro(`A imagem tem mais de ${TAMANHO_MAXIMO_MB} MB. Envie uma menor.`);
-      return;
-    }
     setErro(null);
     setOcupado(true);
     try {
-      await enviarLogoDaAcademia(arquivo);
+      /* `transparente` porque é LOGOTIPO: ele é impresso sobre o papel
+         timbrado e usado como marca d'água, e achatá-lo contra um fundo
+         branco deixaria um retângulo visível em cima do relatório. Sai
+         em PNG, com o fundo que veio. */
+      await enviarLogoDaAcademia(await prepararImagem(arquivo, { lado: 640, transparente: true }));
       aoMudar();
     } catch (x) {
       setErro(x instanceof ApiError ? x.message : 'Não foi possível enviar o logo.');
@@ -457,7 +457,8 @@ function LogoDaAcademia({
           onChange={(e) => void enviar(e)}
         />
         <p className="campo-dica">
-          PNG ou JPEG, até {TAMANHO_MAXIMO_MB} MB. Fundo transparente fica melhor na marca d’água.
+          Envie qualquer imagem — ela é ajustada aqui mesmo. Fundo transparente fica melhor na
+          marca d’água, e é preservado.
         </p>
         {erro !== null && <p className="acad-logo-erro">{erro}</p>}
       </div>
