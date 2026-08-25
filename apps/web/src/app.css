@@ -5983,6 +5983,22 @@
   max-width: 28rem;
 }
 
+/* O papel dentro do quadro personalizado: ele deixou de ser a primeira
+   pergunta do cadastro e virou detalhe de quem monta o acesso à mão. */
+.eq-papel-campo {
+  max-width: 22rem;
+  padding-bottom: var(--e-2);
+  border-bottom: 1px solid var(--fio);
+}
+
+/* O QUE A FUNÇÃO ABRE, colado no seletor que o decidiu. */
+.eq-funcao-abre {
+  margin-top: 4px;
+}
+.eq-funcao-abre strong {
+  color: var(--texto);
+}
+
 /* ---------------------------------------------------------------------
    TABELA DE VALORES
 
@@ -6142,4 +6158,39 @@
   margin: var(--e-3) 0 0;
   font-size: var(--t-sm);
   color: var(--texto-apoio);
+}
+
+/* ---- cor livre, ao lado da paleta ----------------------------------
+   O `input[type=color]` fica escondido como o radio das outras opções:
+   quem clica no disco abre o seletor do sistema. O "+" só aparece
+   enquanto a escolha é uma das sugeridas — quando é livre, o disco passa
+   a mostrar a própria cor, que é a informação.
+   ------------------------------------------------------------------- */
+.eq-livre > span {
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--texto-apoio);
+  background:
+    linear-gradient(var(--superficie), var(--superficie)) padding-box,
+    conic-gradient(#e05252, #e0a852, #7bc46a, #4aa3c4, #7b6ac4, #c46aa8, #e05252) border-box;
+  border: 2px solid transparent;
+}
+
+/* A AMOSTRA, com o nome dentro. Escolher cor num disco de 2 rem é
+   escolher no escuro: o que importa é se o nome se lê sobre ela na
+   agenda, e é isso que esta linha mostra. */
+.eq-cor-previa {
+  margin: var(--e-2) 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.eq-cor-amostra {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--raio);
+  font-size: var(--t-sm);
+  font-weight: 600;
 }

@@ -2,11 +2,14 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import * as api from './api.js';
 import { Carregando, Erro, Vazio } from './ui.jsx';
 import type { Principal } from './api.js';
+import { normalizarCor, tintaSobre } from './cor.js';
 import {
   AREAS,
   AREA_DESCRICOES,
   AREA_LABELS,
   AREA_PERMISSIONS,
+  FUNCOES,
+  funcaoDe,
   permissionsOf,
 } from '@stabilize/shared';
 
@@ -110,7 +113,7 @@ export function Equipe({ principal }: { principal: Principal }): ReactNode {
           <p>
             {lista === null
               ? 'Quem trabalha na academia e o que cada um alcança.'
-              : `${lista.filter((u) => u.ativo).length} ativos de ${lista.length} · o papel é o teto do que cada um pode, e as seções marcadas são o que ele enxerga.`}
+              : `${lista.filter((u) => u.ativo).length} ativos de ${lista.length} · a função de cada um decide o que ele abre ao entrar.`}
           </p>
         </div>
         <button type="button" className="botao-acao" onClick={() => setEditando('novo')}>
@@ -141,7 +144,7 @@ export function Equipe({ principal }: { principal: Principal }): ReactNode {
             <thead>
               <tr>
                 <th scope="col">Pessoa</th>
-                <th scope="col">Papel</th>
+                <th scope="col">Função</th>
                 <th scope="col">Último acesso</th>
                 <th scope="col">Situação</th>
                 <th scope="col" />
@@ -214,7 +217,14 @@ function Linha({
                 ver os dois juntos é o que torna a cor memorizável. */}
             <span
               className="aluno-inicial eq-cor"
-              style={u.cor !== null ? { background: u.cor, color: '#fff' } : undefined}
+              /* A TINTA VEM DA COR, e não fixa em branco. Enquanto a
+                 paleta era a única fonte, o branco servia para todas —
+                 elas foram escolhidas escuras. Com a cor livre, amarelo
+                 e verde-limão são escolhas legítimas, e nome branco
+                 sobre eles some. */
+              style={
+                u.cor !== null ? { background: u.cor, color: tintaSobre(u.cor) } : undefined
+              }
               aria-hidden="true"
             >
               {u.nome.trim().charAt(0).toUpperCase()}
@@ -226,12 +236,20 @@ function Linha({
           </span>
         </td>
         <td>
-          {/* PÍLULA, e não texto solto: o papel é a informação que muda
+          {/* PÍLULA, e não texto solto: a função é a informação que muda
               o que a pessoa alcança no sistema inteiro, e merece a forma
-              que o olho encontra primeiro numa lista. */}
+              que o olho encontra primeiro numa lista.
+
+              O NOME VEM DA FUNÇÃO, e cai no papel quando o recorte é à
+              mão. Escrever "Administrador" para quem só abre o
+              financeiro seria dizer, na lista inteira, uma coisa que não
+              é verdade sobre metade da equipe. */}
           <span className={`pilula papel-${u.papel.toLowerCase()}`}>
-            {NOME_DO_PAPEL[u.papel] ?? u.papel}
+            {funcaoDe(u.papel, u.areas)?.nome ?? NOME_DO_PAPEL[u.papel] ?? u.papel}
           </span>
+          {funcaoDe(u.papel, u.areas) === null && u.areas !== null && (
+            <span className="eq-nota">acesso personalizado</span>
+          )}
         </td>
         <td className="tabular">
           {u.ultimoAcesso === null ? (
@@ -348,6 +366,12 @@ function Formulario({
   const [senha, setSenha] = useState('');
   const [recortar, setRecortar] = useState(usuario?.areas != null);
   const [areas, setAreas] = useState<string[]>(usuario?.areas ?? []);
+  /* "Eu mesmo monto o acesso." NÃO é derivável do par (papel, áreas):
+     quem abre o modo manual e ainda não mexeu em nada continua com uma
+     combinação que corresponde a uma função pronta, e fechar o painel
+     debaixo da mão de quem acabou de abri-lo seria o pior momento
+     possível para fazê-lo. */
+  const [manual, setManual] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -368,6 +392,33 @@ function Formulario({
      forma pior de dizer a mesma coisa. */
   const opcoes = PAPEIS.filter((p) => p.valor !== 'OWNER' || souDono);
   const escolhido = PAPEIS.find((p) => p.valor === papel);
+
+  /* A FUNÇÃO É LIDA do que está preenchido, e não guardada ao lado. Se
+     ela fosse um estado próprio, existiria o dia em que ela diz
+     "Financeiro" e as áreas dizem outra coisa — e quem lê a tela
+     acreditaria no rótulo. Aqui o rótulo não tem como mentir: ou o par
+     (papel, áreas) corresponde a uma função pronta, ou a resposta é
+     "personalizado". */
+  const funcoesOferecidas = FUNCOES.filter((f) => f.papel !== 'OWNER' || souDono);
+  const funcaoAtual = manual ? null : funcaoDe(papel, recortar ? areas : null);
+  const valorDaFuncao = funcaoAtual?.id ?? 'personalizado';
+
+  /* Escolher a função preenche PAPEL E ÁREAS de uma vez — é o atalho
+     inteiro: quem cadastra o financeiro escolhe "Financeiro" e não
+     precisa saber que por baixo isso é um administrador com uma seção
+     marcada. */
+  const escolherFuncao = (id: string): void => {
+    if (id === 'personalizado') {
+      setManual(true);
+      return;
+    }
+    const f = funcoesOferecidas.find((x) => x.id === id);
+    if (f === undefined) return;
+    setManual(false);
+    setPapel(f.papel as api.PapelDaEquipe);
+    setRecortar(f.areas !== null);
+    setAreas(f.areas === null ? [] : [...f.areas]);
+  };
 
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -450,25 +501,54 @@ function Formulario({
           />
         </label>
 
+        {/* ==================================================
+            FUNÇÃO — o que a pessoa É na academia
+
+            Antes aqui se escolhia o PAPEL, que é vocabulário do sistema
+            e não da academia: quem cuida do dinheiro não é "um
+            administrador", é o financeiro. Pior, o papel sozinho não
+            recortava nada — o financeiro entrava como administrador e
+            abria prontuário de aluno, porque a alternativa era não dar
+            acesso nenhum.
+
+            A função preenche o par inteiro (papel + seções) de uma vez.
+            Não é um conceito novo de permissão: é um nome para a
+            combinação comum. Quem precisar de um recorte que não está na
+            lista escolhe "Personalizado" e monta à mão — o que era o
+            único caminho até aqui, e continua existindo.
+            ================================================== */}
         <label className="campo campo-meia">
-          <span className="campo-rotulo">Papel</span>
+          <span className="campo-rotulo">Função</span>
           <select
-            value={papel}
-            onChange={(e) => setPapel(e.target.value as api.PapelDaEquipe)}
+            value={valorDaFuncao}
+            onChange={(e) => escolherFuncao(e.target.value)}
             disabled={eEuMesmo}
           >
-            {opcoes.map((p) => (
-              <option key={p.valor} value={p.valor}>
-                {p.nome}
+            {funcoesOferecidas.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nome}
               </option>
             ))}
+            <option value="personalizado">Personalizado…</option>
           </select>
-          {/* O QUE O PAPEL SIGNIFICA, embaixo do seletor. Sem isto, quem
+          {/* O QUE A FUNÇÃO SIGNIFICA, embaixo do seletor. Sem isto, quem
               cadastra escolhe pelo nome e descobre o alcance depois —
               geralmente quando alguém viu o que não devia. */}
           <span className="campo-dica">
-            {eEuMesmo ? 'Você não pode trocar o próprio papel.' : escolhido?.descricao}
+            {eEuMesmo
+              ? 'Você não pode trocar a própria função.'
+              : (funcaoAtual?.descricao ?? 'Você escolhe o papel e as seções logo abaixo.')}
           </span>
+          {/* AS SEÇÕES DA FUNÇÃO, escritas por extenso e coladas no
+              seletor. "Financeiro" é um nome; o que ele abre é a
+              informação — e é o que quem cadastra precisa conferir antes
+              de salvar. */}
+          {funcaoAtual !== null && funcaoAtual.areas !== null && (
+            <span className="campo-dica eq-funcao-abre">
+              Abre só: <strong>{funcaoAtual.areas.map((a) => AREA_LABELS[a]).join(', ')}</strong>. O
+              resto some do menu e deixa de responder, mesmo pelo endereço direto.
+            </span>
+          )}
         </label>
 
         <fieldset className="campo campo-cheia eq-paleta">
@@ -487,10 +567,34 @@ function Formulario({
                 <span className="apenas-leitor-de-tela">Cor {c}</span>
               </label>
             ))}
+
+            {/* QUALQUER COR, ao lado das sugeridas — e não no lugar
+                delas. A paleta resolve o caso comum em um clique e já
+                vem separada o bastante para não confundir duas pessoas
+                no calendário; escolher a dedo é para quando a academia
+                tem uma cor própria ou quando as oito acabaram. */}
+            <label
+              className={`eq-opcao eq-livre ${PALETA.includes(cor) ? '' : 'ativa'}`}
+              title="Escolher outra cor"
+            >
+              <input
+                type="color"
+                value={normalizarCor(cor, PALETA[0]!)}
+                onChange={(e) => setCor(normalizarCor(e.target.value, PALETA[0]!))}
+              />
+              <span style={{ background: PALETA.includes(cor) ? undefined : cor }} aria-hidden="true">
+                {PALETA.includes(cor) ? '+' : ''}
+              </span>
+              <span className="apenas-leitor-de-tela">Escolher outra cor</span>
+            </label>
           </div>
-          <span className="campo-dica">
-            É por ela que os horários desta pessoa são reconhecidos no calendário.
-          </span>
+
+          <p className="eq-cor-previa">
+            Aparece assim na agenda:{' '}
+            <span className="eq-cor-amostra" style={{ background: cor, color: tintaSobre(cor) }}>
+              {nome.trim() === '' ? 'Nome da pessoa' : nome.trim()}
+            </span>
+          </p>
         </fieldset>
 
         {novo && (
@@ -551,72 +655,95 @@ function Formulario({
         )}
 
         {/* ==================================================
-            O QUE ESTA PESSOA ENXERGA
+            O QUE ESTA PESSOA ENXERGA — o modo à mão
 
-            O papel diz o que ela PODE; aqui se diz o que ela FAZ. Quem
-            cuida do financeiro não abre prontuário de aluno, e até
-            agora a única forma de conseguir isso era não dar acesso
-            nenhum.
+            Só aparece com "Personalizado" escolhido. Enquanto a função é
+            uma das prontas, este quadro estaria mostrando de novo, em
+            duas dúzias de linhas, o que o seletor de cima já disse — e
+            oferecendo caixas que, mexidas, fariam a função e o acesso
+            discordarem na mesma tela.
 
-            A conta é sempre interseção com o papel — marcar uma seção
-            nunca dá permissão que o papel não tenha —, e o corte vale no
+            O papel diz o que a pessoa PODE; as seções dizem o que ela
+            FAZ. A conta é sempre interseção — marcar uma seção nunca dá
+            permissão que o papel não tenha —, e o corte vale no
             servidor, não só no menu: a pessoa não vê e também não
             alcança pela URL.
             ================================================== */}
-        <fieldset className="campo campo-cheia eq-acessos">
-          <legend className="campo-rotulo">O que esta pessoa enxerga</legend>
+        {valorDaFuncao === 'personalizado' && (
+          <fieldset className="campo campo-cheia eq-acessos">
+            <legend className="campo-rotulo">Acesso personalizado</legend>
 
-          <label className="eq-tudo">
-            <input
-              type="radio"
-              name="recorte"
-              checked={!recortar}
-              onChange={() => setRecortar(false)}
-            />
-            <span>
-              <strong>Tudo o que o papel permite</strong>
-              <span className="campo-dica">
-                {escolhido?.descricao ?? 'O alcance completo do papel escolhido.'}
+            <label className="campo eq-papel-campo">
+              <span className="campo-rotulo">Papel</span>
+              <select
+                value={papel}
+                onChange={(e) => setPapel(e.target.value as api.PapelDaEquipe)}
+                disabled={eEuMesmo}
+              >
+                {opcoes.map((p) => (
+                  <option key={p.valor} value={p.valor}>
+                    {p.nome}
+                  </option>
+                ))}
+              </select>
+              {/* SEM a descrição do papel aqui: ela já é a dica da opção
+                  "tudo o que o papel permite", logo abaixo, e escrever a
+                  mesma frase duas vezes na mesma moldura faz parecer que
+                  são duas coisas. */}
+            </label>
+
+            <label className="eq-tudo">
+              <input
+                type="radio"
+                name="recorte"
+                checked={!recortar}
+                onChange={() => setRecortar(false)}
+              />
+              <span>
+                <strong>Tudo o que o papel permite</strong>
+                <span className="campo-dica">
+                  {escolhido?.descricao ?? 'O alcance completo do papel escolhido.'}
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
 
-          <label className="eq-tudo">
-            <input
-              type="radio"
-              name="recorte"
-              checked={recortar}
-              onChange={() => setRecortar(true)}
-            />
-            <span>
-              <strong>Só as seções que eu marcar</strong>
-              <span className="campo-dica">
-                O resto some do menu e deixa de responder, mesmo pelo endereço direto.
+            <label className="eq-tudo">
+              <input
+                type="radio"
+                name="recorte"
+                checked={recortar}
+                onChange={() => setRecortar(true)}
+              />
+              <span>
+                <strong>Só as seções que eu marcar</strong>
+                <span className="campo-dica">
+                  O resto some do menu e deixa de responder, mesmo pelo endereço direto.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
 
-          {recortar && (
-            <div className="eq-areas">
-              {areasDoPapel.map((a) => (
-                <label key={a} className={`eq-area ${areas.includes(a) ? 'ativa' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={areas.includes(a)}
-                    onChange={() => alternar(a)}
-                  />
-                  <span>
-                    <strong>{AREA_LABELS[a]}</strong>
-                    <span className="campo-dica">{AREA_DESCRICOES[a]}</span>
-                  </span>
-                </label>
-              ))}
-              {areasDoPapel.length === 0 && (
-                <p className="campo-dica">Este papel não tem seções para recortar.</p>
-              )}
-            </div>
-          )}
-        </fieldset>
+            {recortar && (
+              <div className="eq-areas">
+                {areasDoPapel.map((a) => (
+                  <label key={a} className={`eq-area ${areas.includes(a) ? 'ativa' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={areas.includes(a)}
+                      onChange={() => alternar(a)}
+                    />
+                    <span>
+                      <strong>{AREA_LABELS[a]}</strong>
+                      <span className="campo-dica">{AREA_DESCRICOES[a]}</span>
+                    </span>
+                  </label>
+                ))}
+                {areasDoPapel.length === 0 && (
+                  <p className="campo-dica">Este papel não tem seções para recortar.</p>
+                )}
+              </div>
+            )}
+          </fieldset>
+        )}
 
         {erro !== null && (
           <p className="mensagem-erro campo-cheia" role="alert">

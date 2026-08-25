@@ -487,3 +487,93 @@ export const ROLE_LABELS: Readonly<Record<Role, string>> = {
   RECEPTION: 'Recepção',
   STUDENT: 'Aluno',
 };
+
+/* =====================================================================
+ * FUNÇÕES — o que a pessoa É na academia
+ *
+ * O papel é o teto do acesso e a área é o recorte; nenhum dos dois é o
+ * nome do cargo. Quem cuida do dinheiro é ADMIN com a área do
+ * financeiro, e chamar essa pessoa de "Administrador" na lista da equipe
+ * é dizer algo que não é verdade sobre ela.
+ *
+ * ISTO NÃO É UM CONCEITO NOVO DE PERMISSÃO. É um par (papel, áreas) com
+ * nome — um atalho para o caso comum, e um rótulo derivado de volta. Não
+ * existe coluna nova, não existe estado a sincronizar, e por construção
+ * o rótulo não consegue mentir sobre o acesso: ele é LIDO do papel e das
+ * áreas, nunca gravado ao lado deles.
+ * =================================================================== */
+
+export interface Funcao {
+  readonly id: string;
+  readonly nome: string;
+  readonly descricao: string;
+  readonly papel: Role;
+  /** `null` = o papel inteiro. */
+  readonly areas: readonly Area[] | null;
+}
+
+export const FUNCOES: readonly Funcao[] = [
+  {
+    id: 'proprietario',
+    nome: 'Proprietário',
+    descricao: 'Dono da academia. Enxerga tudo, inclusive o caixa e a equipe.',
+    papel: 'OWNER',
+    areas: null,
+  },
+  {
+    id: 'administrador',
+    nome: 'Administrador',
+    descricao: 'Toca a academia inteira: alunos, agenda, financeiro e equipe.',
+    papel: 'ADMIN',
+    areas: null,
+  },
+  {
+    id: 'financeiro',
+    nome: 'Financeiro',
+    descricao: 'Só contas a receber e a pagar, pagamentos, comissões e relatórios.',
+    papel: 'ADMIN',
+    areas: ['financeiro'],
+  },
+  {
+    id: 'gerente',
+    nome: 'Gerente de operação',
+    descricao: 'Alunos, agenda, recepção e interessados — sem o caixa e sem a equipe.',
+    papel: 'ADMIN',
+    areas: ['alunos', 'agenda', 'recepcao', 'interessados'],
+  },
+  {
+    id: 'recepcao',
+    nome: 'Recepção',
+    descricao: 'Balcão: cadastra aluno, marca horário, recebe pagamento e atende quem liga.',
+    papel: 'RECEPTION',
+    areas: null,
+  },
+  {
+    id: 'profissional',
+    nome: 'Profissional',
+    descricao: 'Atende: prontuário e treino dos próprios alunos, e a própria agenda.',
+    papel: 'PROFESSIONAL',
+    areas: null,
+  },
+];
+
+/** Duas listas de áreas dizem a mesma coisa? Ordem não importa. */
+function mesmasAreas(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  const na = a === null || a.length === 0;
+  const nb = b === null || b.length === 0;
+  if (na || nb) return na && nb;
+  if (a!.length !== b!.length) return false;
+  const ordenada = [...b!].sort();
+  return [...a!].sort().every((v, i) => v === ordenada[i]);
+}
+
+/**
+ * O nome da função de alguém, deduzido do papel e das áreas.
+ *
+ * `null` quando a combinação não corresponde a nenhuma função pronta —
+ * o que é legítimo: quem monta um recorte à mão fez isso de propósito, e
+ * inventar um nome para ele seria pior do que dizer "personalizado".
+ */
+export function funcaoDe(papel: Role, areas: readonly string[] | null): Funcao | null {
+  return FUNCOES.find((f) => f.papel === papel && mesmasAreas(f.areas, areas)) ?? null;
+}
