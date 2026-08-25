@@ -1714,6 +1714,15 @@ function FormularioDeContaFixa({
   const [ciclo, setCiclo] = useState(conta?.ciclo ?? 'MONTHLY');
   const [dia, setDia] = useState(String(conta?.diaDeCobranca ?? 10));
   const [contraparte, setContraparte] = useState(conta?.contraparte ?? '');
+  /* O ALUNO, quando a conta a receber é de alguém que já é aluno. Isso
+     não é o mesmo que a mensalidade — aquela nasce do contrato e mora no
+     cadastro dele. Isto aqui é o pacote de dez sessões parcelado em
+     três, a avaliação que ele paga todo trimestre: cobrança que se
+     repete e não é o plano. Ligada ao aluno, ela entra na FICHA dele e
+     conta na inadimplência com nome; solta num campo de texto, vira uma
+     linha que ninguém consegue cruzar com pessoa nenhuma. */
+  const [alunoId, setAlunoId] = useState(conta?.studentId ?? '');
+  const [alunos, setAlunos] = useState<api.Aluno[]>([]);
   const [categoria, setCategoria] = useState(conta?.categoria ?? '');
   const [inicio, setInicio] = useState(() => {
     if (conta !== null) return conta.inicio;
@@ -1726,12 +1735,20 @@ function FormularioDeContaFixa({
 
   const sai = direcao === 'PAYABLE';
 
+  useEffect(() => {
+    if (sai) return;
+    void api
+      .buscarAlunos(1)
+      .then((r) => setAlunos(r.data))
+      .catch(() => undefined);
+  }, [sai]);
+
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setErro(null);
 
-    if (contraparte.trim() === '' && !sai) {
-      setErro('Diga de quem você vai receber.');
+    if (!sai && alunoId === '' && contraparte.trim() === '') {
+      setErro('Diga de quem você vai receber: escolha o aluno ou escreva o nome.');
       return;
     }
     setEnviando(true);
@@ -1745,6 +1762,7 @@ function FormularioDeContaFixa({
           diaDeCobranca: Number(dia),
           inicio,
           ...(categoria.trim() !== '' ? { categoria: categoria.trim() } : {}),
+          ...(!sai && alunoId !== '' ? { studentId: alunoId } : {}),
           ...(contraparte.trim() !== '' ? { contraparte: contraparte.trim() } : {}),
           ...(fim !== '' ? { fim } : {}),
         });
@@ -1846,18 +1864,56 @@ function FormularioDeContaFixa({
           />
         </label>
 
-        <label className="campo campo-meia">
-          <span className="campo-rotulo">{sai ? 'Para quem' : 'De quem'}</span>
-          <input
-            value={contraparte}
-            onChange={(e) => setContraparte(e.target.value)}
-            maxLength={160}
-            placeholder={sai ? 'Imobiliária Central' : 'Studio vizinho'}
-          />
-          {!sai && (
-            <span className="campo-dica">Obrigatório: toda conta a receber tem devedor.</span>
-          )}
-        </label>
+        {sai ? (
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Para quem</span>
+            <input
+              value={contraparte}
+              onChange={(e) => setContraparte(e.target.value)}
+              maxLength={160}
+              placeholder="Imobiliária Central"
+            />
+          </label>
+        ) : (
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">De quem</span>
+            <select
+              value={alunoId}
+              onChange={(e) => setAlunoId(e.target.value)}
+              disabled={!nova}
+            >
+              {/* "Não é aluno" e não "sem aluno": toda conta a receber
+                  tem devedor. O que pode faltar é a MATRÍCULA dele. */}
+              <option value="">
+                {alunos.length === 0
+                  ? 'Nenhum aluno cadastrado — vou escrever o nome'
+                  : 'Não é aluno — vou escrever o nome'}
+              </option>
+              {alunos.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nome}
+                </option>
+              ))}
+            </select>
+            <span className="campo-dica">
+              {nova
+                ? 'Ligada ao aluno, a cobrança entra na ficha dele e na inadimplência com nome.'
+                : 'O aluno não muda depois: as cobranças já emitidas apontam para ele.'}
+            </span>
+          </label>
+        )}
+
+        {!sai && alunoId === '' && (
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Nome de quem paga</span>
+            <input
+              value={contraparte}
+              onChange={(e) => setContraparte(e.target.value)}
+              maxLength={160}
+              placeholder="Studio vizinho"
+            />
+          </label>
+        )}
 
         <label className="campo campo-meia">
           <span className="campo-rotulo">Repete</span>
