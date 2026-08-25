@@ -38,6 +38,13 @@ export interface LancamentoRow {
   supplier_name: string | null;
   installment_no: number | null;
   installment_total: number | null;
+  /* De qual conta fixa esta linha nasceu, se nasceu de alguma. A lista
+     precisa disso para dizer "repete" na própria linha: sem a marca, o
+     aluguel de agosto e um aluguel digitado à mão são visualmente a
+     mesma coisa, e quem apaga um deles não sabe que o do mês que vem
+     volta sozinho. */
+  recurrence_id: string | null;
+  contract_id: string | null;
 }
 
 export interface FiltroLancamentos {
@@ -93,7 +100,8 @@ export async function listarLancamentos(
             e.due_date::text AS due_date, e.competence_date::text AS competence_date,
             e.student_id, s.full_name AS student_name,
             e.professional_id, e.supplier_name,
-            e.installment_no, e.installment_total
+            e.installment_no, e.installment_total,
+            e.recurrence_id, e.contract_id
        FROM finance_entries e
        LEFT JOIN students s ON s.id = e.student_id
       WHERE ${where}

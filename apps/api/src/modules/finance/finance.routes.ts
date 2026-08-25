@@ -158,6 +158,15 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
             fornecedor: e.supplier_name,
             parcela:
               e.installment_no === null ? null : `${e.installment_no}/${e.installment_total}`,
+            /* SÓ O `id` DA RECORRÊNCIA, e não um objeto com os campos
+               dela. A lista mostra centenas de linhas; carregar o molde
+               inteiro em cada uma seria um join por linha para desenhar
+               uma pílula de sete letras. */
+            recorrenciaId: e.recurrence_id,
+            /* A mensalidade do aluno também se repete, e por outro
+               caminho: ela nasce do CONTRATO. Para quem lê a lista as
+               duas são "repete"; o que muda é onde se vai mexer nelas. */
+            contratoId: e.contract_id,
           })),
           pagination: {
             page: query.page,

@@ -6695,3 +6695,139 @@
   align-items: center;
   gap: var(--e-3);
 }
+
+/* ---------------------------------------------------------------------
+   RECORRÊNCIA DENTRO DA PRÓPRIA ABA
+
+   A conta fixa deixou de morar numa aba à parte. O aluguel É uma conta a
+   pagar: separá-lo obrigava quem procurava "o aluguel deste mês" a
+   adivinhar em qual das duas telas ele estava, e as duas respostas eram
+   certas — o lançamento numa, o molde na outra.
+   ------------------------------------------------------------------- */
+
+/* A marca na linha. Pequena de propósito: ela não é a informação
+   principal da linha, é o aviso de que apagá-la não resolve nada. */
+.fin-repete {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--fio-forte);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--texto-apoio);
+  vertical-align: 1px;
+}
+
+/* ---- a gaveta das contas fixas ------------------------------------ */
+.fin-fixas-faixa {
+  margin-top: var(--e-3);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+  overflow: hidden;
+}
+.fin-fixas-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--e-3);
+  width: 100%;
+  padding: 12px var(--e-4);
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--texto-apoio);
+}
+.fin-fixas-resumo:hover {
+  background: var(--superficie-realce);
+}
+.fin-fixas-conta strong,
+.fin-fixas-total .dinheiro {
+  color: var(--texto);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fin-fixas-total {
+  font-size: var(--t-sm);
+}
+.fin-fixas-abrir {
+  margin-left: auto;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--teal-fundo);
+}
+.fin-fixas-lista {
+  padding: 0 var(--e-4) var(--e-4);
+  margin-top: 0;
+  border-top: 1px solid var(--fio);
+  padding-top: var(--e-4);
+}
+
+/* ---- a caixa "repete", dentro do formulário de lançamento --------- */
+.fin-repete-bloco {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px dashed var(--fio-forte);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+/* LIGADA, a moldura vira sólida e ganha cor: marcar esta caixa muda o
+   que o botão de salvar faz — de lançar uma conta para cadastrar a
+   regra que a produz —, e uma mudança dessas precisa ser visível sem
+   reler o texto. */
+.fin-repete-bloco.ligado {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--teal) 50%, transparent);
+  background: color-mix(in srgb, var(--teal) 6%, transparent);
+}
+.fin-repete-chave {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.fin-repete-chave input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.fin-repete-chave strong {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--texto);
+}
+.fin-repete-chave .campo-dica {
+  display: block;
+  margin-top: 1px;
+}
+.fin-repete-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--e-3);
+  margin-left: calc(18px + var(--e-3));
+  padding-top: var(--e-3);
+  border-top: 1px solid var(--fio);
+}
+/* A FRASE OCUPA A LINHA INTEIRA e diz o que vai acontecer com a data
+   que a pessoa já escolheu, em vez de repetir a pergunta. */
+.fin-repete-explica {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--texto-apoio);
+}
+.fin-repete-explica strong {
+  color: var(--texto);
+}
+
+.fin-mens-apoio {
+  margin-top: var(--e-4);
+}

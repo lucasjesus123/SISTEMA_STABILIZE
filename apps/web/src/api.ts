@@ -1120,6 +1120,10 @@ export interface Lancamento {
   aluno: { id: string; nome: string } | null;
   fornecedor: string | null;
   parcela: string | null;
+  /** Nasceu de uma conta fixa. `null` = foi digitada à mão. */
+  recorrenciaId: string | null;
+  /** Nasceu do contrato de um aluno — a mensalidade. */
+  contratoId: string | null;
 }
 
 export interface FiltroLancamentos {

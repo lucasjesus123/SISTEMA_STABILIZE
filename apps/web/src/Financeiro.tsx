@@ -147,9 +147,15 @@ function situacaoReal(l: api.Lancamento): api.StatusLancamento {
 const ABAS: readonly (readonly [Painel, string, string])[] = [
   ['receber', 'A receber', 'finance:receivable:read'],
   ['pagar', 'A pagar', 'finance:payable:read'],
-  /* RECORRÊNCIAS antes de RELATÓRIOS: é operação (o que vai nascer
-     sozinho mês que vem), e relatório é leitura. */
-  ['recorrencias', 'Recorrências', 'finance:receivable:read'],
+  /* MENSALIDADES antes de RELATÓRIOS: é operação (o que vai nascer
+     sozinho mês que vem), e relatório é leitura.
+
+     O NOME MUDOU de "Recorrências" para "Mensalidades" quando as contas
+     fixas saíram daqui e foram para dentro de "A pagar" e "A receber",
+     que é onde elas nascem. O que sobrou nesta aba é uma coisa só: o
+     que vem do CONTRATO do aluno. "Recorrências" descrevia um conceito;
+     "Mensalidades" descreve o que a academia vai encontrar aqui. */
+  ['recorrencias', 'Mensalidades', 'finance:receivable:read'],
   ['relatorios', 'Relatórios', 'finance:report:read'],
   ['comissoes', 'Comissões', 'commission:read'],
 ];
@@ -253,7 +259,7 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
       {painel === 'comissoes' ? (
         <Comissoes mes={mes} principal={principal} />
       ) : painel === 'recorrencias' ? (
-        <Recorrencias podeEscrever={principal.permissions.includes('finance:recurring:write')} />
+        <Mensalidades />
       ) : painel === 'relatorios' ? (
         <Relatorios de={de} ate={ate} mes={mes} />
       ) : (
@@ -395,6 +401,25 @@ function Lancamentos({
   const [baixando, setBaixando] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
   const [versao, setVersao] = useState(0);
+  /* AS CONTAS FIXAS MORAM AQUI, e não numa aba à parte. O aluguel é uma
+     conta a pagar — separá-lo numa aba própria obriga quem procura "o
+     aluguel deste mês" a adivinhar em qual das duas ele está, e as duas
+     respostas são certas: o lançamento está em "A pagar" e o molde está
+     em outro lugar. Aqui o molde é uma gaveta desta mesma tela. */
+  const [fixas, setFixas] = useState<api.ContaFixa[] | null>(null);
+  const [verFixas, setVerFixas] = useState(false);
+  const [editandoFixa, setEditandoFixa] = useState<api.ContaFixa | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    void api
+      .buscarContasFixas(direcao)
+      .then((r) => vivo && setFixas(r.data))
+      .catch(() => vivo && setFixas([]));
+    return () => {
+      vivo = false;
+    };
+  }, [direcao, versao]);
 
   useEffect(() => {
     let vivo = true;
@@ -439,6 +464,19 @@ function Lancamentos({
     return [...base].sort((a, b) => peso(a) - peso(b) || a.vencimento.localeCompare(b.vencimento));
   }, [linhas, soVencidos]);
 
+  if (editandoFixa !== null) {
+    return (
+      <FormularioDeContaFixa
+        conta={editandoFixa}
+        aoSair={() => setEditandoFixa(null)}
+        aoSalvar={() => {
+          setEditandoFixa(null);
+          recarregar();
+        }}
+      />
+    );
+  }
+
   if (criando) {
     return (
       <NovoLancamento
@@ -451,6 +489,12 @@ function Lancamentos({
       />
     );
   }
+
+  const fixasAtivas = (fixas ?? []).filter((f) => f.ativa);
+  const porMes = fixasAtivas.reduce(
+    (a, f) => a + porMesDoCiclo(f.valorCentavos, f.ciclo),
+    0,
+  );
 
   return (
     <>
@@ -484,6 +528,54 @@ function Lancamentos({
           {direcao === 'RECEIVABLE' ? 'Nova cobrança' : 'Nova despesa'}
         </button>
       </div>
+
+      {/* ==================================================
+          A GAVETA DAS CONTAS FIXAS
+
+          FECHADA POR PADRÃO, e resumida numa linha. Quem abre esta aba
+          quer ver o mês; o que se repete é uma pergunta de manutenção,
+          feita uma vez por trimestre. Mas o resumo fica visível sempre,
+          porque "R$ 3.980 por mês já comprometidos" muda a leitura de
+          todos os números da tela — e é a única informação daqui que
+          nenhuma linha da tabela carrega.
+          ================================================== */}
+      {fixasAtivas.length > 0 && (
+        <div className={`fin-fixas-faixa ${verFixas ? 'aberta' : ''}`}>
+          <button
+            type="button"
+            className="fin-fixas-resumo"
+            aria-expanded={verFixas}
+            onClick={() => setVerFixas((v) => !v)}
+          >
+            <span className="fin-fixas-conta">
+              <strong>{fixasAtivas.length}</strong>{' '}
+              {fixasAtivas.length === 1 ? 'conta fixa' : 'contas fixas'}
+            </span>
+            <span className="fin-fixas-total">
+              <span className="dinheiro">{formatCents(porMes)}</span> por mês
+              {direcao === 'RECEIVABLE' ? ' entrando' : ' saindo'}
+            </span>
+            <span className="fin-fixas-abrir" aria-hidden="true">
+              {verFixas ? 'fechar' : 'gerenciar'}
+            </span>
+          </button>
+
+          {verFixas && (
+            <div className="fix-grade fin-fixas-lista">
+              {(fixas ?? []).map((f) => (
+                <CartaoDeContaFixa
+                  key={f.id}
+                  conta={f}
+                  podeEscrever
+                  aoEditar={() => setEditandoFixa(f)}
+                  aoMudar={recarregar}
+                  aoFalhar={setErro}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {erro !== null && <Erro mensagem={erro} />}
       {ordenadas === null ? (
@@ -563,6 +655,17 @@ function Linha({
           <span className="celula-apoio">
             {l.aluno !== null || l.fornecedor !== null ? l.descricao : (l.categoria ?? '—')}
             {l.parcela !== null && ` · parcela ${l.parcela}`}
+            {/* NASCEU SOZINHA — e a marca importa antes de alguém
+                apagar a linha. Sem ela, o aluguel de agosto e um
+                aluguel digitado à mão são visualmente a mesma coisa, e
+                quem apaga um deles não sabe que o do mês que vem volta.
+                A palavra diz de onde veio, porque o que fazer a respeito
+                é diferente: conta fixa se pausa aqui, mensalidade se
+                encerra no cadastro do aluno. */}
+            {l.recorrenciaId !== null && <span className="fin-repete">repete</span>}
+            {l.recorrenciaId === null && l.contratoId !== null && (
+              <span className="fin-repete">mensalidade</span>
+            )}
           </span>
         </td>
         <td className="fin-col-num">
@@ -814,6 +917,15 @@ function NovoLancamento({
      ainda não é aluno tem pagador, só não tem matrícula. */
   const [pagador, setPagador] = useState('');
   const [alunos, setAlunos] = useState<api.Aluno[]>([]);
+  /* REPETE — a mesma pergunta que a conta faz na vida real.
+     Antes isto era um cadastro à parte, numa aba própria, e o resultado
+     era previsível: quem vinha lançar o aluguel lançava o aluguel deste
+     mês, porque era o que a tela oferecia. No mês seguinte, de novo. A
+     recorrência tem de nascer onde a conta nasce — é aqui que a pessoa
+     está quando sabe a resposta. */
+  const [repete, setRepete] = useState(false);
+  const [ciclo, setCiclo] = useState('MONTHLY');
+  const [encerra, setEncerra] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -838,8 +950,44 @@ function NovoLancamento({
       return;
     }
 
+    /* O DIA 29, 30 e 31 NÃO EXISTEM EM TODO MÊS. Recusar aqui, com a
+       data na tela, faz quem cadastra escolher; deixar o sistema decidir
+       — cair para 28, pular, empurrar para o dia 1º — seria ele tomando
+       uma decisão sobre o contrato de outra pessoa. */
+    if (repete && Number(vencimento.slice(8, 10)) > 28) {
+      setErro(
+        'Para uma conta que se repete, escolha um vencimento até o dia 28 — é o maior dia que existe em todo mês, inclusive fevereiro.',
+      );
+      return;
+    }
+
     setEnviando(true);
     try {
+      if (repete) {
+        /* O VENCIMENTO VIRA DUAS COISAS: a data em que a conta começa e
+           o dia do mês em que ela cai. É o que a pessoa já respondeu —
+           perguntar "vence dia 20" e depois "a partir de quando?" seria
+           pedir a mesma informação duas vezes. */
+        const dia = Number(vencimento.slice(8, 10));
+        await api.criarContaFixa({
+          direcao,
+          descricao,
+          valor,
+          ciclo,
+          diaDeCobranca: Math.min(Math.max(dia, 1), 28),
+          inicio: vencimento,
+          ...(categoria !== '' ? { categoria } : {}),
+          ...(receber && quem !== '' ? { studentId: quem } : {}),
+          ...(receber && quem === '' && pagador.trim() !== ''
+            ? { contraparte: pagador.trim() }
+            : {}),
+          ...(!receber && quem !== '' ? { contraparte: quem } : {}),
+          ...(encerra !== '' ? { fim: encerra } : {}),
+        });
+        aoCriar();
+        return;
+      }
+
       await api.criarLancamento({
         direcao,
         descricao,
@@ -950,6 +1098,65 @@ function NovoLancamento({
           />
         </label>
 
+        {/* ==================================================
+            REPETE — a caixa que transforma um lançamento num molde.
+
+            NÃO É UM CAMPO A MAIS, é a diferença entre lançar o aluguel
+            de agosto e cadastrar o aluguel. Marcada, o que se salva
+            deixa de ser uma linha e passa a ser a regra que a produz —
+            e por isso o texto abaixo diz o que vai acontecer com a data
+            que a pessoa acabou de escolher, em vez de repetir a
+            pergunta com outras palavras.
+            ================================================== */}
+        <fieldset className={`campo campo-cheia fin-repete-bloco ${repete ? 'ligado' : ''}`}>
+          <label className="fin-repete-chave">
+            <input
+              type="checkbox"
+              checked={repete}
+              onChange={(e) => setRepete(e.target.checked)}
+            />
+            <span>
+              <strong>
+                {receber ? 'Esta cobrança se repete' : 'Esta despesa se repete'}
+              </strong>
+              <span className="campo-dica">
+                {receber
+                  ? 'Aluguel de sala, parceria, um pacote parcelado. Nasce sozinha na data, sem ninguém lançar.'
+                  : 'Aluguel, energia, internet, contador. Nasce sozinha na data, sem ninguém lançar.'}
+              </span>
+            </span>
+          </label>
+
+          {repete && (
+            <div className="fin-repete-campos">
+              <label className="campo">
+                <span className="campo-rotulo">Com que frequência</span>
+                <select value={ciclo} onChange={(e) => setCiclo(e.target.value)}>
+                  {CICLOS_FIXOS.map((c) => (
+                    <option key={c.valor} value={c.valor}>
+                      {c.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="campo">
+                <span className="campo-rotulo">Até quando (opcional)</span>
+                <input type="date" value={encerra} onChange={(e) => setEncerra(e.target.value)} />
+                <span className="campo-dica">
+                  {encerra === '' ? 'Em branco, não para.' : (dataPorExtenso(encerra) ?? '')}
+                </span>
+              </label>
+
+              <p className="fin-repete-explica">
+                Vence <strong>dia {vencimento.slice(8, 10) || '—'}</strong> de cada período, a
+                partir de <strong>{dataPorExtenso(vencimento) ?? 'a data escolhida'}</strong>.
+                {' '}Se essa data já passou, os períodos que faltam entram agora, de uma vez.
+              </p>
+            </div>
+          )}
+        </fieldset>
+
         {erro !== null && (
           <p className="mensagem-erro campo-cheia" role="alert">
             {erro}
@@ -961,7 +1168,7 @@ function NovoLancamento({
             Cancelar
           </button>
           <button type="submit" className="botao-acao" disabled={enviando}>
-            {enviando ? 'Lançando…' : 'Lançar'}
+            {enviando ? 'Salvando…' : repete ? 'Cadastrar e lançar' : 'Lançar'}
           </button>
         </div>
       </form>
@@ -1364,205 +1571,139 @@ function porMesDoCiclo(valorCentavos: number, ciclo: string): number {
  * teve uma linha: o aluguel era digitado à mão todo mês, e no mês em que
  * alguém esquecia, o "a pagar" mentia.
  */
-function Recorrencias({ podeEscrever }: { podeEscrever: boolean }): ReactNode {
-  const [fixas, setFixas] = useState<api.ContaFixa[] | null>(null);
-  const [contratos, setContratos] = useState<api.Recorrencia[] | null>(null);
+/**
+ * As mensalidades — o que vem do contrato de cada aluno.
+ *
+ * ESTA ABA ERA "RECORRÊNCIAS" e tinha duas listas: os contratos e as
+ * contas fixas da academia. Elas foram para dentro de "A pagar" e "A
+ * receber", que é onde nascem — o aluguel É uma conta a pagar, e
+ * separá-lo numa aba própria obrigava quem procurava "o aluguel deste
+ * mês" a adivinhar em qual das duas telas ele estava.
+ *
+ * O QUE SOBROU É UMA COISA SÓ, e é por isso que a aba tem um nome de
+ * coisa e não de conceito: a mensalidade nasce do CONTRATO, que mora no
+ * cadastro do aluno. Aqui ela é MOSTRADA, não editada — mexer no valor
+ * por esta tela seria mexer no contrato pelas costas de quem o assinou.
+ *
+ * A PERGUNTA QUE ELA RESPONDE é "o que vai entrar mês que vem". A lista
+ * de lançamentos mostra o que já foi emitido; sem esta, o previsto do
+ * mês seguinte é uma conta que alguém faz de cabeça — e ninguém faz.
+ */
+function Mensalidades(): ReactNode {
+  const [linhas, setLinhas] = useState<api.Recorrencia[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
-  const [editando, setEditando] = useState<api.ContaFixa | 'nova' | null>(null);
-  const [versao, setVersao] = useState(0);
-
-  const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
     let vivo = true;
-    void Promise.all([
-      api.buscarContasFixas().then((r) => r.data),
-      api.buscarRecorrencias().then((r) => r.data),
-    ])
-      .then(([f, c]) => {
-        if (!vivo) return;
-        setFixas(f);
-        setContratos(c);
-        setErro(null);
-      })
+    api
+      .buscarRecorrencias()
+      .then((r) => vivo && setLinhas(r.data))
       .catch((e: unknown) => {
         if (!vivo) return;
-        setFixas([]);
-        setContratos([]);
+        setLinhas([]);
         setErro(e instanceof api.ApiError ? e.message : 'Falha ao carregar.');
       });
     return () => {
       vivo = false;
     };
-  }, [versao]);
+  }, []);
 
-  if (editando !== null) {
-    return (
-      <FormularioDeContaFixa
-        conta={editando === 'nova' ? null : editando}
-        aoSair={() => setEditando(null)}
-        aoSalvar={(geradas) => {
-          setEditando(null);
-          setAviso(
-            geradas > 0
-              ? `Pronto. ${geradas} lançamento${geradas === 1 ? '' : 's'} ${geradas === 1 ? 'já entrou' : 'já entraram'} nas contas do período.`
-              : 'Pronto. O próximo lançamento nasce na data combinada.',
-          );
-          recarregar();
-        }}
-      />
-    );
-  }
-
-  const ativas = (fixas ?? []).filter((f) => f.ativa);
-  const saiPorMes = ativas
-    .filter((f) => f.direcao === 'PAYABLE')
-    .reduce((a, f) => a + porMesDoCiclo(f.valorCentavos, f.ciclo), 0);
-  const entraPorMes =
-    ativas
-      .filter((f) => f.direcao === 'RECEIVABLE')
-      .reduce((a, f) => a + porMesDoCiclo(f.valorCentavos, f.ciclo), 0) +
-    (contratos ?? [])
-      .filter((c) => c.ciclo === 'MONTHLY' && !c.encerrandoNoFim)
-      .reduce((a, c) => a + c.valorCentavos, 0);
+  const mensais = (linhas ?? []).filter((r) => r.ciclo === 'MONTHLY');
+  const previsto = mensais
+    .filter((r) => !r.encerrandoNoFim)
+    .reduce((a, r) => a + r.valorCentavos, 0);
 
   return (
     <>
       {erro !== null && <Erro mensagem={erro} />}
-      {aviso !== null && (
-        <p className="fin-aviso" role="status">
-          {aviso}
-        </p>
-      )}
-
-      {/* O SALDO DO QUE SE REPETE, antes das listas. É a única pergunta
-          que ninguém consegue responder olhando as linhas: quanto desta
-          academia já está comprometido antes de o mês começar. */}
-      <div className="fin-kpis fin-kpis-largo">
-        <Kpi
-          rotulo="Entra por mês"
-          valor={entraPorMes}
-          nota="mensalidades dos contratos e receitas fixas"
-        />
-        <Kpi rotulo="Sai por mês" valor={saiPorMes} nota="aluguel, energia e o resto do fixo" />
-        <div className="fin-kpi">
-          <span className="fin-kpi-rotulo">Sobra antes do resto</span>
-          <strong className={`fin-kpi-valor ${entraPorMes - saiPorMes < 0 ? 'negativo' : ''}`}>
-            {formatCents(entraPorMes - saiPorMes)}
-          </strong>
-          <span className="fin-kpi-nota">
-            {/* O ciclo é normalizado para o mês: um contador trimestral
-                de R$ 900 pesa R$ 300 por mês. Somar o valor cheio de um
-                anual junto com um mensal daria um número que não é
-                despesa de mês nenhum. */}
-            só o que se repete, já rateado por mês
-          </span>
-        </div>
-      </div>
-
-      <div className="secao-cabecalho linha-cabecalho fin-fixas-topo">
-        <div>
-          <h2 className="plt-titulo">Contas fixas</h2>
-          <p className="rel-apoio">
-            O que nasce sozinho na data combinada — de um lado e do outro do caixa. Mudar o valor
-            vale do próximo em diante; o que já foi lançado não muda.
-          </p>
-        </div>
-        {podeEscrever && (
-          <button type="button" className="botao-acao" onClick={() => setEditando('nova')}>
-            <span aria-hidden="true">+</span> Nova conta fixa
-          </button>
-        )}
-      </div>
-
-      {fixas === null ? (
-        <Carregando rotulo="Carregando as contas fixas" />
-      ) : fixas.length === 0 ? (
-        <Vazio
-          titulo="Nenhuma conta fixa ainda."
-          descricao="Aluguel, energia, internet, contador. Cadastre uma vez e ela aparece em “A pagar” todo mês, na data certa, sem ninguém lembrar."
-        />
-      ) : (
-        <div className="fix-grade">
-          {fixas.map((f) => (
-            <CartaoDeContaFixa
-              key={f.id}
-              conta={f}
-              podeEscrever={podeEscrever}
-              aoEditar={() => setEditando(f)}
-              aoMudar={recarregar}
-              aoFalhar={setErro}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* ==================================================
-          AS MENSALIDADES, embaixo e sem botão de editar.
-          Elas nascem do contrato do aluno; esta tela mostra o
-          resultado, e quem muda o contrato é o cadastro dele.
-          ================================================== */}
-      <h2 className="plt-titulo fix-titulo-contratos">Mensalidades dos alunos</h2>
-      <p className="rel-apoio">
-        Nascem do contrato de cada aluno, que fica no cadastro dele. Aqui é só para conferir o que
-        vai entrar.
-      </p>
-
-      {contratos === null ? (
-        <Carregando rotulo="Carregando os contratos" />
-      ) : contratos.length === 0 ? (
+      {linhas === null ? (
+        <Carregando rotulo="Carregando as mensalidades" />
+      ) : linhas.length === 0 ? (
         <Vazio
           titulo="Nenhum contrato ativo."
           descricao="O plano do aluno é definido no cadastro dele. É o contrato que faz a mensalidade nascer sozinha todo mês."
         />
       ) : (
-        <div className="rolo">
-          <table className="tabela">
-            <thead>
-              <tr>
-                <th scope="col">Aluno</th>
-                <th scope="col">Plano</th>
-                <th scope="col" className="fin-col-num">
-                  Valor
-                </th>
-                <th scope="col">Cobra dia</th>
-                <th scope="col">Situação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contratos.map((r) => (
-                <tr key={r.contratoId}>
-                  <td>
-                    <span className="celula-forte">{r.aluno}</span>
-                    <span className="celula-apoio">
-                      {r.profissional ?? 'sem professor'} · desde {r.desde.slice(0, 7)}
-                    </span>
-                  </td>
-                  <td className="plt-secundario">{NOME_DO_CICLO[r.ciclo] ?? r.ciclo}</td>
-                  <td className="fin-col-num">
-                    <span className="dinheiro">{r.valorFormatado}</span>
-                  </td>
-                  <td className="tabular">{r.diaDeCobranca ?? '—'}</td>
-                  <td>
-                    {r.encerrandoNoFim ? (
-                      <span className="pilula apagada">encerrando</span>
-                    ) : r.vencidasAbertas > 0 ? (
-                      /* O NÚMERO, e não só "em atraso": três vencidas
-                         é um aluno a ligar hoje, uma é um boleto que
-                         venceu ontem. */
-                      <span className="pilula atrasada">
-                        {r.vencidasAbertas} vencida{r.vencidasAbertas === 1 ? '' : 's'}
-                      </span>
-                    ) : (
-                      <span className="pilula viva">em dia</span>
-                    )}
-                  </td>
+        <>
+          <div className="fin-kpis fin-kpis-largo">
+            <Kpi
+              rotulo="Previsto por mês"
+              valor={previsto}
+              /* "mensais", não "mensalis": o plural de mensal troca o
+                 -l por -is. Concatenar sufixo cegamente produz a forma
+                 errada em toda palavra terminada em -al. */
+              nota={mensais.length === 1 ? '1 contrato mensal' : `${mensais.length} contratos mensais`}
+            />
+            <div className="fin-kpi">
+              <span className="fin-kpi-rotulo">Saindo</span>
+              <strong className="fin-kpi-valor">
+                {linhas.filter((r) => r.encerrandoNoFim).length}
+              </strong>
+              <span className="fin-kpi-nota">pediram para encerrar no fim do período</span>
+            </div>
+            <div className="fin-kpi">
+              <span className="fin-kpi-rotulo">Com atraso</span>
+              <strong className="fin-kpi-valor">
+                {linhas.filter((r) => r.vencidasAbertas > 0).length}
+              </strong>
+              <span className="fin-kpi-nota">têm cobrança vencida em aberto</span>
+            </div>
+          </div>
+
+          <p className="rel-apoio fin-mens-apoio">
+            Nascem do contrato de cada aluno, que fica no cadastro dele — é lá que se muda plano,
+            valor ou dia de cobrança. As contas fixas da academia (aluguel, energia) ficam em{' '}
+            <strong>A pagar</strong> e <strong>A receber</strong>, junto com os lançamentos que
+            elas geram.
+          </p>
+
+          <div className="rolo">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th scope="col">Aluno</th>
+                  <th scope="col">Plano</th>
+                  <th scope="col" className="fin-col-num">
+                    Valor
+                  </th>
+                  <th scope="col">Cobra dia</th>
+                  <th scope="col">Situação</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {linhas.map((r) => (
+                  <tr key={r.contratoId}>
+                    <td>
+                      <span className="celula-forte">{r.aluno}</span>
+                      <span className="celula-apoio">
+                        {r.profissional ?? 'sem professor'} · desde {r.desde.slice(0, 7)}
+                      </span>
+                    </td>
+                    <td className="plt-secundario">{NOME_DO_CICLO[r.ciclo] ?? r.ciclo}</td>
+                    <td className="fin-col-num">
+                      <span className="dinheiro">{r.valorFormatado}</span>
+                    </td>
+                    <td className="tabular">{r.diaDeCobranca ?? '—'}</td>
+                    <td>
+                      {r.encerrandoNoFim ? (
+                        <span className="pilula apagada">encerrando</span>
+                      ) : r.vencidasAbertas > 0 ? (
+                        /* O NÚMERO, e não só "em atraso": três vencidas
+                           é um aluno a ligar hoje, uma é um boleto que
+                           venceu ontem. */
+                        <span className="pilula atrasada">
+                          {r.vencidasAbertas} vencida{r.vencidasAbertas === 1 ? '' : 's'}
+                        </span>
+                      ) : (
+                        <span className="pilula viva">em dia</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </>
   );
@@ -1607,11 +1748,13 @@ function CartaoDeContaFixa({
   return (
     <article className={`fix-cartao ${f.ativa ? '' : 'pausada'} ${sai ? 'sai' : 'entra'}`}>
       <header className="fix-cabeca">
-        {/* A DIREÇÃO É A PRIMEIRA COISA e não uma cor só: numa lista
-            misturada, confundir uma receita fixa com uma despesa fixa
-            inverte o sinal da conta que a pessoa está fazendo de
-            cabeça. */}
-        <span className={`pilula ${sai ? 'atrasada' : 'viva'}`}>{sai ? 'Sai' : 'Entra'}</span>
+        {/* SEM A PÍLULA "SAI"/"ENTRA". Ela existia quando as contas fixas
+            moravam numa lista misturada, e ali era necessária: confundir
+            uma receita fixa com uma despesa fixa inverte o sinal da
+            conta que a pessoa está fazendo de cabeça. Agora o cartão só
+            aparece dentro de "A pagar" ou de "A receber", e a aba já
+            respondeu — repetir aqui é ocupar a linha mais visível do
+            cartão com o que se acabou de ler. */}
         {!f.ativa && <span className="pilula apagada">pausada</span>}
         {f.vencidasAbertas > 0 && (
           <span className="pilula atrasada">
