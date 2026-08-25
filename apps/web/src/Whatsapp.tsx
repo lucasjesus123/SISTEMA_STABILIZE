@@ -246,33 +246,39 @@ export function Whatsapp(): ReactNode {
           descricao="Os parabéns de aniversário aparecem aqui assim que forem enviados."
         />
       ) : (
-        <table className="tabela">
-          <thead>
-            <tr>
-              <th>Quando</th>
-              <th>Para</th>
-              <th>Tipo</th>
-              <th>Situação</th>
-              <th>Mensagem</th>
-            </tr>
-          </thead>
-          <tbody>
-            {mensagens.map((m) => (
-              <tr key={m.id}>
-                <td className="tabular">{new Date(m.criadoEm).toLocaleString('pt-BR')}</td>
-                <td>{m.aluno ?? m.numero}</td>
-                <td>{m.tipo === 'BIRTHDAY' ? 'aniversário' : 'manual'}</td>
-                <td className={m.status === 'FAILED' ? 'tom-negativo' : 'tom-positivo'}>
-                  {m.status === 'SENT' ? 'enviada' : m.status === 'FAILED' ? 'falhou' : m.status}
-                  {/* O motivo da falha fica visível: sem ele, "falhou" não
-                      dá o que fazer a seguir. */}
-                  {m.erro !== null && <span className="wa-erro">{m.erro}</span>}
-                </td>
-                <td className="wa-texto">{m.texto}</td>
+        /* NO `.rolo`, como todas as outras tabelas do sistema. Sem ele
+           esta tabela tem 455px e empurra a PÁGINA de lado num celular
+           de 390 — a leitura vira arrastar a tela inteira para ver a
+           última coluna. Dentro do rolo, quem rola é o quadro. */
+        <div className="rolo">
+          <table className="tabela">
+            <thead>
+              <tr>
+                <th>Quando</th>
+                <th>Para</th>
+                <th>Tipo</th>
+                <th>Situação</th>
+                <th>Mensagem</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {mensagens.map((m) => (
+                <tr key={m.id}>
+                  <td className="tabular">{new Date(m.criadoEm).toLocaleString('pt-BR')}</td>
+                  <td>{m.aluno ?? m.numero}</td>
+                  <td>{m.tipo === 'BIRTHDAY' ? 'aniversário' : 'manual'}</td>
+                  <td className={m.status === 'FAILED' ? 'tom-negativo' : 'tom-positivo'}>
+                    {m.status === 'SENT' ? 'enviada' : m.status === 'FAILED' ? 'falhou' : m.status}
+                    {/* O motivo da falha fica visível: sem ele, "falhou" não
+                        dá o que fazer a seguir. */}
+                    {m.erro !== null && <span className="wa-erro">{m.erro}</span>}
+                  </td>
+                  <td className="wa-texto">{m.texto}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   );

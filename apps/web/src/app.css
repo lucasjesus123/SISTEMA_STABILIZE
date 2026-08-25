@@ -596,9 +596,49 @@
     flex-direction: row;
     overflow-x: auto;
     padding: 0 var(--e-3) var(--e-3);
+    /* `min-width: 0` É O QUE FAZ O `overflow-x` ACIMA REALMENTE AGIR.
+
+       A faixa de um grid tem largura mínima `auto`, que vale o tamanho
+       do CONTEÚDO: com dez itens de menu, a faixa cresce até 1104px, o
+       `overflow` nunca tem o que conter, e quem empurra a página de lado
+       é a barra de navegação — em TODAS as telas, não em uma.
+
+       O sintoma era o pior tipo: o dedo arrasta a página inteira para o
+       lado no celular, e a academia conclui que o sistema não foi feito
+       para telefone. Medido em 390px: Agenda ia a 608px de largura,
+       Financeiro a 434, WhatsApp a 489. */
+    min-width: 0;
   }
+  /* O ITEM NÃO ENCOLHE. Sem isto, o flex distribui a falta de espaço
+     encolhendo cada botão até o texto quebrar em duas linhas — que é
+     trocar a rolagem lateral por um menu ilegível. */
   .lateral-item {
     width: auto;
+    flex: none;
+  }
+
+  /* A PÁGINA NUNCA ROLA DE LADO. É a rede de segurança: qualquer tabela
+     ou grade que escape no futuro vai rolar dentro do próprio quadro (é
+     o que `.rolo` faz) em vez de arrastar a tela inteira.
+
+     `clip`, NÃO `hidden`, e a diferença não é estilística.
+
+     `overflow-x: hidden` obriga o `overflow-y` a computar `auto` — a
+     regra é do próprio CSS, não do navegador. Com isso o `body` vira
+     uma caixa de rolagem, e todo `position: sticky` que mora dentro
+     dele passa a grudar no `body` em vez de grudar na tela. O `body`
+     não rola (quem rola é a janela), então na prática o sticky morre em
+     silêncio: nada quebra, nada avisa, o menu só some ao rolar.
+
+     Medido aqui em 390px de largura, rolando 1500px:
+       html,body{overflow-x:hidden}  → menu em -1500px (foi embora)
+       html{overflow-x:hidden}       → menu gruda, mas a página ainda
+                                       rolava de lado (900px)
+       html,body{overflow-x:clip}    → menu gruda E a página não rola
+     `clip` não cria caixa de rolagem, então não contamina o eixo Y. */
+  html,
+  body {
+    overflow-x: clip;
   }
 }
 
