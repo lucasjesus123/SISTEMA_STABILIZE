@@ -2,7 +2,9 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { inTenant } from '../../http/plugins/authenticate.js';
 import { writeAudit } from '../../audit/audit.js';
-import { badRequest, notFound, unauthorized, unprocessable } from '../../http/errors.js';
+import { badRequest, conflict, notFound, unauthorized, unprocessable } from '../../http/errors.js';
+import { verifyPassword } from '../../auth/password.js';
+import { REFRESH_COOKIE, hashRefreshToken } from '../../auth/tokens.js';
 import { apagar, existe, gravar, ler, tipoDeImagem } from '../attachments/storage.js';
 import {
   chaveDaFoto,
@@ -89,6 +91,14 @@ const perfilSchema = z.object({
     .transform((v) => (v === '' || v === undefined ? null : v)),
 });
 
+const emailSchema = z.object({
+  /* Sem mínimo de tamanho: aqui a senha não está sendo criada, está
+     sendo conferida. Uma regra de comprimento nesta ponta só contaria a
+     quem chuta quantos caracteres a senha certa tem. */
+  senhaAtual: z.string().min(1, 'Informe sua senha atual.').max(128),
+  email: z.string().trim().toLowerCase().email('E-mail inválido.').max(160),
+});
+
 export async function perfilRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * GET /api/perfil
@@ -141,6 +151,108 @@ export async function perfilRoutes(app: FastifyInstance): Promise<void> {
       return { data: perfil };
     });
   });
+
+  /* ------------------------------------------------------------------
+   * POST /api/perfil/email
+   *
+   * Trocar o PRÓPRIO e-mail de acesso.
+   *
+   * Até aqui isto era operação de administração, e a tela de perfil
+   * mostrava o e-mail em cinza. Funcionava enquanto toda academia tinha
+   * alguém por perto para pedir; para um profissional que trocou de
+   * endereço, virava um chamado.
+   *
+   * A SENHA ATUAL É O QUE TORNA ISTO SEGURO. O e-mail é a identidade do
+   * login: quem o troca decide por onde a conta entra daqui para a
+   * frente. Sem a senha, uma sessão esquecida aberta num computador da
+   * recepção bastaria para mudar o endereço e trancar o dono para fora
+   * da própria conta — de forma permanente, porque a recuperação também
+   * passa pelo e-mail.
+   *
+   * E AS OUTRAS SESSÕES CAEM. Esta continua de pé, que é o normal para
+   * quem acabou de digitar a própria senha; as demais não, porque se o
+   * motivo da troca for justamente uma sessão alheia aberta, deixá-la
+   * viva não resolve nada.
+   * ---------------------------------------------------------------- */
+  app.post(
+    '/email',
+    {
+      preHandler: [app.authenticate],
+      /* Teto porque a rota confere senha, e rota que confere senha sem
+         limite é um oráculo de senha.
+
+         DEZ E NÃO CINCO, e a razão é o cliente: um 401 daqui é
+         indistinguível, para o navegador, de um token vencido — então o
+         `api()` da tela renova a sessão e REPETE a chamada. Cada erro de
+         digitação gasta duas fichas. Com cinco, quem errasse a senha
+         duas vezes ficava quinze minutos sem poder trocar o próprio
+         e-mail; com dez, o limite ainda vale para cinco tentativas de
+         verdade, que é o que ele sempre quis dizer. */
+      config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+    },
+    async (request) => {
+      const { senhaAtual, email } = emailSchema.parse(request.body);
+
+      return inTenant(request, async (client, principal) => {
+        const { rows } = await client.query<{ password_hash: string; email: string }>(
+          'SELECT password_hash, email FROM users WHERE id = $1',
+          [principal.userId],
+        );
+        const eu = rows[0];
+        if (eu === undefined) throw notFound('Perfil');
+
+        if (!(await verifyPassword(eu.password_hash, senhaAtual))) {
+          throw unauthorized('Senha incorreta.');
+        }
+        if (eu.email.toLowerCase() === email) {
+          throw badRequest('Este já é o seu e-mail.');
+        }
+
+        try {
+          await client.query('UPDATE users SET email = $1 WHERE id = $2', [
+            email,
+            principal.userId,
+          ]);
+        } catch (erro) {
+          /* 23505: o índice único é por academia, e a mensagem precisa
+             dizer isso — "e-mail já cadastrado" faz procurar no mundo
+             inteiro por uma colisão que é da porta ao lado. */
+          if ((erro as { code?: string }).code === '23505') {
+            throw conflict('Já existe uma conta com este e-mail nesta academia.');
+          }
+          throw erro;
+        }
+
+        const apresentado = request.cookies[REFRESH_COOKIE];
+        await client.query(
+          `UPDATE user_sessions
+              SET revoked_at = now(), revoked_reason = 'e-mail alterado'
+            WHERE user_id = $1
+              AND revoked_at IS NULL
+              AND family_id IS DISTINCT FROM (
+                    SELECT family_id FROM user_sessions
+                     WHERE token_hash = $2 AND user_id = $1)`,
+          [principal.userId, apresentado === undefined ? '' : hashRefreshToken(apresentado)],
+        );
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'profile.email_changed',
+          resourceType: 'user',
+          resourceId: principal.userId,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+          /* O e-mail NOVO fica; o antigo não. Quem lê a auditoria precisa
+             saber por onde a conta entra agora — guardar os dois seria
+             copiar dado pessoal para uma tabela que ninguém limpa. */
+          metadata: { email },
+        });
+
+        return { data: { email } };
+      });
+    },
+  );
 
   /* ------------------------------------------------------------------
    * POST /api/perfil/foto   (multipart)

@@ -1439,6 +1439,20 @@ export const trocarMinhaSenha = (atual: string, nova: string) =>
     body: JSON.stringify({ currentPassword: atual, newPassword: nova }),
   });
 
+/**
+ * Troca o próprio e-mail de acesso.
+ *
+ * Pede a senha atual porque o e-mail é a identidade do login: quem o
+ * troca decide por onde a conta entra daqui para a frente, e a
+ * recuperação de senha também passa por ele. Ao contrário da troca de
+ * senha, ESTA sessão sobrevive — as outras é que caem.
+ */
+export const trocarMeuEmail = (senhaAtual: string, email: string) =>
+  api<{ data: { email: string } }>('/api/perfil/email', {
+    method: 'POST',
+    body: JSON.stringify({ senhaAtual, email }),
+  });
+
 /* ====================================================================
  * RELATÓRIOS E RECORRÊNCIAS DO FINANCEIRO
  * ================================================================== */

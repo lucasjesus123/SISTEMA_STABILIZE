@@ -287,3 +287,71 @@ export function Erro({ mensagem, aoTentar }: { mensagem: string; aoTentar?: () =
     </div>
   );
 }
+
+/* ====================================================================
+ * Janela
+ * ================================================================== */
+
+/**
+ * Uma janela sobre a tela, para o que se resolve sem sair de onde se
+ * está: configurações da conta, edição de um registro da lista.
+ *
+ * JANELA E NÃO PÁGINA quando o contexto importa. Trocar de tela para
+ * mudar uma senha faz perder o lugar, e voltar de uma tela de edição
+ * sempre deixa a dúvida de se salvou. Quando o assunto é grande o
+ * bastante para merecer endereço próprio, aí sim é página.
+ */
+export function Janela({
+  titulo,
+  descricao,
+  aoFechar,
+  children,
+}: {
+  titulo: string;
+  descricao?: string;
+  aoFechar: () => void;
+  children: ReactNode;
+}): ReactNode {
+  useEffect(() => {
+    /* ESC FECHA — é o reflexo de quem usa teclado, e uma janela que só
+       fecha no botão obriga a procurar o botão. */
+    const aoTeclar = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') aoFechar();
+    };
+    window.addEventListener('keydown', aoTeclar);
+
+    /* E O FUNDO PARA DE ROLAR enquanto ela está aberta. Sem isto a roda
+       do mouse sobre a janela rola a página atrás dela, e ao fechar a
+       pessoa não reconhece mais onde estava. */
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', aoTeclar);
+      document.body.style.overflow = anterior;
+    };
+  }, [aoFechar]);
+
+  return (
+    <div className="janela-fundo" onClick={aoFechar} role="presentation">
+      <div
+        className="janela"
+        role="dialog"
+        aria-modal="true"
+        aria-label={titulo}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="janela-topo">
+          <div>
+            <h2>{titulo}</h2>
+            {descricao !== undefined && <p className="janela-sub">{descricao}</p>}
+          </div>
+          <button type="button" className="botao-texto" onClick={aoFechar}>
+            Fechar
+          </button>
+        </div>
+        <div className="janela-corpo">{children}</div>
+      </div>
+    </div>
+  );
+}

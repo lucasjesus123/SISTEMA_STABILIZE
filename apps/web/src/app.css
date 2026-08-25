@@ -3431,10 +3431,24 @@
   align-items: center;
   gap: var(--e-4);
 }
+/* AGORA É UM BOTÃO, e precisa parecer um sem virar um. O crachá é
+   primeiro identidade — "com qual papel estou olhando" — e só depois
+   porta para as configurações: um contorno permanente competiria com o
+   conteúdo da tela. Ele aparece no hover e no foco de teclado. */
 .topo-quem {
   display: flex;
   align-items: center;
   gap: var(--e-3);
+  padding: 4px 6px 4px var(--e-3);
+  margin-right: -6px;
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+  transition: background var(--rapido) var(--saida);
+}
+.topo-quem:hover,
+.topo-quem:focus-visible {
+  background: var(--superficie-alta);
 }
 .topo-quem-texto {
   display: grid;
@@ -5756,4 +5770,142 @@
   outline: none;
   border-color: var(--teal-vivo);
   box-shadow: 0 0 0 3px var(--realce-teclado);
+}
+
+/* ---------------------------------------------------------------------
+   JANELA
+
+   Sobre a tela, para o que se resolve sem sair de onde se está. Ver o
+   comentário do componente `Janela` em ui.tsx.
+   ------------------------------------------------------------------- */
+.janela-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--e-5) var(--e-4);
+  overflow-y: auto;
+  /* O fundo escurece porque o clique nele fecha, e um fundo que fecha
+     sem parecer diferente do resto é uma armadilha. */
+/* Escuro nos dois temas: no claro ele afunda a página, no escuro ele
+     separa a janela do fundo já escuro. Um `color-mix` sobre um token de
+     texto inverteria de tema para tema. */
+  background: rgba(6, 16, 15, 0.62);
+}
+
+.janela {
+  width: min(58rem, 100%);
+  margin: auto;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+}
+
+.janela-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding: var(--e-5) var(--e-5) var(--e-4);
+  border-bottom: 1px solid var(--fio);
+}
+.janela-topo h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--texto);
+}
+.janela-sub {
+  margin: 4px 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.janela-corpo {
+  padding: var(--e-5);
+}
+.janela-corpo .formulario {
+  margin: 0;
+}
+/* O cabeçalho de seção do formulário não precisa do respiro de topo de
+   página quando já está dentro de uma janela com título. */
+.janela-corpo > .formulario > .formulario-secao:first-child {
+  margin-top: 0;
+}
+
+/* ---- abas da janela ------------------------------------------------
+   Sublinhado e não pílula: são duas seções de um mesmo assunto, e uma
+   pílula colorida daria a elas o peso de navegação principal.
+   ------------------------------------------------------------------- */
+.janela-abas {
+  display: flex;
+  gap: var(--e-4);
+  margin-bottom: var(--e-5);
+  border-bottom: 1px solid var(--fio);
+}
+.janela-aba {
+  padding: 0 0 10px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto-apoio);
+  background: none;
+  cursor: pointer;
+  transition: color var(--rapido) var(--saida);
+}
+.janela-aba:hover {
+  color: var(--texto);
+}
+.janela-aba.ativa {
+  color: var(--texto);
+  border-bottom-color: var(--teal);
+}
+
+/* ---- configurações da conta ---------------------------------------- */
+.cfg-acesso {
+  display: grid;
+  gap: var(--e-4);
+}
+.cfg-bloco {
+  padding: var(--e-4) var(--e-5);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.cfg-bloco-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+}
+.cfg-bloco h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--texto);
+}
+.cfg-nota {
+  margin: 4px 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.cfg-valor {
+  margin: var(--e-3) 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto);
+  word-break: break-all;
+}
+.cfg-ok {
+  margin: var(--e-3) 0 0;
+  font-size: var(--t-sm);
+  color: var(--ok);
+}
+/* O formulário só aparece depois do "Trocar", então ele precisa do
+   próprio respiro e de uma linha que o separe do que está acima. */
+.cfg-form {
+  margin-top: var(--e-4);
+  padding-top: var(--e-4);
+  border-top: 1px solid var(--fio);
 }

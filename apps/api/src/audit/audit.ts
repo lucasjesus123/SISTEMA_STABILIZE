@@ -64,6 +64,11 @@ export type AuditAction =
   // fala com a pessoa: uma troca silenciosa é como se desvia a conversa.
   | 'profile.update'
   | 'profile.photo'
+  // A troca do PRÓPRIO e-mail de acesso. Entra separada de
+  // `profile.update` porque não é contato: é a identidade do login, e a
+  // recuperação de senha passa por ela. Quem investiga um acesso indevido
+  // procura exatamente por esta linha.
+  | 'profile.email_changed'
   // espaços e contrato — a agenda e o financeiro dependem dos dois, e
   // mudar preço ou capacidade sem rastro é o tipo de alteração que
   // ninguém lembra de ter feito quando a conta não fecha.

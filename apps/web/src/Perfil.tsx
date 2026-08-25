@@ -56,7 +56,16 @@ const VAZIO: Formulario = {
   uf: '',
 };
 
-export function Perfil({ principal }: { principal: Principal }): ReactNode {
+export function Perfil({
+  principal,
+  semCabecalho = false,
+}: {
+  principal: Principal;
+  /* Dentro da janela de Configurações o título já está no alto dela.
+     Repetir "Meu perfil" logo abaixo de "Configurações" é dizer duas
+     vezes onde a pessoa está. */
+  semCabecalho?: boolean;
+}): ReactNode {
   const [dados, setDados] = useState<PerfilDados | null>(null);
   const [form, setForm] = useState<Formulario>(VAZIO);
   const [carregando, setCarregando] = useState(true);
@@ -155,10 +164,12 @@ export function Perfil({ principal }: { principal: Principal }): ReactNode {
 
   return (
     <>
-      <div className="secao-cabecalho">
-        <h1>Meu perfil</h1>
-        <p>Seus dados de contato e endereço. O e-mail e o papel só mudam pela administração.</p>
-      </div>
+      {!semCabecalho && (
+        <div className="secao-cabecalho">
+          <h1>Meu perfil</h1>
+          <p>Seus dados de contato e endereço. O e-mail e a senha ficam na aba Acesso.</p>
+        </div>
+      )}
 
       <RetratoDoPerfil
         temFoto={dados.temFoto}
@@ -185,7 +196,7 @@ export function Perfil({ principal }: { principal: Principal }): ReactNode {
         <div className="campo campo-meia campo-fixo">
           <span className="campo-rotulo">E-mail</span>
           <p className="campo-fixo-valor">{dados.email}</p>
-          <span className="campo-dica">É com ele que você entra no sistema.</span>
+          <span className="campo-dica">Você entra com ele. Para trocar, veja a aba Acesso.</span>
         </div>
         <div className="campo campo-meia campo-fixo">
           <span className="campo-rotulo">Papel</span>

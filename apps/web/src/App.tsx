@@ -32,7 +32,7 @@ import { AbaCarteirinha } from './Carteirinha.jsx';
 import { Whatsapp } from './Whatsapp.jsx';
 import { Aplicativo } from './Aplicativo.jsx';
 import { BotaoTema, useTema } from './tema.jsx';
-import { Perfil } from './Perfil.jsx';
+import { Configuracoes } from './Configuracoes.jsx';
 import { Academia } from './Academia.jsx';
 import { Crm } from './Crm.jsx';
 import { Financeiro } from './Financeiro.jsx';
@@ -370,6 +370,7 @@ function Sistema({
   aoSair: () => void;
 }): ReactNode {
   const [aba, setAba] = useState<Aba>('painel');
+  const [configAberta, setConfigAberta] = useState(false);
   const { efetivo, definir } = useTema();
 
   /* O menu é montado a partir das permissões do papel. Isto é
@@ -484,7 +485,14 @@ function Sistema({
       visivel: pode('user:write'),
       grupo: 'Administração',
     },
-    { id: 'perfil', nome: 'Perfil', icone: <IconePerfil />, visivel: true, grupo: 'Administração' },
+    /* SEMPRE VISÍVEL, e é a única assim. As outras seções dependem de
+       permissão porque são dados da empresa; esta é a própria pessoa, e
+       não existe papel que não possa trocar a própria senha.
+
+       Abre a MESMA janela do crachá, e não uma tela. Duas portas para o
+       mesmo lugar é conveniência; duas telas com o mesmo formulário é
+       manutenção em dobro e a certeza de que uma delas envelhece. */
+    { id: 'perfil', nome: 'Minha conta', icone: <IconePerfil />, visivel: true, grupo: 'Administração' },
   ];
   const visiveis = abas.filter((a) => a.visivel);
 
@@ -535,7 +543,7 @@ function Sistema({
                     type="button"
                     className={`lateral-item ${aba === a.id ? 'ativa' : ''}`}
                     aria-current={aba === a.id ? 'page' : undefined}
-                    onClick={() => setAba(a.id)}
+                    onClick={() => (a.id === 'perfil' ? setConfigAberta(true) : setAba(a.id))}
                   >
                     <span className="lateral-icone" aria-hidden="true">
                       {a.icone}
@@ -594,7 +602,15 @@ function Sistema({
 
           <div className="topo-acoes">
             <BotaoTema efetivo={efetivo} definir={definir} />
-            <span className="topo-quem">
+            {/* O CRACHÁ É O BOTÃO. É para ele que a mão vai quando se
+                quer mexer em si mesmo — trocar a senha, corrigir o
+                telefone —, e ele estava ali parado, só informando. */}
+            <button
+              type="button"
+              className="topo-quem"
+              onClick={() => setConfigAberta(true)}
+              title="Configurações da sua conta"
+            >
               <span className="topo-quem-texto">
                 <span className="topo-quem-nome">{principal.name}</span>
                 <span className="topo-quem-papel">{principal.roleLabel}</span>
@@ -602,7 +618,7 @@ function Sistema({
               <span className="topo-quem-inicial" aria-hidden="true">
                 {iniciais(principal.name)}
               </span>
-            </span>
+            </button>
           </div>
         </header>
 
@@ -617,10 +633,20 @@ function Sistema({
         {aba === 'whatsapp' && <Whatsapp />}
         {aba === 'interessados' && <Crm podeConverter={pode('student:write')} />}
         {aba === 'academia' && <Academia />}
-        {aba === 'perfil' && <Perfil principal={principal} />}
         </div>
       </main>
       </div>
+
+      {configAberta && (
+        <Configuracoes
+          principal={principal}
+          aoFechar={() => setConfigAberta(false)}
+          /* Trocar a senha derruba todas as sessões, esta inclusive. A
+             janela avisa e chama isto; sem o `aoSair`, a pessoa ficaria
+             clicando numa tela que já não responde. */
+          aoPerderSessao={aoSair}
+        />
+      )}
     </div>
   );
 }
