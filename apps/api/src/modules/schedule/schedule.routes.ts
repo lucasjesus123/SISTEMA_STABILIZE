@@ -6,7 +6,7 @@ import {
 } from '../whatsapp/avisos.js';
 import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { auditDenied, writeAudit } from '../../audit/audit.js';
-import { badRequest, notFound, unprocessable } from '../../http/errors.js';
+import { badRequest, forbidden, notFound, unprocessable } from '../../http/errors.js';
 import { gerarSlots, horarioEhValido, SlotError } from './slots.js';
 import {
   cancelarCompromisso,
@@ -261,6 +261,149 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
 
       void reply.status(201);
       return { data: { id: criado.id } };
+    });
+  });
+
+  /* ------------------------------------------------------------------
+   * POST /api/schedule/serie — o mesmo horário, toda semana
+   *
+   * O QUE ISTO RESOLVE. Um aluno de pilates faz terça e quinta às 9h
+   * durante meses, com a mesma professora. Marcar isso uma sessão de
+   * cada vez são vinte e quatro passagens pelo mesmo formulário — e
+   * ninguém faz: a recepção marca duas semanas, o resto vira combinado
+   * de boca, e o calendário deixa de descrever a academia.
+   *
+   * NÃO É UM "AGENDAMENTO RECORRENTE" NO BANCO, e a escolha é
+   * deliberada. Cada semana vira um compromisso NORMAL, independente. O
+   * feriado se cancela sozinho, a semana que mudou de horário se
+   * arrasta, e o aluno que faltou numa terça não some da série. Um
+   * registro-mãe com "toda terça às 9h" obrigaria a inventar exceções
+   * para cada uma dessas coisas — que é como calendário vira software
+   * complicado e errado.
+   *
+   * O QUE FALHA NÃO DERRUBA O RESTO. Em doze semanas vai haver um
+   * feriado, uma janela que a professora fechou, um horário já ocupado.
+   * Recusar a série inteira por causa de uma semana é obrigar quem
+   * marca a descobrir qual, tirar do pedido e tentar de novo. Aqui as
+   * que dão certo são criadas e a resposta DIZ, uma a uma, quais não
+   * couberam e por quê — e a tela mostra isso antes de fechar.
+   * ---------------------------------------------------------------- */
+  app.post('/serie', { preHandler: [app.authorize('schedule:write')] }, async (request, reply) => {
+    const body = criarSchema
+      .extend({
+        /* O TETO É 52 — um ano. Acima disso a série passa a descrever
+           uma intenção, não uma combinação: ninguém sabe hoje o que faz
+           em agosto do ano que vem, e o calendário fica cheio de aula
+           que vai ser cancelada. */
+        semanas: z.coerce.number().int().min(2).max(52),
+      })
+      .parse(request.body);
+    const scope = requireScope(request);
+
+    return inTenant(request, async (client, principal) => {
+      /* SÉRIE NÃO É COISA DE ALUNO. Pelo aplicativo ele marca uma
+         sessão por vez, com antecedência mínima; deixar um aluno
+         reservar o ano inteiro da professora num toque é dar a ele a
+         agenda dela. */
+      if (principal.role === 'STUDENT') throw forbidden('Séries são marcadas pela academia.');
+
+      if (!(await assertStudentInScope(client, scope, body.studentId))) {
+        throw notFound('Aluno');
+      }
+
+      const tz = await fusoDoTenant(client);
+      const regras = await listarRegras(client, body.professionalId);
+      const duracaoMs = body.fim.getTime() - body.inicio.getTime();
+
+      const criados: { id: string; inicio: string }[] = [];
+      const recusados: { inicio: string; motivo: string }[] = [];
+
+      for (let n = 0; n < body.semanas; n += 1) {
+        const inicio = new Date(body.inicio.getTime() + n * 7 * 24 * 3_600_000);
+        const fim = new Date(inicio.getTime() + duracaoMs);
+
+        /* AS OCUPAÇÕES SÃO RELIDAS A CADA SEMANA, e não uma vez antes do
+           laço: as sessões que esta própria série acabou de criar
+           precisam contar. Sem isto, pedir a mesma série duas vezes
+           criaria tudo em duplicidade — a segunda passada não veria a
+           primeira. */
+        const ocupacoes = await listarOcupacoes(client, {
+          de: new Date(inicio.getTime() - 24 * 3_600_000),
+          ate: new Date(fim.getTime() + 24 * 3_600_000),
+          professionalId: body.professionalId,
+        });
+
+        const veredito = horarioEhValido(
+          { inicio, fim },
+          { de: inicio, ate: fim, regras, ocupacoes, agora: new Date(), antecedenciaMinutos: 0, timeZone: tz },
+        );
+
+        if (!veredito.valido) {
+          recusados.push({
+            inicio: inicio.toISOString(),
+            motivo: veredito.motivo ?? 'Horário indisponível.',
+          });
+          continue;
+        }
+
+        const contrato = await buscarContrato(client, body.studentId);
+        const criado = await criarCompromisso(client, principal.tenantId, {
+          studentId: body.studentId,
+          professionalId: body.professionalId,
+          roomId: body.roomId,
+          inicio,
+          fim,
+          notes: body.observacao,
+          isIncludedInPlan: contrato?.mensalista ?? false,
+          priceCents: contrato?.mensalista === true ? undefined : contrato?.valorSessao,
+          createdBy: principal.userId,
+        });
+        criados.push({ id: criado.id, inicio: inicio.toISOString() });
+
+        /* O AVISO SÓ SAI PARA AS DUAS PRIMEIRAS. Enfileirar doze
+           confirmações de uma vez enche o WhatsApp do aluno com o mesmo
+           texto doze vezes, muda a data e nada mais — é a definição de
+           spam, e queima o número da academia. O lembrete de véspera
+           continua valendo para todas: esse chega no dia, que é quando
+           ele serve. */
+        if (n < 2) {
+          await enfileirarAvisosDoAgendamento(client, principal.tenantId, criado.id);
+        }
+      }
+
+      if (criados.length === 0) {
+        /* Nenhuma coube: isto não é "sucesso com zero" — é um pedido que
+           não aconteceu, e a tela precisa tratá-lo como recusa. */
+        throw unprocessable(
+          recusados[0]?.motivo ?? 'Nenhuma das semanas cabe na agenda deste profissional.',
+        );
+      }
+
+      await writeAudit(client, principal.tenantId, {
+        action: 'appointment.create',
+        resourceType: 'appointment',
+        resourceId: criados[0]!.id,
+        actorId: principal.userId,
+        actorRole: principal.role,
+        ip: request.ip,
+        metadata: {
+          serie: true,
+          pedidas: body.semanas,
+          criadas: criados.length,
+          recusadas: recusados.length,
+        },
+      });
+
+      void reply.status(201);
+      return {
+        data: {
+          criadas: criados.length,
+          pedidas: body.semanas,
+          primeira: criados[0]!.inicio,
+          ultima: criados[criados.length - 1]!.inicio,
+          recusadas: recusados,
+        },
+      };
     });
   });
 

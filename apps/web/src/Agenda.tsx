@@ -56,6 +56,20 @@ const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digi
 
 export function Agenda({ principal }: { principal: Principal }): ReactNode {
   const [semana, setSemana] = useState(() => segundaDa(new Date()));
+  /* SEMANA OU MÊS. A grade de horários responde "o que acontece na
+     terça às 9h" — é a visão de quem opera o dia. Ela não responde
+     "como está o mês", que é a pergunta de quem planeja: quantos dias
+     têm gente, onde estão os buracos, quando dá para tirar folga. São
+     duas leituras diferentes do mesmo dado, e nenhuma substitui a
+     outra. */
+  const [modo, setModo] = useState<'semana' | 'mes'>('semana');
+  /* O MÊS TEM ÂNCORA PRÓPRIA, e não é derivado de `semana`. Derivá-lo
+     custou um bug medido: `semana` é sempre uma SEGUNDA-FEIRA, e a
+     segunda da semana do dia 1º de setembro cai em 31 de AGOSTO. O
+     cabeçalho continuava dizendo "Agosto" depois de clicar em "próximo
+     mês", e a grade não mudava. Duas perguntas diferentes, dois
+     estados. */
+  const [ancora, setAncora] = useState(() => new Date());
   const [compromissos, setCompromissos] = useState<api.CompromissoDetalhado[]>([]);
   const [equipe, setEquipe] = useState<api.Profissional[]>([]);
   const [salas, setSalas] = useState<api.Sala[]>([]);
@@ -80,6 +94,31 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
     [semana],
   );
 
+  /* O MÊS COMEÇA NA SEGUNDA DA SEMANA DO DIA 1 e vai até o domingo da
+     semana do último dia — sempre semanas inteiras. Um mês que começa
+     numa quinta e termina num sábado deixaria a primeira e a última
+     linha da grade truncadas, e o olho lê isso como dado faltando. */
+  const mes = useMemo(() => {
+    const primeiro = new Date(ancora.getFullYear(), ancora.getMonth(), 1);
+    const inicio = segundaDa(primeiro);
+    const ultimo = new Date(ancora.getFullYear(), ancora.getMonth() + 1, 0);
+    const fim = segundaDa(ultimo);
+    fim.setDate(fim.getDate() + 7);
+    const total = Math.round((fim.getTime() - inicio.getTime()) / (24 * 3_600_000));
+    return {
+      referencia: primeiro,
+      inicio,
+      fim,
+      dias: Array.from({ length: total }, (_, i) => {
+        const d = new Date(inicio);
+        d.setDate(d.getDate() + i);
+        return d;
+      }),
+    };
+  }, [ancora]);
+
+  const janela = modo === 'mes' ? { de: mes.inicio, ate: mes.fim } : null;
+
   useEffect(() => {
     api
       .buscarProfissionais()
@@ -97,10 +136,10 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
-    const fim = new Date(semana);
-    fim.setDate(fim.getDate() + 7);
+    const de = janela?.de ?? semana;
+    const fim = janela?.ate ?? new Date(semana.getTime() + 7 * 24 * 3_600_000);
     api
-      .buscarAgendaDetalhada(semana, fim, {
+      .buscarAgendaDetalhada(de, fim, {
         ...(filtroProf !== '' ? { profissionalId: filtroProf } : {}),
         ...(filtroSala !== '' ? { salaId: filtroSala } : {}),
       })
@@ -122,10 +161,11 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
 
        A falha é silenciosa de propósito: se esta chamada cair, a agenda
        de atendimentos ainda precisa aparecer. */
-    const fimDaSemana = new Date(semana);
-    fimDaSemana.setDate(fimDaSemana.getDate() + 6);
+    const inicioDasReservas = janela?.de ?? semana;
+    const fimDasReservas = new Date(janela?.ate ?? semana);
+    fimDasReservas.setDate(fimDasReservas.getDate() + (janela === null ? 6 : -1));
     api
-      .buscarReservas(comoData(semana), comoData(fimDaSemana))
+      .buscarReservas(comoData(inicioDasReservas), comoData(fimDasReservas))
       .then((r) => {
         if (vivo) setReservas(filtroSala === '' ? r.data : r.data.filter((x) => x.espacoId === filtroSala));
       })
@@ -136,7 +176,7 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
     return () => {
       vivo = false;
     };
-  }, [semana, filtroProf, filtroSala, versao]);
+  }, [semana, ancora, modo, filtroProf, filtroSala, versao]);
 
   /** Cor de cada profissional, com reserva estável por posição na lista. */
   const cores = useMemo(() => {
@@ -153,9 +193,16 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
 
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
-  const andar = (semanas: number): void => {
+  /* A SETA ANDA NA UNIDADE QUE ESTÁ NA TELA. Em mês, avançar sete dias
+     mudaria a semana e não o mês — o cabeçalho continuaria dizendo
+     "agosto" na maioria dos cliques, e a grade mudaria pouco ou nada. */
+  const andar = (passo: number): void => {
+    if (modo === 'mes') {
+      setAncora((a) => new Date(a.getFullYear(), a.getMonth() + passo, 1));
+      return;
+    }
     const s = new Date(semana);
-    s.setDate(s.getDate() + semanas * 7);
+    s.setDate(s.getDate() + passo * 7);
     setSemana(s);
   };
 
@@ -219,23 +266,71 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
         <div>
           <h1>Agenda</h1>
           <p>
-            {dias[0]!.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} a{' '}
-            {dias[6]!.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+            {modo === 'mes'
+              ? capitalizarMes(
+                  mes.referencia.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+                )
+              : `${dias[0]!.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} a ${dias[6]!.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`}
           </p>
         </div>
         <div className="ag-navegacao">
-          <button type="button" className="botao-secundario" onClick={() => andar(-1)}>
-            ‹ Semana
+          {/* O SELETOR DE MODO VEM ANTES DAS SETAS, porque ele muda o
+              que as setas fazem: em mês elas andam de mês. Depois delas,
+              a pessoa clica na seta e o salto é de tamanho diferente do
+              que ela esperava. */}
+          <div className="ag-modo" role="group" aria-label="Como ver a agenda">
+            <button
+              type="button"
+              className={`ag-modo-botao ${modo === 'semana' ? 'ativo' : ''}`}
+              aria-pressed={modo === 'semana'}
+              onClick={() => setModo('semana')}
+            >
+              Semana
+            </button>
+            <button
+              type="button"
+              className={`ag-modo-botao ${modo === 'mes' ? 'ativo' : ''}`}
+              aria-pressed={modo === 'mes'}
+              onClick={() => {
+                /* Entrar no mês pela semana que está na tela: quem está
+                   olhando a semana do dia 30 de agosto e pede o mês quer
+                   agosto, não o mês em que a âncora tiver parado. */
+                setAncora(new Date(semana.getFullYear(), semana.getMonth(), semana.getDate() + 3));
+                setModo('mes');
+              }}
+            >
+              Mês
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className="botao-secundario"
+            onClick={() => andar(-1)}
+            aria-label={modo === 'mes' ? 'Mês anterior' : 'Semana anterior'}
+          >
+            ‹
           </button>
           <button
             type="button"
             className="botao-secundario"
-            onClick={() => setSemana(segundaDa(new Date()))}
+            onClick={() => {
+              /* "Hoje" volta os DOIS: quem estava em setembro e clica
+                 aqui espera ver esta semana, e trocar de modo depois
+                 não pode reabrir o mês onde ele estava. */
+              setSemana(segundaDa(new Date()));
+              setAncora(new Date());
+            }}
           >
             Hoje
           </button>
-          <button type="button" className="botao-secundario" onClick={() => andar(1)}>
-            Semana ›
+          <button
+            type="button"
+            className="botao-secundario"
+            onClick={() => andar(1)}
+            aria-label={modo === 'mes' ? 'Próximo mês' : 'Próxima semana'}
+          >
+            ›
           </button>
           {podeEscrever && (
             <button type="button" className="botao-secundario" onClick={() => setEspacos(true)}>
@@ -250,7 +345,7 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
         </div>
       </div>
 
-      <ResumoDaSemana compromissos={compromissos} />
+      <ResumoDaSemana compromissos={compromissos} periodo={modo} />
 
       <div className="ag-filtros">
         <label className="campo ag-filtro">
@@ -303,16 +398,34 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
 
       {erro !== null && <Erro mensagem={erro} />}
 
-      <Grade
-        dias={dias}
-        compromissos={compromissos}
-        reservas={reservas}
-        cores={cores}
-        carregando={carregando}
-        podeMarcar={podeEscrever}
-        aoAbrir={setSelecionado}
-        aoVago={(inicio, fim) => setNovo({ inicio, fim })}
-      />
+      {modo === 'mes' ? (
+        <Mes
+          dias={mes.dias}
+          referencia={mes.referencia}
+          compromissos={compromissos}
+          cores={cores}
+          carregando={carregando}
+          aoAbrir={setSelecionado}
+          aoEscolherDia={(d) => {
+            /* CLICAR NUM DIA VOLTA PARA A SEMANA DELE. O mês responde
+               "onde tem gente"; a pergunta seguinte é sempre "e a que
+               horas" — e essa só a grade responde. */
+            setSemana(segundaDa(d));
+            setModo('semana');
+          }}
+        />
+      ) : (
+        <Grade
+          dias={dias}
+          compromissos={compromissos}
+          reservas={reservas}
+          cores={cores}
+          carregando={carregando}
+          podeMarcar={podeEscrever}
+          aoAbrir={setSelecionado}
+          aoVago={(inicio, fim) => setNovo({ inicio, fim })}
+        />
+      )}
 
       {selecionado !== null && (
         <Detalhe
@@ -344,7 +457,16 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
  * e apagado quando é zero, porque uma semana com sete faltas é uma
  * semana em que alguém precisa ligar para sete pessoas.
  */
-function ResumoDaSemana({ compromissos }: { compromissos: api.Compromisso[] }): ReactNode {
+function ResumoDaSemana({
+  compromissos,
+  periodo,
+}: {
+  compromissos: api.Compromisso[];
+  /* O RÓTULO ACOMPANHA O QUE ESTÁ NA TELA. "163 na semana" mostrando o
+     mês inteiro é um número certo com a legenda errada — e quem lê
+     confia na legenda. */
+  periodo: 'semana' | 'mes';
+}): ReactNode {
   if (compromissos.length === 0) return null;
 
   const conta = (status: string): number =>
@@ -366,7 +488,7 @@ function ResumoDaSemana({ compromissos }: { compromissos: api.Compromisso[] }): 
     <div className="ag-resumo">
       <span className="ag-resumo-item">
         <strong>{compromissos.length}</strong>
-        <span>na semana</span>
+        <span>{periodo === 'mes' ? 'no mês' : 'na semana'}</span>
       </span>
       <span className="ag-resumo-item">
         <strong>{porVir}</strong>
@@ -705,6 +827,18 @@ function Marcacao({
   const [sala, setSala] = useState('');
   const [duracao, setDuracao] = useState(60);
   const [observacao, setObservacao] = useState('');
+  /* REPETE TODA SEMANA. O aluno de pilates faz terça e quinta às 9h
+     durante meses, com a mesma professora; marcar isso uma sessão de
+     cada vez são vinte e quatro passagens pelo mesmo formulário — e
+     ninguém faz. A recepção marca duas semanas e o resto vira combinado
+     de boca, que é como o calendário deixa de descrever a academia. */
+  const [repete, setRepete] = useState(false);
+  const [semanas, setSemanas] = useState(12);
+  const [parcial, setParcial] = useState<{
+    criadas: number;
+    pedidas: number;
+    recusadas: { inicio: string; motivo: string }[];
+  } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -726,15 +860,28 @@ function Marcacao({
     }
     setErro(null);
     setEnviando(true);
+    const comum = {
+      studentId: aluno,
+      professionalId: profissional,
+      ...(sala !== '' ? { roomId: sala } : {}),
+      inicio: inicio.toISOString(),
+      fim: new Date(inicio.getTime() + duracao * 60_000).toISOString(),
+      ...(observacao !== '' ? { observacao } : {}),
+    };
     try {
-      await api.marcarCompromisso({
-        studentId: aluno,
-        professionalId: profissional,
-        ...(sala !== '' ? { roomId: sala } : {}),
-        inicio: inicio.toISOString(),
-        fim: new Date(inicio.getTime() + duracao * 60_000).toISOString(),
-        ...(observacao !== '' ? { observacao } : {}),
-      });
+      if (repete) {
+        const r = await api.marcarSerie({ ...comum, semanas });
+        /* AS RECUSADAS SÃO MOSTRADAS ANTES DE FECHAR. Sair da tela
+           dizendo só "pronto" quando três das doze não couberam é a
+           recepção descobrir o buraco no dia em que o aluno aparecer. */
+        if (r.data.recusadas.length > 0) {
+          setParcial(r.data);
+          setEnviando(false);
+          return;
+        }
+      } else {
+        await api.marcarCompromisso(comum);
+      }
       aoMarcar();
     } catch (x) {
       setErro(x instanceof api.ApiError ? x.message : 'Não foi possível marcar.');
@@ -842,20 +989,117 @@ function Marcacao({
           />
         </label>
 
+        {/* ==================================================
+            O MESMO HORÁRIO, TODA SEMANA
+
+            A caixa fica no fim porque é a última decisão: primeiro se
+            escolhe quem, com quem e quando: só então faz sentido
+            perguntar "e isso se repete?".
+            ================================================== */}
+        <fieldset className={`campo campo-cheia ag-serie ${repete ? 'ligada' : ''}`}>
+          <label className="ag-serie-chave">
+            <input type="checkbox" checked={repete} onChange={(e) => setRepete(e.target.checked)} />
+            <span>
+              <strong>Repetir toda semana, no mesmo horário</strong>
+              <span className="campo-dica">
+                Com o mesmo profissional. Cada semana vira um horário normal — dá para cancelar ou
+                mudar uma sem mexer nas outras.
+              </span>
+            </span>
+          </label>
+
+          {repete && (
+            <div className="ag-serie-campos">
+              <label className="campo">
+                <span className="campo-rotulo">Por quantas semanas</span>
+                <select value={String(semanas)} onChange={(e) => setSemanas(Number(e.target.value))}>
+                  {[4, 8, 12, 16, 24, 36, 52].map((n) => (
+                    <option key={n} value={String(n)}>
+                      {n} semanas{n === 52 ? ' (um ano)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <p className="ag-serie-explica">
+                {(() => {
+                  const ultima = new Date(inicio.getTime() + (semanas - 1) * 7 * 24 * 3_600_000);
+                  return (
+                    <>
+                      Vai de{' '}
+                      <strong>
+                        {inicio.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
+                      </strong>{' '}
+                      até{' '}
+                      <strong>
+                        {ultima.toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </strong>
+                      , sempre {inicio.toLocaleDateString('pt-BR', { weekday: 'long' })} às{' '}
+                      {HORA.format(inicio)}. As semanas que não couberem — feriado, horário já
+                      ocupado — são puladas, e a tela avisa quais.
+                    </>
+                  );
+                })()}
+              </p>
+            </div>
+          )}
+        </fieldset>
+
+        {/* A SÉRIE PARCIAL É MOSTRADA ANTES DE SAIR DA TELA. Fechar
+            dizendo só "pronto" quando três das doze não couberam é a
+            recepção descobrir o buraco no dia em que o aluno aparecer. */}
+        {parcial !== null && (
+          <div className="campo campo-cheia ag-parcial" role="status">
+            <strong>
+              {parcial.criadas} de {parcial.pedidas} semanas foram marcadas.
+            </strong>
+            <p>Estas não couberam e continuam livres:</p>
+            <ul>
+              {parcial.recusadas.map((r) => (
+                <li key={r.inicio}>
+                  <span className="ag-parcial-data">
+                    {new Date(r.inicio).toLocaleDateString('pt-BR', {
+                      weekday: 'short',
+                      day: '2-digit',
+                      month: '2-digit',
+                    })}
+                  </span>
+                  <span>{r.motivo}</span>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="botao-acao" onClick={aoMarcar}>
+              Entendi, ver a agenda
+            </button>
+          </div>
+        )}
+
         {erro !== null && (
           <p className="mensagem-erro campo-cheia" role="alert">
             {erro}
           </p>
         )}
 
-        <div className="formulario-acoes campo-cheia">
-          <button type="button" className="botao-secundario" onClick={aoSair}>
-            Cancelar
-          </button>
-          <button type="submit" className="botao-acao" disabled={enviando}>
-            {enviando ? 'Marcando…' : 'Marcar'}
-          </button>
-        </div>
+        {parcial === null && (
+          <div className="formulario-acoes campo-cheia">
+            <button type="button" className="botao-secundario" onClick={aoSair}>
+              Cancelar
+            </button>
+            <button type="submit" className="botao-acao" disabled={enviando}>
+              {enviando
+                ? repete
+                  ? `Marcando ${semanas} semanas…`
+                  : 'Marcando…'
+                : repete
+                  ? `Marcar as ${semanas} semanas`
+                  : 'Marcar'}
+            </button>
+          </div>
+        )}
       </form>
     </>
   );
@@ -864,4 +1108,139 @@ function Marcacao({
 /** Data local em YYYY-MM-DD. `toISOString` deslocaria o dia a oeste de Greenwich. */
 function comoData(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/* ====================================================================
+ * A VISÃO DE MÊS
+ * ================================================================== */
+
+/** "agosto de 2026" vira "Agosto de 2026". */
+function capitalizarMes(t: string): string {
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+const CURTOS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+/**
+ * O mês inteiro, um quadrado por dia.
+ *
+ * O QUE ESTA VISÃO RESPONDE, E A GRADE NÃO. A grade de horários é a
+ * ferramenta de quem opera o dia: "o que acontece na terça às 9h". Ela
+ * não responde a pergunta de quem PLANEJA — quantos dias têm gente, onde
+ * estão os buracos, quando dá para tirar folga, em que semana o mês
+ * aperta. Para isso é preciso ver trinta dias de uma vez, e trinta dias
+ * de grade horária não cabem numa tela.
+ *
+ * CADA DIA MOSTRA ATÉ QUATRO E DEPOIS CONTA. Uma academia cheia tem
+ * doze sessões numa terça; listar as doze faria a linha da semana
+ * esticar e o mês voltar a não caber. Quatro nomes dão a textura do dia
+ * — quem está lá, de que cor —, e o "+8" diz que tem mais sem mentir
+ * sobre o tamanho.
+ *
+ * NÃO SE MARCA DAQUI. Clicar num dia leva para a semana dele: marcar
+ * exige escolher a hora, e a hora não existe nesta visão. Um formulário
+ * aberto a partir de um quadrado do mês começaria com o campo mais
+ * importante em branco.
+ */
+function Mes({
+  dias,
+  referencia,
+  compromissos,
+  cores,
+  carregando,
+  aoAbrir,
+  aoEscolherDia,
+}: {
+  dias: Date[];
+  referencia: Date;
+  compromissos: api.CompromissoDetalhado[];
+  cores: Map<string, string>;
+  carregando: boolean;
+  aoAbrir: (c: api.CompromissoDetalhado) => void;
+  aoEscolherDia: (d: Date) => void;
+}): ReactNode {
+  const hoje = new Date();
+
+  /* Um índice por dia, montado UMA VEZ. Filtrar a lista inteira dentro
+     de cada um dos 35 quadrados é varrer o mês 35 vezes. */
+  const porDia = new Map<string, api.CompromissoDetalhado[]>();
+  for (const c of compromissos) {
+    const chave = comoData(new Date(c.inicio));
+    const lista = porDia.get(chave);
+    if (lista === undefined) porDia.set(chave, [c]);
+    else lista.push(c);
+  }
+  for (const lista of porDia.values()) {
+    lista.sort((a, b) => a.inicio.localeCompare(b.inicio));
+  }
+
+  return (
+    <div className={`ag-mes ${carregando ? 'ocupada' : ''}`}>
+      <div className="ag-mes-cabeca" aria-hidden="true">
+        {CURTOS.map((d) => (
+          <span key={d}>{d}</span>
+        ))}
+      </div>
+
+      <div className="ag-mes-grade">
+        {dias.map((d) => {
+          const doDia = porDia.get(comoData(d)) ?? [];
+          const deOutroMes = d.getMonth() !== referencia.getMonth();
+          const eHoje = mesmoDia(d, hoje);
+
+          return (
+            <div
+              key={d.toISOString()}
+              className={`ag-mes-dia ${deOutroMes ? 'fora' : ''} ${eHoje ? 'hoje' : ''}`}
+            >
+              <button
+                type="button"
+                className="ag-mes-numero"
+                onClick={() => aoEscolherDia(d)}
+                aria-label={`Ver a semana de ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}`}
+              >
+                {d.getDate()}
+                {/* A CONTAGEM AO LADO DO NÚMERO, e não só a lista: é ela
+                    que dá para comparar dois dias com o olho, sem contar
+                    linha por linha. */}
+                {doDia.length > 0 && <span className="ag-mes-conta">{doDia.length}</span>}
+              </button>
+
+              <ul className="ag-mes-lista">
+                {doDia.slice(0, 4).map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      className={`ag-mes-item ${c.status === 'CANCELLED' ? 'cancelado' : ''}`}
+                      onClick={() => aoAbrir(c)}
+                      title={`${HORA.format(new Date(c.inicio))} · ${c.aluno.nome} · ${c.profissional.nome}`}
+                    >
+                      <span
+                        className="ag-ponto"
+                        style={{ background: cores.get(c.profissional.id) }}
+                        aria-hidden="true"
+                      />
+                      <span className="ag-mes-hora">{HORA.format(new Date(c.inicio))}</span>
+                      <span className="ag-mes-nome">{c.aluno.nome}</span>
+                    </button>
+                  </li>
+                ))}
+                {doDia.length > 4 && (
+                  <li>
+                    <button
+                      type="button"
+                      className="ag-mes-mais"
+                      onClick={() => aoEscolherDia(d)}
+                    >
+                      +{doDia.length - 4} no dia
+                    </button>
+                  </li>
+                )}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

@@ -1353,6 +1353,37 @@ export const marcarCompromisso = (dados: {
   body: JSON.stringify(dados),
 });
 
+/**
+ * O mesmo horário, toda semana.
+ *
+ * CADA SEMANA VIRA UM COMPROMISSO NORMAL, independente — não existe um
+ * "agendamento recorrente" no banco. O feriado se cancela sozinho, a
+ * semana que mudou de horário se arrasta, e o aluno que faltou numa
+ * terça não some da série.
+ *
+ * A RESPOSTA DIZ O QUE NÃO COUBE. Em doze semanas vai haver um feriado
+ * ou um horário já ocupado; recusar a série inteira por causa de uma
+ * obrigaria quem marca a descobrir qual e tentar de novo.
+ */
+export const marcarSerie = (dados: {
+  studentId: string;
+  professionalId: string;
+  roomId?: string;
+  inicio: string;
+  fim: string;
+  observacao?: string;
+  semanas: number;
+}) =>
+  api<{
+    data: {
+      criadas: number;
+      pedidas: number;
+      primeira: string;
+      ultima: string;
+      recusadas: { inicio: string; motivo: string }[];
+    };
+  }>('/api/schedule/serie', { method: 'POST', body: JSON.stringify(dados) });
+
 export const cancelarCompromisso = (id: string, motivo?: string) =>
   api<{ ok: boolean }>(`/api/schedule/${id}/cancelar`, {
     method: 'POST',

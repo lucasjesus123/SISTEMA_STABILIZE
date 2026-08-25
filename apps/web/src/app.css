@@ -7081,3 +7081,287 @@
 .eq-horarios-depois strong {
   color: var(--texto);
 }
+
+/* ---------------------------------------------------------------------
+   A VISÃO DE MÊS
+
+   A grade de horários responde "o que acontece na terça às 9h". O mês
+   responde a pergunta de quem planeja — onde tem gente, onde estão os
+   buracos, em que semana aperta — e para isso precisa caber inteiro na
+   tela, o que a grade horária de trinta dias não faria.
+   ------------------------------------------------------------------- */
+.ag-mes {
+  margin-top: var(--e-3);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  overflow: hidden;
+  background: var(--superficie-alta);
+  transition: opacity var(--rapido) var(--saida);
+}
+.ag-mes.ocupada {
+  opacity: 0.55;
+}
+
+.ag-mes-cabeca {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--fio-forte);
+}
+.ag-mes-cabeca span {
+  padding: 8px 10px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-apoio);
+  text-align: center;
+}
+
+.ag-mes-grade {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.ag-mes-dia {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 7.5rem;
+  padding: 6px;
+  border-right: 1px solid var(--fio);
+  border-bottom: 1px solid var(--fio);
+}
+.ag-mes-dia:nth-child(7n) {
+  border-right: 0;
+}
+/* OS DIAS DO MÊS VIZINHO CONTINUAM LEGÍVEIS. Eles existem para a
+   semana não sair truncada; apagá-los até o limite faria a primeira
+   linha parecer um defeito de renderização. */
+.ag-mes-dia.fora {
+  background: color-mix(in srgb, var(--texto-apoio) 5%, transparent);
+}
+.ag-mes-dia.fora .ag-mes-numero {
+  color: var(--texto-apoio);
+}
+.ag-mes-dia.hoje {
+  background: color-mix(in srgb, var(--teal) 7%, transparent);
+}
+
+.ag-mes-numero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--raio);
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+.ag-mes-numero:hover {
+  background: var(--superficie-realce);
+}
+.ag-mes-dia.hoje .ag-mes-numero {
+  color: var(--teal-fundo);
+}
+.ag-mes-conta {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--superficie-realce);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--texto-apoio);
+}
+
+.ag-mes-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.ag-mes-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--raio);
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--texto-corpo);
+  text-align: left;
+  min-width: 0;
+}
+.ag-mes-item:hover {
+  background: var(--superficie-realce);
+}
+.ag-mes-item.cancelado {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.ag-mes-hora {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-apoio);
+}
+.ag-mes-nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ag-mes-mais {
+  padding: 1px 4px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--teal-fundo);
+}
+
+/* No celular sete colunas de 7,5rem não cabem — a grade rola de lado
+   dentro do próprio quadro, e não empurra a página. */
+@media (max-width: 720px) {
+  .ag-mes {
+    overflow-x: auto;
+  }
+  .ag-mes-cabeca,
+  .ag-mes-grade {
+    min-width: 44rem;
+  }
+}
+
+/* ---- alternar semana / mês ---------------------------------------- */
+.ag-modo {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+}
+.ag-modo-botao {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: calc(var(--raio-md) - 2px);
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--texto-apoio);
+}
+.ag-modo-botao.ativo {
+  background: var(--superficie-realce);
+  color: var(--texto);
+}
+
+/* ---- a série, no formulário de marcar ------------------------------ */
+.ag-serie {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px dashed var(--fio-forte);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.ag-serie.ligada {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--teal) 50%, transparent);
+  background: color-mix(in srgb, var(--teal) 6%, transparent);
+}
+.ag-serie-chave {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.ag-serie-chave input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.ag-serie-chave strong {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--texto);
+}
+.ag-serie-chave .campo-dica {
+  display: block;
+  margin-top: 1px;
+}
+.ag-serie-campos {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) 2fr;
+  gap: var(--e-3);
+  align-items: start;
+  margin-left: calc(18px + var(--e-3));
+  padding-top: var(--e-3);
+  border-top: 1px solid var(--fio);
+}
+.ag-serie-explica {
+  margin: 0;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--texto-apoio);
+}
+.ag-serie-explica strong {
+  color: var(--texto);
+}
+@media (max-width: 640px) {
+  .ag-serie-campos {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* AS SEMANAS QUE NÃO COUBERAM. Fechar dizendo só "pronto" quando três
+   das doze falharam é a recepção descobrir o buraco no dia em que o
+   aluno aparecer. */
+.ag-parcial {
+  padding: var(--e-4);
+  border: 1px solid color-mix(in srgb, var(--atencao, #b8860b) 45%, transparent);
+  border-radius: var(--raio-lg);
+  background: color-mix(in srgb, var(--atencao, #b8860b) 7%, transparent);
+}
+.ag-parcial strong {
+  font-size: var(--t-sm);
+  color: var(--texto);
+}
+.ag-parcial p {
+  margin: var(--e-2) 0 0;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.ag-parcial ul {
+  list-style: none;
+  margin: var(--e-2) 0 var(--e-3);
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.ag-parcial li {
+  display: flex;
+  gap: var(--e-3);
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.ag-parcial-data {
+  flex: none;
+  min-width: 6rem;
+  font-weight: 600;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
