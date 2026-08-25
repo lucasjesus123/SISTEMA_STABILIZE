@@ -6831,3 +6831,93 @@
 .fin-mens-apoio {
   margin-top: var(--e-4);
 }
+
+/* ---------------------------------------------------------------------
+   PREVISTO — o que ainda não é lançamento
+
+   A distinção precisa sobreviver a uma olhada rápida: uma linha
+   prevista não tem botão de baixa, e a pessoa que não percebeu a
+   diferença clica no lugar errado e conclui que o sistema travou. O
+   tracejado e a cor mais fraca dizem "isto ainda não aconteceu" sem
+   precisar ler.
+   ------------------------------------------------------------------- */
+.fin-previsto-cabeca td {
+  padding-top: var(--e-4);
+  border-top: 1px dashed var(--fio-forte);
+  background: none;
+}
+.fin-previsto-titulo {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-apoio);
+}
+.fin-previsto-apoio {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+  max-width: 60ch;
+}
+.fin-previsto-total {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.fin-linha.fin-prevista td {
+  /* Sem o fundo alternado das outras: previsto não é linha de extrato. */
+  background: none;
+}
+.fin-linha.fin-prevista .celula-forte,
+.fin-linha.fin-prevista .dinheiro {
+  color: var(--texto-apoio);
+}
+.fin-selo.previsto {
+  /* `.fin-selo` não tem borda, então a moldura é criada aqui: o
+     tracejado é o que separa "previsto" de "em aberto" a um metro de
+     distância, e as duas palavras sozinhas se parecem demais. */
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px dashed var(--fio-forte);
+  border-radius: 999px;
+  color: var(--texto-apoio);
+}
+
+/* ---- o horizonte, no relatório ------------------------------------ */
+.rel-horizonte-escolha {
+  min-width: 9rem;
+}
+.rel-horizonte-soma td {
+  border-top: 1px solid var(--fio-forte);
+  font-weight: 600;
+}
+.rel-horizonte-soma .dinheiro {
+  color: var(--texto);
+}
+.fin-negativo {
+  color: var(--erro);
+}
+
+/* Editar e dar baixa na mesma célula, sem colar um no outro. */
+.fin-acao .fin-acoes {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-3);
+  justify-content: flex-end;
+}
+/* EXCLUIR À ESQUERDA, longe do botão que se aperta sem olhar. */
+.fin-excluir {
+  margin-right: auto;
+}
+.fin-repete-aviso {
+  margin: 0;
+  padding: 10px var(--e-3);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-md);
+  background: var(--superficie-alta);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--texto-apoio);
+}

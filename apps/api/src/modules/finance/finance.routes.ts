@@ -15,7 +15,9 @@ import {
 import { gerarContasFixasDaEmpresa } from './contas-fixas.js';
 import {
   alterarContaFixa,
+  alterarLancamento,
   baseDeComissao,
+  cancelarLancamento,
   criarContaFixa,
   criarLancamento,
   excluirContaFixa,
@@ -26,6 +28,7 @@ import {
   listarLancamentos,
   listarRecorrencias,
   porCategoria,
+  previsaoDoMes,
   registrarPagamento,
   resumoDoPeriodo,
 } from './finance.repository.js';
@@ -214,6 +217,100 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
 
         void reply.status(201);
         return { data: { id: criado.id } };
+      });
+    },
+  );
+
+  /* ------------------------------------------------------------------
+   * CORRIGIR E EXCLUIR UM LANÇAMENTO
+   *
+   * FALTAVA, e o que faltava não era um botão: era a possibilidade de
+   * consertar. Um lançamento só podia nascer e receber baixa. Quem
+   * digitou "alugue" no lugar de "aluguel", errou o valor por um zero ou
+   * lançou a despesa duas vezes ficava com aquilo no extrato para
+   * sempre — e um financeiro em que o erro é permanente é um financeiro
+   * que as pessoas param de usar.
+   *
+   * A DIREÇÃO NÃO SE EDITA. Uma despesa não vira cobrança: os dois lados
+   * já contaram esse valor no saldo, e trocar o sinal de uma linha antiga
+   * reescreve o fechamento de um mês que alguém já leu.
+   * ---------------------------------------------------------------- */
+
+  app.patch(
+    '/lancamentos/:id',
+    { preHandler: [app.authorize('finance:receivable:write')] },
+    async (request) => {
+      const { id } = z.object({ id: idSchema }).parse(request.params);
+      const body = z
+        .object({
+          descricao: z.string().trim().min(1).max(300).optional(),
+          categoria: z.string().trim().max(80).nullable().optional(),
+          valor: valorSchema.optional(),
+          vencimento: z.coerce.date().optional(),
+          competencia: z.coerce.date().nullable().optional(),
+          fornecedor: z.string().trim().max(160).nullable().optional(),
+          observacao: z.string().trim().max(500).nullable().optional(),
+        })
+        .parse(request.body);
+
+      return inTenant(request, async (client, principal) => {
+        const r = await alterarLancamento(client, id, {
+          ...(body.descricao !== undefined && { descricao: body.descricao }),
+          ...(body.categoria !== undefined && { categoria: body.categoria }),
+          ...(body.valor !== undefined && { valorCentavos: body.valor }),
+          ...(body.vencimento !== undefined && { vencimento: body.vencimento }),
+          ...(body.competencia !== undefined && { competencia: body.competencia }),
+          ...(body.fornecedor !== undefined && { contraparte: body.fornecedor }),
+          ...(body.observacao !== undefined && { observacao: body.observacao }),
+        });
+
+        if (!r.ok) {
+          if (r.motivo !== undefined) throw unprocessable(r.motivo);
+          throw notFound('Lançamento');
+        }
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'finance.entry.update',
+          resourceType: 'finance_entry',
+          resourceId: id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          /* O VALOR ENTRA NO LOG. É registro contábil: quem lê a
+             auditoria depois precisa saber para quanto a linha mudou,
+             não só que ela mudou. */
+          metadata: { campos: Object.keys(body), valorCentavos: body.valor ?? null },
+        });
+
+        return { ok: true };
+      });
+    },
+  );
+
+  app.delete(
+    '/lancamentos/:id',
+    { preHandler: [app.authorize('finance:receivable:write')] },
+    async (request) => {
+      const { id } = z.object({ id: idSchema }).parse(request.params);
+
+      return inTenant(request, async (client, principal) => {
+        const r = await cancelarLancamento(client, id);
+        if (!r.ok) {
+          if (r.motivo !== undefined) throw unprocessable(r.motivo);
+          throw notFound('Lançamento');
+        }
+
+        await writeAudit(client, principal.tenantId, {
+          action: 'finance.entry.update',
+          resourceType: 'finance_entry',
+          resourceId: id,
+          actorId: principal.userId,
+          actorRole: principal.role,
+          ip: request.ip,
+          metadata: { cancelado: true },
+        });
+
+        return { ok: true };
       });
     },
   );
@@ -443,6 +540,72 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
         data: linhas.map((r) => ({ ...r, valorFormatado: formatCents(r.valorCentavos) })),
       };
     }),
+  );
+
+  /* ------------------------------------------------------------------
+   * PREVISÃO — o que vai vencer num mês que ainda não chegou
+   *
+   * A tela dizia "Nada neste mês" em setembro para uma academia com R$
+   * 4.567 de conta fixa por mês. O número estava certo — não há
+   * lançamento nenhum em setembro, porque a geração para no mês
+   * corrente de propósito — e a resposta estava errada: quem olha o mês
+   * que vem quer saber o que vai ter de pagar.
+   *
+   * O QUE VOLTA DAQUI NÃO SÃO LANÇAMENTOS. Não têm id, não recebem
+   * baixa e somem no instante em que o molde muda. É a diferença entre
+   * "vou dever isso" e "devo isso", e ela precisa continuar visível na
+   * tela — senão alguém tenta dar baixa em fevereiro no meio de janeiro.
+   * ---------------------------------------------------------------- */
+  app.get(
+    '/previsao',
+    { preHandler: [app.authorize('finance:receivable:read')] },
+    async (request) => {
+      const { mes, direcao, meses } = z
+        .object({
+          mes: z.coerce.date(),
+          direcao: z.enum(['RECEIVABLE', 'PAYABLE']).optional(),
+          /* UM MÊS por padrão — é o que a lista de lançamentos pede. O
+             horizonte maior é para a pergunta do planejamento: "o que já
+             está comprometido daqui até o fim do ano". Teto de 24 porque
+             além disso a projeção fala mais sobre os moldes de hoje do
+             que sobre o ano que vem. */
+          meses: z.coerce.number().int().min(1).max(24).default(1),
+        })
+        .parse(request.query);
+
+      return inTenant(request, async (client) => {
+        const periodos = [];
+
+        for (let n = 0; n < meses; n += 1) {
+          const alvo = new Date(
+            Date.UTC(mes.getUTCFullYear(), mes.getUTCMonth() + n, 1, 12, 0, 0),
+          );
+          const linhas = await previsaoDoMes(client, alvo, direcao);
+          const somar = (d: 'RECEIVABLE' | 'PAYABLE'): number =>
+            linhas.filter((l) => l.direcao === d).reduce((a, l) => a + l.valorCentavos, 0);
+
+          const aReceber = somar('RECEIVABLE');
+          const aPagar = somar('PAYABLE');
+
+          periodos.push({
+            mes: alvo.toISOString().slice(0, 7),
+            linhas: linhas.map((l) => ({ ...l, valorFormatado: formatCents(l.valorCentavos) })),
+            aReceberCentavos: aReceber,
+            aReceberFormatado: formatCents(aReceber),
+            aPagarCentavos: aPagar,
+            aPagarFormatado: formatCents(aPagar),
+            saldoCentavos: aReceber - aPagar,
+            saldoFormatado: formatCents(aReceber - aPagar),
+          });
+        }
+
+        /* A RESPOSTA DE UM MÊS SÓ CONTINUA SENDO UM OBJETO, e não um
+           array de um item: quem pede a previsão da tela de lançamentos
+           quer os números daquele mês, e obrigá-lo a escrever `[0]` é
+           empurrar para o cliente uma decisão que é do servidor. */
+        return { data: meses === 1 ? periodos[0]! : { meses: periodos } };
+      });
+    },
   );
 
   /* ------------------------------------------------------------------

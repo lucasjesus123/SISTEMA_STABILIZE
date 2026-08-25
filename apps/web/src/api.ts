@@ -1160,6 +1160,26 @@ export interface NovoLancamento {
   observacao?: string;
 }
 
+export const alterarLancamento = (
+  id: string,
+  campos: Partial<{
+    descricao: string;
+    categoria: string | null;
+    valor: string;
+    vencimento: string;
+    fornecedor: string | null;
+    observacao: string | null;
+  }>,
+) =>
+  api<{ ok: true }>(`/api/finance/lancamentos/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(campos),
+  });
+
+/** Cancela — não apaga. A linha sai das listas e continua auditável. */
+export const excluirLancamento = (id: string) =>
+  api<{ ok: true }>(`/api/finance/lancamentos/${id}`, { method: 'DELETE' });
+
 export const criarLancamento = (dados: NovoLancamento) =>
   api<{ data: { id: string } }>('/api/finance/lancamentos', {
     method: 'POST',
@@ -1597,6 +1617,49 @@ export interface Recorrencia {
 }
 
 export const buscarRecorrencias = () => api<{ data: Recorrencia[] }>('/api/finance/recorrencias');
+
+/* --------------------------------------------------------------------
+ * PREVISÃO — o que vai vencer num mês que ainda não chegou
+ *
+ * NÃO SÃO LANÇAMENTOS. Não têm id, não recebem baixa e somem no instante
+ * em que o molde muda. É a diferença entre "vou dever isso" e "devo
+ * isso", e ela precisa continuar visível na tela.
+ * ------------------------------------------------------------------ */
+
+export interface LinhaPrevista {
+  id: null;
+  direcao: DirecaoLancamento;
+  descricao: string;
+  categoria: string | null;
+  valorCentavos: number;
+  valorFormatado: string;
+  vencimento: string;
+  contraparte: string | null;
+  origem: 'CONTA_FIXA' | 'CONTRATO';
+  origemId: string;
+}
+
+export interface PrevisaoDoMes {
+  mes: string;
+  linhas: LinhaPrevista[];
+  aReceberCentavos: number;
+  aReceberFormatado: string;
+  aPagarCentavos: number;
+  aPagarFormatado: string;
+  saldoCentavos: number;
+  saldoFormatado: string;
+}
+
+export const buscarPrevisao = (mes: Date, direcao?: DirecaoLancamento) =>
+  api<{ data: PrevisaoDoMes }>(
+    `/api/finance/previsao?mes=${iso(mes)}${direcao === undefined ? '' : `&direcao=${direcao}`}`,
+  );
+
+/** O horizonte: N meses a partir de `mes`, para a pergunta do planejamento. */
+export const buscarPrevisaoDosMeses = (mes: Date, meses: number) =>
+  api<{ data: { meses: PrevisaoDoMes[] } }>(
+    `/api/finance/previsao?mes=${iso(mes)}&meses=${meses}`,
+  );
 
 /* --------------------------------------------------------------------
  * Contas fixas — o aluguel do dia 20

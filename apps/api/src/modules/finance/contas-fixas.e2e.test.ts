@@ -511,4 +511,232 @@ suite('contas fixas e fechamento do mês', () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  /* ================================================================
+   * PREVISÃO — o mês que ainda não chegou
+   * ============================================================== */
+
+  /* UM MOLDE PRÓPRIO PARA ESTES TESTES. O do "Aluguel" é excluído pelo
+     teste de exclusão logo acima, e depender da ordem entre `it`s é como
+     uma suíte passa a falhar quando alguém insere um teste no meio. */
+  let fixaDaPrevisao = '';
+
+  it('cadastra o molde que os testes de previsão usam', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/finance/contas-fixas',
+      headers: auth(),
+      payload: {
+        direcao: 'PAYABLE',
+        descricao: 'Energia',
+        valor: '2.500,00',
+        ciclo: 'MONTHLY',
+        diaDeCobranca: 12,
+        contraparte: 'Concessionária',
+        inicio: iso(new Date()),
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    fixaDaPrevisao = (res.json() as { data: { id: string } }).data.id;
+    expect(fixaDaPrevisao).not.toBe('');
+  });
+
+  it('um mês futuro mostra o que VAI vencer, mesmo sem lançamento nenhum nele', async () => {
+    /* O bug que isto tranca: a tela dizia "Nada neste mês" em setembro
+       para uma academia com conta fixa cadastrada. Os lançamentos são
+       materializados só até o mês corrente — de propósito, para o valor
+       do futuro não ficar congelado no de hoje —, e a resposta certa
+       para "o que vou pagar mês que vem" nunca podia ser "nada". */
+    const futuro = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 4, 1));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/finance/previsao?mes=${iso(futuro)}&direcao=PAYABLE`,
+      headers: auth(),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const d = res.json() as {
+      data: { aPagarCentavos: number; linhas: { id: null; origem: string }[] };
+    };
+    /* O trimestral do "Contador" pode ou não cair neste mês; o
+       "Aluguel" mensal cai em todos. */
+    expect(d.data.aPagarCentavos).toBeGreaterThanOrEqual(250000);
+    expect(d.data.linhas.length).toBeGreaterThan(0);
+    /* SEM ID: previsão não é lançamento, e a tela precisa saber disso
+       para não oferecer baixa numa conta que ainda não existe. */
+    expect(d.data.linhas.every((l) => l.id === null)).toBe(true);
+    expect(d.data.linhas.some((l) => l.origem === 'CONTA_FIXA')).toBe(true);
+  });
+
+  it('a previsão NÃO conta duas vezes o que já foi lançado', async () => {
+    /* No mês corrente os lançamentos da conta fixa já existem. Se a
+       previsão os incluísse, o total do mês somaria o aluguel duas
+       vezes — uma como lançamento e outra como projeção. */
+    const hoje = new Date();
+    const corrente = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), 1));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/finance/previsao?mes=${iso(corrente)}&direcao=PAYABLE`,
+      headers: auth(),
+    });
+    const linhas = (res.json() as { data: { linhas: { descricao: string }[] } }).data.linhas;
+    expect(linhas.some((l) => l.descricao.startsWith('Energia'))).toBe(false);
+  });
+
+  it('a mensalidade do aluno entra na previsão de "a receber"', async () => {
+    const futuro = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 4, 1));
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/finance/previsao?mes=${iso(futuro)}&direcao=RECEIVABLE`,
+      headers: auth(),
+    });
+    const d = (res.json() as { data: { aReceberCentavos: number; linhas: { origem: string }[] } })
+      .data;
+    expect(d.aReceberCentavos).toBe(30000);
+    expect(d.linhas.some((l) => l.origem === 'CONTRATO')).toBe(true);
+  });
+
+  it('o horizonte devolve vários meses de uma vez', async () => {
+    const hoje = new Date();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/finance/previsao?mes=${iso(new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, 1)))}&meses=6`,
+      headers: auth(),
+    });
+    expect(res.statusCode).toBe(200);
+    const meses = (res.json() as { data: { meses: { mes: string; aPagarCentavos: number }[] } })
+      .data.meses;
+    expect(meses).toHaveLength(6);
+    /* Todos os seis trazem pelo menos o aluguel: é exatamente a
+       pergunta "se eu olhar seis meses pra frente". */
+    expect(meses.every((m) => m.aPagarCentavos >= 250000)).toBe(true);
+  });
+
+  /* ================================================================
+   * CORRIGIR E EXCLUIR UM LANÇAMENTO
+   * ============================================================== */
+
+  it('corrigir um lançamento muda só ele, e o molde continua o que era', async () => {
+    const { rows } = await tx((c) =>
+      c.query<{ id: string; recurrence_id: string }>(
+        `SELECT id, recurrence_id FROM finance_entries
+          WHERE description LIKE 'Aluguel do salão%' AND cancelled_at IS NULL
+          ORDER BY due_date LIMIT 1`,
+      ),
+    );
+    const alvo = rows[0]!;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/finance/lancamentos/${alvo.id}`,
+      headers: auth(),
+      payload: { descricao: 'Aluguel do salão (corrigido)', valor: '2.750,00' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const depois = await tx((c) =>
+      c.query<{ description: string; amount_cents: string }>(
+        'SELECT description, amount_cents::text FROM finance_entries WHERE id = $1',
+        [alvo.id],
+      ),
+    );
+    expect(depois.rows[0]).toMatchObject({
+      description: 'Aluguel do salão (corrigido)',
+      amount_cents: '275000',
+    });
+
+    /* Os IRMÃOS não mudaram: a correção é de uma linha, não do molde. */
+    const irmaos = await tx((c) =>
+      c.query<{ amount_cents: string }>(
+        'SELECT amount_cents::text FROM finance_entries WHERE recurrence_id = $1 AND id <> $2',
+        [alvo.recurrence_id, alvo.id],
+      ),
+    );
+    expect(irmaos.rows.every((r) => r.amount_cents === '250000')).toBe(true);
+  });
+
+  it('reduzir o valor abaixo do que já foi pago é recusado, com o que fazer', async () => {
+    const criado = await app.inject({
+      method: 'POST',
+      url: '/api/finance/lancamentos',
+      headers: auth(),
+      payload: {
+        direcao: 'PAYABLE',
+        descricao: 'Despesa com baixa parcial',
+        valor: '500,00',
+        vencimento: iso(new Date()),
+      },
+    });
+    const lancamento = (criado.json() as { data: { id: string } }).data.id;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/finance/lancamentos/${lancamento}/pagamentos`,
+      headers: auth(),
+      payload: { valor: '300,00', metodo: 'PIX' },
+    });
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/finance/lancamentos/${lancamento}`,
+      headers: auth(),
+      payload: { valor: '200,00' },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toMatchObject({
+      error: { message: expect.stringContaining('Estorne') },
+    });
+
+    /* E excluir também é recusado, pelo mesmo motivo: o dinheiro já
+       saiu, e cancelar deixaria no caixa um pagamento sem conta. */
+    const exc = await app.inject({
+      method: 'DELETE',
+      url: `/api/finance/lancamentos/${lancamento}`,
+      headers: auth(),
+    });
+    expect(exc.statusCode).toBe(422);
+  });
+
+  it('excluir CANCELA — a linha sai das listas e continua auditável', async () => {
+    const criado = await app.inject({
+      method: 'POST',
+      url: '/api/finance/lancamentos',
+      headers: auth(),
+      payload: {
+        direcao: 'PAYABLE',
+        descricao: 'Lançado por engano',
+        valor: '99,00',
+        vencimento: iso(new Date()),
+      },
+    });
+    const lancamento = (criado.json() as { data: { id: string } }).data.id;
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/finance/lancamentos/${lancamento}`,
+      headers: auth(),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const { rows } = await tx((c) =>
+      c.query<{ status: string; cancelled_at: string | null }>(
+        'SELECT status::text, cancelled_at FROM finance_entries WHERE id = $1',
+        [lancamento],
+      ),
+    );
+    expect(rows).toHaveLength(1);
+    /* O status vem do gatilho de 034 — sem ele a linha ficaria
+       CANCELADA e OPEN ao mesmo tempo. */
+    expect(rows[0]!.status).toBe('CANCELLED');
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: `/api/finance/lancamentos?direcao=PAYABLE`,
+      headers: auth(),
+    });
+    const ids = (lista.json() as { data: { id: string }[] }).data.map((l) => l.id);
+    expect(ids).not.toContain(lancamento);
+  });
 });

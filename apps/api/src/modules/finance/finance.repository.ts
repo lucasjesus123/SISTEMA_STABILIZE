@@ -763,3 +763,297 @@ export async function excluirContaFixa(client: TenantClient, id: string): Promis
   const r = await client.query('DELETE FROM finance_recurrences WHERE id = $1', [id]);
   return (r.rowCount ?? 0) > 0;
 }
+
+
+/**
+ * Corrige um lançamento já emitido.
+ *
+ * O QUE NÃO SE PODE MEXER: a direção e o vínculo. Uma despesa não vira
+ * cobrança por edição — os dois lados do caixa já contaram esse valor no
+ * saldo, e trocar o sinal de uma linha antiga reescreve o fechamento de
+ * um mês que alguém já leu. Quem errou o lado exclui e lança de novo.
+ *
+ * O VALOR NÃO PODE CAIR ABAIXO DO QUE JÁ FOI PAGO. O banco recusa por
+ * CHECK (`entry_not_overpaid`), e é bom que recuse — mas a mensagem dele
+ * fala de restrição, não do que fazer. Quem baixou R$ 300 e quer
+ * corrigir o total para R$ 200 precisa estornar a baixa primeiro.
+ *
+ * EDITAR UM LANÇAMENTO QUE NASCEU DE UMA CONTA FIXA vale só para ELE. O
+ * molde continua o que era, e o mês que vem nasce igual — é a mesma
+ * regra de "mudar o molde não reescreve o passado", vista do outro lado.
+ */
+export async function alterarLancamento(
+  client: TenantClient,
+  id: string,
+  campos: Partial<{
+    descricao: string;
+    categoria: string | null;
+    valorCentavos: Cents;
+    vencimento: Date;
+    competencia: Date | null;
+    contraparte: string | null;
+    observacao: string | null;
+  }>,
+): Promise<{ ok: boolean; motivo?: string }> {
+  const atual = await client.query<{ paid_cents: string; cancelled_at: string | null }>(
+    'SELECT paid_cents::text, cancelled_at FROM finance_entries WHERE id = $1',
+    [id],
+  );
+  const linha = atual.rows[0];
+  if (linha === undefined) return { ok: false };
+
+  if (linha.cancelled_at !== null) {
+    return { ok: false, motivo: 'Este lançamento foi cancelado e não pode mais ser alterado.' };
+  }
+
+  const pago = Number(linha.paid_cents);
+  if (campos.valorCentavos !== undefined && campos.valorCentavos < pago) {
+    return {
+      ok: false,
+      motivo:
+        `Já foram baixados ${(pago / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} ` +
+        'neste lançamento. Estorne o pagamento antes de reduzir o valor.',
+    };
+  }
+
+  const sets: string[] = [];
+  const values: unknown[] = [id];
+  const põe = (coluna: string, valor: unknown): void => {
+    values.push(valor);
+    sets.push(`${coluna} = $${values.length}`);
+  };
+
+  if (campos.descricao !== undefined) põe('description', campos.descricao);
+  if (campos.categoria !== undefined) põe('category', campos.categoria);
+  if (campos.valorCentavos !== undefined) põe('amount_cents', campos.valorCentavos);
+  if (campos.vencimento !== undefined) põe('due_date', campos.vencimento);
+  if (campos.competencia !== undefined) põe('competence_date', campos.competencia);
+  if (campos.contraparte !== undefined) põe('supplier_name', campos.contraparte);
+  if (campos.observacao !== undefined) põe('notes', campos.observacao);
+
+  if (sets.length === 0) return { ok: true };
+
+  const r = await client.query(
+    `UPDATE finance_entries SET ${sets.join(', ')} WHERE id = $1 AND cancelled_at IS NULL`,
+    values,
+  );
+  if ((r.rowCount ?? 0) === 0) return { ok: false };
+
+  /* O STATUS É DERIVADO do valor e do vencimento, e quem o mantinha era
+     o gatilho sobre `finance_payments`. Mudar o valor ou a data por aqui
+     não passa por lá: uma conta que vencia amanhã e passou a vencer
+     ontem continuaria "em aberto" na tela até alguém dar uma baixa nela.
+     Recalculado pelo MESMO critério, para os dois nunca discordarem. */
+  await client.query(
+    `UPDATE finance_entries
+        SET status = CASE
+              WHEN cancelled_at IS NOT NULL      THEN 'CANCELLED'::entry_status
+              WHEN paid_cents >= amount_cents    THEN 'PAID'::entry_status
+              WHEN paid_cents > 0                THEN 'PARTIALLY_PAID'::entry_status
+              WHEN due_date < CURRENT_DATE       THEN 'OVERDUE'::entry_status
+              ELSE 'OPEN'::entry_status
+            END
+      WHERE id = $1`,
+    [id],
+  );
+
+  return { ok: true };
+}
+
+/**
+ * Cancela um lançamento.
+ *
+ * CANCELA, NÃO APAGA. A linha sai das listas e das somas — o gatilho de
+ * 034 põe o status em CANCELLED — e continua existindo para quem for
+ * auditar o mês. Apagar de verdade deixaria um buraco na sequência do
+ * extrato que ninguém consegue explicar depois.
+ *
+ * COM BAIXA, NÃO CANCELA. O dinheiro já entrou ou saiu; cancelar deixaria
+ * no caixa um pagamento sem conta que o justifique. Estorna-se a baixa
+ * primeiro — uma etapa a mais, e a que deixa rastro.
+ */
+export async function cancelarLancamento(
+  client: TenantClient,
+  id: string,
+): Promise<{ ok: boolean; motivo?: string }> {
+  const atual = await client.query<{ paid_cents: string; cancelled_at: string | null }>(
+    'SELECT paid_cents::text, cancelled_at FROM finance_entries WHERE id = $1',
+    [id],
+  );
+  const linha = atual.rows[0];
+  if (linha === undefined) return { ok: false };
+  if (linha.cancelled_at !== null) return { ok: true };
+
+  if (Number(linha.paid_cents) > 0) {
+    return {
+      ok: false,
+      motivo:
+        'Este lançamento já teve baixa. Estorne o pagamento antes de excluí-lo — senão o caixa fica com um pagamento sem conta que o explique.',
+    };
+  }
+
+  await client.query('UPDATE finance_entries SET cancelled_at = now() WHERE id = $1', [id]);
+  return { ok: true };
+}
+
+/* --------------------------------------------------------------------
+ * PREVISÃO — o que ainda não existe, e vai existir
+ *
+ * O BURACO QUE ISTO FECHA. Os lançamentos recorrentes são
+ * materializados até o mês corrente, e não além: uma conta a pagar
+ * criada com um ano de antecedência ficaria congelada no valor de hoje,
+ * e subir o aluguel em março não mudaria os onze meses já emitidos —
+ * exatamente o contrário do que se espera do futuro.
+ *
+ * Só que a consequência disso era a tela dizer "Nada neste mês" em
+ * setembro para uma academia com R$ 4.567 de conta fixa por mês. O
+ * número estava certo e a resposta estava errada: quem olha o mês que
+ * vem quer saber o que vai ter de pagar, e "nada" é a única resposta
+ * que aquela tela não podia dar.
+ *
+ * A SAÍDA NÃO É MATERIALIZAR O FUTURO, é CALCULÁ-LO na hora. O que vem
+ * daqui não é um lançamento: é a projeção dele. Não tem id, não recebe
+ * baixa e sai da tela no instante em que o molde muda — que é
+ * precisamente o comportamento certo para uma conta que ainda não
+ * venceu.
+ * ------------------------------------------------------------------ */
+
+export interface LinhaPrevista {
+  /** Sempre `null`: previsão não é lançamento e não tem identidade. */
+  readonly id: null;
+  readonly direcao: Direcao;
+  readonly descricao: string;
+  readonly categoria: string | null;
+  readonly valorCentavos: number;
+  readonly vencimento: string;
+  readonly contraparte: string | null;
+  /** De onde a projeção veio — para a tela saber onde mandar quem quer mexer. */
+  readonly origem: 'CONTA_FIXA' | 'CONTRATO';
+  readonly origemId: string;
+}
+
+/**
+ * O que ainda vai nascer no mês, e ainda não nasceu.
+ *
+ * EXCLUI O QUE JÁ EXISTE. Uma conta fixa cujo lançamento do mês já foi
+ * gerado não aparece aqui — senão o total do mês contaria o aluguel duas
+ * vezes, uma como lançamento e outra como previsão. É a mesma chave da
+ * idempotência da geração: (molde, competência).
+ */
+export async function previsaoDoMes(
+  client: TenantClient,
+  mes: Date,
+  direcao?: Direcao,
+): Promise<LinhaPrevista[]> {
+  const { rows: fixas } = await client.query<{
+    origem_id: string;
+    direcao: Direcao;
+    descricao: string;
+    categoria: string | null;
+    valor: string;
+    vence: string;
+    contraparte: string | null;
+  }>(
+    `WITH alvo AS (SELECT date_trunc('month', $1::date)::date AS m)
+     SELECT r.id AS origem_id, r.direction AS direcao,
+            r.description || ' ' || to_char(a.m, 'MM/YYYY') AS descricao,
+            r.category AS categoria, r.amount_cents::text AS valor,
+            GREATEST(
+              (a.m + (r.billing_day - 1) * INTERVAL '1 day')::date,
+              r.starts_on
+            )::text AS vence,
+            COALESCE(s.full_name, r.supplier_name) AS contraparte
+       FROM finance_recurrences r
+       CROSS JOIN alvo a
+       LEFT JOIN students s ON s.id = r.student_id
+      WHERE r.is_active
+        AND r.amount_cents > 0
+        AND ($2::text IS NULL OR r.direction::text = $2)
+        AND a.m >= date_trunc('month', r.starts_on)
+        /* O passo do ciclo, contado em MESES a partir do início — a
+           mesma conta da geração, para a previsão e o que nasce nunca
+           discordarem sobre em qual mês a conta cai. */
+        AND MOD(
+              (EXTRACT(YEAR FROM a.m)::int * 12 + EXTRACT(MONTH FROM a.m)::int)
+              - (EXTRACT(YEAR FROM r.starts_on)::int * 12 + EXTRACT(MONTH FROM r.starts_on)::int),
+              CASE r.cycle::text
+                WHEN 'MONTHLY' THEN 1 WHEN 'QUARTERLY' THEN 3
+                WHEN 'SEMIANNUAL' THEN 6 WHEN 'ANNUAL' THEN 12 ELSE 1
+              END
+            ) = 0
+        AND r.cycle::text IN ('MONTHLY','QUARTERLY','SEMIANNUAL','ANNUAL')
+        AND (r.ends_on IS NULL OR a.m <= date_trunc('month', r.ends_on)::date)
+        AND NOT EXISTS (
+          SELECT 1 FROM finance_entries e
+           WHERE e.recurrence_id = r.id
+             AND e.competence_date = a.m
+             AND e.cancelled_at IS NULL
+        )`,
+    [mes, direcao ?? null],
+  );
+
+  /* A MENSALIDADE DO ALUNO É A OUTRA METADE DA PERGUNTA. "Quanto eu tenho
+     para receber no mês que vem" só tem resposta com ela — as contas
+     fixas a receber são a exceção numa academia, e o contrato é a regra. */
+  const { rows: contratos } =
+    direcao === 'PAYABLE'
+      ? { rows: [] as typeof fixas }
+      : await client.query<{
+          origem_id: string;
+          direcao: Direcao;
+          descricao: string;
+          categoria: string | null;
+          valor: string;
+          vence: string;
+          contraparte: string | null;
+        }>(
+          `WITH alvo AS (SELECT date_trunc('month', $1::date)::date AS m)
+           SELECT c.id AS origem_id, 'RECEIVABLE'::entry_direction AS direcao,
+                  'Mensalidade ' || to_char(a.m, 'MM/YYYY') AS descricao,
+                  'Mensalidade' AS categoria, c.amount_cents::text AS valor,
+                  GREATEST(
+                    (a.m + (COALESCE(c.billing_day, 10) - 1) * INTERVAL '1 day')::date,
+                    c.starts_on
+                  )::text AS vence,
+                  s.full_name AS contraparte
+             FROM student_contracts c
+             JOIN students s ON s.id = c.student_id
+             CROSS JOIN alvo a
+            WHERE c.is_active
+              AND c.cycle = 'MONTHLY'
+              AND c.amount_cents > 0
+              AND a.m >= date_trunc('month', c.starts_on)
+              /* PEDIU PARA SAIR não entra na previsão: o contrato vale
+                 até o fim do período pago e não gera cobrança nova. */
+              AND NOT c.encerrar_no_fim_do_periodo
+              AND (c.ends_on IS NULL OR a.m <= date_trunc('month', c.ends_on)::date)
+              AND s.status IN ('ACTIVE', 'LEAD')
+              AND NOT EXISTS (
+                SELECT 1 FROM finance_entries e
+                 WHERE e.contract_id = c.id
+                   AND e.competence_date = a.m
+                   AND e.cancelled_at IS NULL
+              )`,
+          [mes],
+        );
+
+  const converter = (
+    r: (typeof fixas)[number],
+    origem: 'CONTA_FIXA' | 'CONTRATO',
+  ): LinhaPrevista => ({
+    id: null,
+    direcao: r.direcao,
+    descricao: r.descricao,
+    categoria: r.categoria,
+    valorCentavos: Number(r.valor),
+    vencimento: r.vence,
+    contraparte: r.contraparte,
+    origem,
+    origemId: r.origem_id,
+  });
+
+  return [
+    ...fixas.map((r) => converter(r, 'CONTA_FIXA')),
+    ...contratos.map((r) => converter(r, 'CONTRATO')),
+  ].sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+}

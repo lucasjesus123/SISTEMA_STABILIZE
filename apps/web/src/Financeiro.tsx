@@ -175,6 +175,7 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
   const [pedidoDeVencidos, setPedidoDeVencidos] = useState(0);
   const [mes, setMes] = useState(() => new Date());
   const [resumo, setResumo] = useState<api.ResumoFinanceiro | null>(null);
+  const [previsao, setPrevisao] = useState<api.PrevisaoDoMes | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const { de, ate } = useMemo(() => limitesDoMes(mes), [mes]);
@@ -193,6 +194,19 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
   }, [de, ate, podeVerResumo]);
 
   useEffect(carregarResumo, [carregarResumo]);
+
+  useEffect(() => {
+    if (!podeVerResumo) return undefined;
+    let vivo = true;
+    setPrevisao(null);
+    void api
+      .buscarPrevisao(de)
+      .then((r) => vivo && setPrevisao(r.data))
+      .catch(() => vivo && setPrevisao(null));
+    return () => {
+      vivo = false;
+    };
+  }, [de, podeVerResumo]);
 
   const andar = (passo: number): void =>
     setMes((m) => new Date(m.getFullYear(), m.getMonth() + passo, 1));
@@ -227,6 +241,7 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
       {resumo !== null && (
         <Cartoes
           resumo={resumo}
+          previsao={previsao}
           aoFiltrarVencidos={() => {
             setPainel('receber');
             setPedidoDeVencidos((v) => v + 1);
@@ -281,12 +296,22 @@ export function Financeiro({ principal }: { principal: Principal }): ReactNode {
 
 function Cartoes({
   resumo,
+  previsao,
   aoFiltrarVencidos,
 }: {
   resumo: api.ResumoFinanceiro;
+  previsao: api.PrevisaoDoMes | null;
   aoFiltrarVencidos: () => void;
 }): ReactNode {
   const positivo = resumo.saldoRealizadoCentavos >= 0;
+
+  /* O MÊS QUE AINDA NÃO CHEGOU tem os dois números zerados — não há
+     lançamento nenhum nele —, e "A pagar no mês: R$ 0,00" em setembro é
+     a resposta errada para uma academia com R$ 4.567 de conta fixa. O
+     cartão passa a SOMAR o previsto e a dizer, embaixo, quanto do total
+     ainda não virou lançamento. */
+  const previstoAPagar = previsao?.aPagarCentavos ?? 0;
+  const previstoAReceber = previsao?.aReceberCentavos ?? 0;
 
   return (
     <section className="fin-topo">
@@ -333,13 +358,21 @@ function Cartoes({
         />
         <Kpi
           rotulo="A receber no mês"
-          valor={resumo.aReceberCentavos}
-          nota={`${formatCents(resumo.recebidoCentavos)} já entrou`}
+          valor={resumo.aReceberCentavos + previstoAReceber}
+          nota={
+            previstoAReceber > 0
+              ? `${formatCents(previstoAReceber)} ainda vai ser lançado`
+              : `${formatCents(resumo.recebidoCentavos)} já entrou`
+          }
         />
         <Kpi
           rotulo="A pagar no mês"
-          valor={resumo.aPagarCentavos}
-          nota={`${formatCents(resumo.pagoCentavos)} já saiu`}
+          valor={resumo.aPagarCentavos + previstoAPagar}
+          nota={
+            previstoAPagar > 0
+              ? `${formatCents(previstoAPagar)} ainda vai ser lançado`
+              : `${formatCents(resumo.pagoCentavos)} já saiu`
+          }
         />
       </div>
     </section>
@@ -400,6 +433,7 @@ function Lancamentos({
   const [soVencidos, setSoVencidos] = useState(false);
   const [baixando, setBaixando] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
+  const [editando, setEditando] = useState<api.Lancamento | null>(null);
   const [versao, setVersao] = useState(0);
   /* AS CONTAS FIXAS MORAM AQUI, e não numa aba à parte. O aluguel é uma
      conta a pagar — separá-lo numa aba própria obriga quem procura "o
@@ -409,6 +443,17 @@ function Lancamentos({
   const [fixas, setFixas] = useState<api.ContaFixa[] | null>(null);
   const [verFixas, setVerFixas] = useState(false);
   const [editandoFixa, setEditandoFixa] = useState<api.ContaFixa | null>(null);
+  /* O QUE AINDA NÃO EXISTE NESTE MÊS. Os lançamentos recorrentes são
+     materializados até o mês corrente e não além — um ano de contas
+     criado hoje ficaria congelado no valor de hoje, e subir o aluguel em
+     março não mudaria os onze meses já emitidos.
+
+     A consequência era a tela dizer "Nada neste mês" em setembro para
+     uma academia com R$ 4.567 de conta fixa por mês. O número estava
+     certo e a resposta estava errada: quem olha o mês que vem quer saber
+     o que vai ter de pagar, e "nada" é a única resposta que aquela tela
+     não podia dar. */
+  const [previsao, setPrevisao] = useState<api.PrevisaoDoMes | null>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -420,6 +465,18 @@ function Lancamentos({
       vivo = false;
     };
   }, [direcao, versao]);
+
+  useEffect(() => {
+    let vivo = true;
+    setPrevisao(null);
+    void api
+      .buscarPrevisao(de, direcao)
+      .then((r) => vivo && setPrevisao(r.data))
+      .catch(() => vivo && setPrevisao(null));
+    return () => {
+      vivo = false;
+    };
+  }, [direcao, de, versao]);
 
   useEffect(() => {
     let vivo = true;
@@ -477,19 +534,25 @@ function Lancamentos({
     );
   }
 
-  if (criando) {
+  if (criando || editando !== null) {
     return (
       <NovoLancamento
         direcao={direcao}
-        aoSair={() => setCriando(false)}
+        lancamento={editando}
+        aoSair={() => {
+          setCriando(false);
+          setEditando(null);
+        }}
         aoCriar={() => {
           setCriando(false);
+          setEditando(null);
           recarregar();
         }}
       />
     );
   }
 
+  const previstas = previsao?.linhas ?? [];
   const fixasAtivas = (fixas ?? []).filter((f) => f.ativa);
   const porMes = fixasAtivas.reduce(
     (a, f) => a + porMesDoCiclo(f.valorCentavos, f.ciclo),
@@ -580,7 +643,7 @@ function Lancamentos({
       {erro !== null && <Erro mensagem={erro} />}
       {ordenadas === null ? (
         <Carregando rotulo="Carregando lançamentos" />
-      ) : ordenadas.length === 0 ? (
+      ) : ordenadas.length === 0 && previstas.length === 0 ? (
         <Vazio
           titulo="Nada neste mês."
           descricao={
@@ -612,12 +675,76 @@ function Lancamentos({
                   lancamento={l}
                   aberta={baixando === l.id}
                   aoAbrir={() => setBaixando(baixando === l.id ? null : l.id)}
+                  aoEditar={() => setEditando(l)}
                   aoBaixar={() => {
                     setBaixando(null);
                     recarregar();
                   }}
                 />
               ))}
+
+              {/* ==================================================
+                  O QUE AINDA VAI NASCER, depois do que já nasceu.
+
+                  MISTURAR AS DUAS NA MESMA ORDENAÇÃO SERIA PIOR: uma
+                  linha prevista não tem botão de baixa, e uma tabela em
+                  que metade das linhas tem ação e a outra metade não,
+                  intercaladas por data, é uma tabela em que a pessoa
+                  clica no lugar errado. Separadas por um cabeçalho que
+                  diz o que são e quanto somam, a leitura é uma só:
+                  "isto eu devo, aquilo eu vou dever".
+                  ================================================== */}
+              {previstas.length > 0 && (
+                <>
+                  <tr className="fin-previsto-cabeca">
+                    <td colSpan={4}>
+                      <span className="fin-previsto-titulo">
+                        Ainda vai vencer neste mês
+                      </span>
+                      <span className="fin-previsto-apoio">
+                        {previstas.length} conta{previstas.length === 1 ? '' : 's'} que{' '}
+                        {previstas.length === 1 ? 'nasce' : 'nascem'} sozinha
+                        {previstas.length === 1 ? '' : 's'} — ainda não{' '}
+                        {previstas.length === 1 ? 'foi lançada' : 'foram lançadas'}, e por isso não
+                        {previstas.length === 1 ? ' recebe' : ' recebem'} baixa.
+                      </span>
+                    </td>
+                    <td className="fin-col-num" colSpan={2}>
+                      <span className="dinheiro fin-previsto-total">
+                        {formatCents(
+                          previstas.reduce((a, l) => a + l.valorCentavos, 0),
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                  {previstas.map((l) => (
+                    <tr key={`${l.origemId}-${l.vencimento}`} className="fin-linha fin-prevista">
+                      <td className="fin-data">
+                        <span className="fin-dia">{diaMes(l.vencimento)}</span>
+                      </td>
+                      <td>
+                        <span className="celula-forte">{l.contraparte ?? l.descricao}</span>
+                        <span className="celula-apoio">
+                          {l.contraparte !== null ? l.descricao : (l.categoria ?? '—')}
+                          <span className="fin-repete">
+                            {l.origem === 'CONTRATO' ? 'mensalidade' : 'repete'}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="fin-col-num">
+                        <span className="dinheiro">{l.valorFormatado}</span>
+                      </td>
+                      <td className="fin-col-num">
+                        <span className="fin-nada">—</span>
+                      </td>
+                      <td>
+                        <span className="fin-selo previsto">previsto</span>
+                      </td>
+                      <td />
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
         </div>
@@ -630,11 +757,13 @@ function Linha({
   lancamento: l,
   aberta,
   aoAbrir,
+  aoEditar,
   aoBaixar,
 }: {
   lancamento: api.Lancamento;
   aberta: boolean;
   aoAbrir: () => void;
+  aoEditar: () => void;
   aoBaixar: () => void;
 }): ReactNode {
   const situacao = situacaoReal(l);
@@ -688,11 +817,22 @@ function Linha({
           <span className={`fin-selo ${TOM_DO_STATUS[situacao]}`}>{NOME_DO_STATUS[situacao]}</span>
         </td>
         <td className="fin-acao">
-          {!quitado && (
-            <button type="button" className="fin-botao-baixa" onClick={aoAbrir}>
-              {aberta ? 'Fechar' : 'Dar baixa'}
+          {/* EDITAR EXISTIA EM LUGAR NENHUM. Um lançamento só podia
+              nascer e receber baixa: quem digitou "alugue" no lugar de
+              "aluguel", errou o valor por um zero ou lançou a despesa
+              duas vezes ficava com aquilo no extrato para sempre. Um
+              financeiro em que o erro é permanente é um financeiro que
+              as pessoas param de usar. */}
+          <span className="fin-acoes">
+            <button type="button" className="botao-texto" onClick={aoEditar}>
+              Editar
             </button>
-          )}
+            {!quitado && (
+              <button type="button" className="fin-botao-baixa" onClick={aoAbrir}>
+                {aberta ? 'Fechar' : 'Dar baixa'}
+              </button>
+            )}
+          </span>
         </td>
       </tr>
       {aberta && (
@@ -891,22 +1031,36 @@ function FormularioDeBaixa({
 
 function NovoLancamento({
   direcao,
+  lancamento,
   aoSair,
   aoCriar,
 }: {
   direcao: api.DirecaoLancamento;
+  /* PRESENTE = editar. O formulário é o MESMO de propósito: os campos
+     são os mesmos, e manter dois iguais garante que um dia um deles
+     ganhe uma validação que o outro não tem. */
+  lancamento?: api.Lancamento | null;
   aoSair: () => void;
   aoCriar: () => void;
 }): ReactNode {
+  const editando = lancamento !== null && lancamento !== undefined;
   const receber = direcao === 'RECEIVABLE';
-  const [descricao, setDescricao] = useState('');
-  const [valor, setValor] = useState('');
+  const [descricao, setDescricao] = useState(lancamento?.descricao ?? '');
+  const [valor, setValor] = useState(
+    lancamento === null || lancamento === undefined
+      ? ''
+      : (lancamento.valorCentavos / 100).toFixed(2).replace('.', ','),
+  );
   const [vencimento, setVencimento] = useState(() => {
+    if (lancamento !== null && lancamento !== undefined) return lancamento.vencimento.slice(0, 10);
     const h = new Date();
     return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
   });
-  const [categoria, setCategoria] = useState('');
-  const [quem, setQuem] = useState('');
+  const [categoria, setCategoria] = useState(lancamento?.categoria ?? '');
+  const [quem, setQuem] = useState(
+    !receber && lancamento?.fornecedor != null ? lancamento.fornecedor : '',
+  );
+  const [excluindo, setExcluindo] = useState(false);
   /* QUEM PAGA, quando não é aluno.
      Uma conta a receber SEM devedor é buraco de contabilidade, e o banco
      recusa: `entry_counterparty` exige aluno ou nome de quem paga. A
@@ -945,7 +1099,7 @@ function NovoLancamento({
        O banco recusaria de qualquer forma — mas recusaria com o texto
        genérico do CHECK, que não diz o que fazer. Dito antes de enviar,
        com o nome do campo, vira instrução em vez de parede. */
-    if (receber && quem === '' && pagador.trim() === '') {
+    if (!editando && receber && quem === '' && pagador.trim() === '') {
       setErro('Diga de quem é esta cobrança: escolha o aluno ou escreva quem vai pagar.');
       return;
     }
@@ -954,7 +1108,7 @@ function NovoLancamento({
        data na tela, faz quem cadastra escolher; deixar o sistema decidir
        — cair para 28, pular, empurrar para o dia 1º — seria ele tomando
        uma decisão sobre o contrato de outra pessoa. */
-    if (repete && Number(vencimento.slice(8, 10)) > 28) {
+    if (!editando && repete && Number(vencimento.slice(8, 10)) > 28) {
       setErro(
         'Para uma conta que se repete, escolha um vencimento até o dia 28 — é o maior dia que existe em todo mês, inclusive fevereiro.',
       );
@@ -963,6 +1117,18 @@ function NovoLancamento({
 
     setEnviando(true);
     try {
+      if (editando) {
+        await api.alterarLancamento(lancamento.id, {
+          descricao,
+          valor,
+          vencimento,
+          categoria: categoria.trim() === '' ? null : categoria.trim(),
+          ...(receber ? {} : { fornecedor: quem.trim() === '' ? null : quem.trim() }),
+        });
+        aoCriar();
+        return;
+      }
+
       if (repete) {
         /* O VENCIMENTO VIRA DUAS COISAS: a data em que a conta começa e
            o dia do mês em que ela cai. É o que a pessoa já respondeu —
@@ -1013,11 +1179,19 @@ function NovoLancamento({
         ← Voltar
       </button>
       <div className="secao-cabecalho">
-        <h1>{receber ? 'Nova cobrança' : 'Nova despesa'}</h1>
+        <h1>
+          {editando
+            ? `Editar ${receber ? 'cobrança' : 'despesa'}`
+            : receber
+              ? 'Nova cobrança'
+              : 'Nova despesa'}
+        </h1>
         <p>
-          {receber
-            ? 'Uma cobrança avulsa: matrícula, avaliação, produto. A mensalidade do contrato é gerada sozinha.'
-            : 'O que sai da academia: aluguel, energia, comissão, material.'}
+          {editando
+            ? 'A correção vale só para este lançamento. Se ele nasceu de uma conta fixa, o molde continua o que era e o mês que vem nasce igual.'
+            : receber
+              ? 'Uma cobrança avulsa: matrícula, avaliação, produto. A mensalidade do contrato é gerada sozinha.'
+              : 'O que sai da academia: aluguel, energia, comissão, material.'}
         </p>
       </div>
 
@@ -1055,6 +1229,17 @@ function NovoLancamento({
           <span className="campo-dica">{dataPorExtenso(vencimento) ?? 'Escolha a data do vencimento.'}</span>
         </label>
 
+        {/* O VÍNCULO COM O ALUNO NÃO SE EDITA. A ficha dele já mostra
+            esta cobrança, e trocá-la de dono por aqui moveria dinheiro de
+            uma ficha para outra sem nenhum rastro do porquê. Quem errou o
+            aluno exclui e lança de novo — o que fica auditado. */}
+        {editando && receber ? (
+          <p className="campo campo-meia">
+            <span className="campo-rotulo">Aluno</span>
+            <strong>{lancamento.aluno?.nome ?? lancamento.fornecedor ?? '—'}</strong>
+            <span className="campo-dica">Não muda por aqui.</span>
+          </p>
+        ) : (
         <label className="campo campo-meia">
           <span className="campo-rotulo">{receber ? 'Aluno' : 'Fornecedor'}</span>
           {receber ? (
@@ -1075,10 +1260,11 @@ function NovoLancamento({
             <input value={quem} onChange={(e) => setQuem(e.target.value)} placeholder="Imobiliária" />
           )}
         </label>
+        )}
 
         {/* Só aparece quando faz falta — e no primeiro dia da academia,
             sem nenhum aluno cadastrado, é o único caminho possível. */}
-        {receber && quem === '' && (
+        {!editando && receber && quem === '' && (
           <label className="campo campo-meia">
             <span className="campo-rotulo">Quem paga</span>
             <input
@@ -1108,6 +1294,12 @@ function NovoLancamento({
             que a pessoa acabou de escolher, em vez de repetir a
             pergunta com outras palavras.
             ================================================== */}
+        {/* A CAIXA "REPETE" NÃO APARECE NA EDIÇÃO. Um lançamento que já
+            existe não vira molde retroativamente — marcar isso aqui
+            criaria a regra E deixaria a linha original solta, duplicando
+            o mês corrente. Quem quer que aquilo passe a se repetir
+            cadastra a conta fixa, que é uma frase inteira acima. */}
+        {!editando && (
         <fieldset className={`campo campo-cheia fin-repete-bloco ${repete ? 'ligado' : ''}`}>
           <label className="fin-repete-chave">
             <input
@@ -1156,6 +1348,15 @@ function NovoLancamento({
             </div>
           )}
         </fieldset>
+        )}
+
+        {editando && lancamento.recorrenciaId !== null && (
+          <p className="campo campo-cheia fin-repete-aviso">
+            Este lançamento nasceu de uma <strong>conta fixa</strong>. A correção vale só para ele;
+            para mudar todos os próximos, edite a conta fixa em <strong>gerenciar</strong>, na
+            lista.
+          </p>
+        )}
 
         {erro !== null && (
           <p className="mensagem-erro campo-cheia" role="alert">
@@ -1164,11 +1365,40 @@ function NovoLancamento({
         )}
 
         <div className="formulario-acoes campo-cheia">
+          {/* EXCLUIR FICA À ESQUERDA, longe do botão que se aperta sem
+              olhar. E cancela em vez de apagar: a linha sai das listas e
+              continua existindo para quem for auditar o mês. */}
+          {editando && (
+            <button
+              type="button"
+              className="botao-texto-perigo fin-excluir"
+              disabled={enviando || excluindo}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Excluir "${lancamento.descricao}"?\n\nEle sai das listas e das somas. O registro continua guardado para auditoria — não some do histórico.`,
+                  )
+                ) {
+                  setExcluindo(true);
+                  setErro(null);
+                  void api
+                    .excluirLancamento(lancamento.id)
+                    .then(() => aoCriar())
+                    .catch((x: unknown) => {
+                      setErro(x instanceof api.ApiError ? x.message : 'Não foi possível excluir.');
+                      setExcluindo(false);
+                    });
+                }
+              }}
+            >
+              {excluindo ? 'Excluindo…' : 'Excluir'}
+            </button>
+          )}
           <button type="button" className="botao-secundario" onClick={aoSair}>
             Cancelar
           </button>
-          <button type="submit" className="botao-acao" disabled={enviando}>
-            {enviando ? 'Salvando…' : repete ? 'Cadastrar e lançar' : 'Lançar'}
+          <button type="submit" className="botao-acao" disabled={enviando || excluindo}>
+            {enviando ? 'Salvando…' : editando ? 'Salvar' : repete ? 'Cadastrar e lançar' : 'Lançar'}
           </button>
         </div>
       </form>
@@ -2481,7 +2711,12 @@ function Relatorios({ de, ate, mes }: { de: Date; ate: Date; mes: Date }): React
       </div>
 
       {/* ==================================================
-          2. ESTOU MELHORANDO
+          2. O QUE JÁ ESTÁ COMPROMETIDO DAQUI PARA A FRENTE
+          ================================================== */}
+      <Horizonte mes={mes} />
+
+      {/* ==================================================
+          3. ESTOU MELHORANDO
           ================================================== */}
       <h2 className="plt-titulo rel-secao">Doze meses de caixa</h2>
       <GraficoDeCaixa fluxo={dados.fluxo} mesEmFoco={chaveDoMes} />
@@ -2548,6 +2783,138 @@ function Relatorios({ de, ate, mes }: { de: Date; ate: Date; mes: Date }): React
       <PapelTimbrado de={de} ate={ate} mes={mes} />
     </>
   );
+}
+
+/**
+ * Os próximos meses — o que já está comprometido antes de o mês começar.
+ *
+ * A PERGUNTA QUE ISTO RESPONDE não tem outra tela: "se eu olhar seis
+ * meses para a frente, quanto eu tenho de conta para pagar?". O
+ * financeiro sabia responder sobre o passado (o gráfico de doze meses) e
+ * sobre hoje (as listas), e emudecia sobre o futuro — que é justamente
+ * onde ainda dá para fazer alguma coisa a respeito.
+ *
+ * SÃO NÚMEROS PROJETADOS, e a tabela diz isso. Vêm dos contratos ativos
+ * e das contas fixas de hoje: um aluno que sair em outubro continua
+ * contado até alguém encerrar o contrato dele. É uma projeção, não uma
+ * promessa — e é infinitamente melhor do que a conta que ninguém faz.
+ */
+function Horizonte({ mes }: { mes: Date }): ReactNode {
+  const [meses, setMeses] = useState<api.PrevisaoDoMes[] | null>(null);
+  const [quantos, setQuantos] = useState(6);
+
+  useEffect(() => {
+    let vivo = true;
+    setMeses(null);
+    void api
+      .buscarPrevisaoDosMeses(mes, quantos)
+      .then((r) => vivo && setMeses(r.data.meses))
+      .catch(() => vivo && setMeses([]));
+    return () => {
+      vivo = false;
+    };
+  }, [mes, quantos]);
+
+  const comAlgo = (meses ?? []).filter((m) => m.aPagarCentavos > 0 || m.aReceberCentavos > 0);
+
+  return (
+    <>
+      <div className="rel-barra-topo">
+        <div>
+          <h2 className="plt-titulo rel-secao">O que já está comprometido</h2>
+          <p className="rel-apoio">
+            Projetado do que se repete: os contratos ativos dos alunos e as contas fixas da
+            academia. Não inclui o que ainda vai ser lançado à mão.
+          </p>
+        </div>
+        <label className="campo fin-selecao rel-horizonte-escolha">
+          <span className="campo-rotulo">Horizonte</span>
+          <select value={quantos} onChange={(e) => setQuantos(Number(e.target.value))}>
+            <option value={3}>3 meses</option>
+            <option value={6}>6 meses</option>
+            <option value={12}>12 meses</option>
+          </select>
+        </label>
+      </div>
+
+      {meses === null ? (
+        <Carregando rotulo="Projetando os próximos meses" />
+      ) : comAlgo.length === 0 ? (
+        <p className="rel-apoio">
+          Nada se repete ainda. Cadastre as contas fixas em <strong>A pagar</strong> e os planos
+          dos alunos no cadastro deles — é o que faz esta projeção existir.
+        </p>
+      ) : (
+        <div className="rolo">
+          <table className="tabela rel-horizonte">
+            <thead>
+              <tr>
+                <th scope="col">Mês</th>
+                <th scope="col" className="fin-col-num">
+                  Entra
+                </th>
+                <th scope="col" className="fin-col-num">
+                  Sai
+                </th>
+                <th scope="col" className="fin-col-num">
+                  Sobra
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {(meses ?? []).map((m) => (
+                <tr key={m.mes}>
+                  <td className="celula-forte">{nomeDoMes(m.mes)}</td>
+                  <td className="fin-col-num">
+                    <span className="dinheiro">{m.aReceberFormatado}</span>
+                  </td>
+                  <td className="fin-col-num">
+                    <span className="dinheiro">{m.aPagarFormatado}</span>
+                  </td>
+                  <td className="fin-col-num">
+                    <span
+                      className={`dinheiro ${m.saldoCentavos < 0 ? 'fin-negativo' : ''}`}
+                    >
+                      {m.saldoFormatado}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {/* A SOMA DO PERÍODO, e não só as linhas. "Quanto eu tenho
+                  de conta pelos próximos seis meses" é uma pergunta
+                  diferente de "quanto em cada mês", e é a que decide se
+                  dá para comprar o equipamento agora. */}
+              <tr className="rel-horizonte-soma">
+                <td className="celula-forte">Total do período</td>
+                <td className="fin-col-num">
+                  <span className="dinheiro">
+                    {formatCents((meses ?? []).reduce((a, m) => a + m.aReceberCentavos, 0))}
+                  </span>
+                </td>
+                <td className="fin-col-num">
+                  <span className="dinheiro">
+                    {formatCents((meses ?? []).reduce((a, m) => a + m.aPagarCentavos, 0))}
+                  </span>
+                </td>
+                <td className="fin-col-num">
+                  <span className="dinheiro">
+                    {formatCents((meses ?? []).reduce((a, m) => a + m.saldoCentavos, 0))}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** "2026-09" vira "Setembro de 2026". */
+function nomeDoMes(iso: string): string {
+  const [ano, mes] = iso.split('-');
+  const d = new Date(Number(ano), Number(mes) - 1, 1);
+  return capitalizar(MES_ANO.format(d));
 }
 
 function CartaoDeResumo({
