@@ -125,7 +125,15 @@ else
     exit 1
   fi
   if [ "$tenant_id" = "$TENANT_DEMO" ]; then
-    amarelo "Esta é a academia de demonstração. Para removê-la inteira, use --apagar-demo."
+    echo
+    vermelho "  ATENÇÃO: esta é a academia de DEMONSTRAÇÃO."
+    vermelho "  As senhas dela são públicas — estão escritas no código do seed,"
+    vermelho "  que está no repositório. Zerar o movimento NÃO troca essas senhas:"
+    vermelho "  a equipe de demonstração continuaria de pé, com senha conhecida."
+    vermelho ""
+    vermelho "  Para entrar em produção, o certo é --apagar-demo e cadastrar a"
+    vermelho "  academia de verdade pelo painel da plataforma."
+    echo
   fi
 fi
 
