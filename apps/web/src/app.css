@@ -7043,3 +7043,41 @@
   padding-top: var(--e-2);
   border-top: 1px solid var(--fio);
 }
+
+/* ---------------------------------------------------------------------
+   HORÁRIOS NO CADASTRO DA PESSOA — resumo, não editor
+
+   A edição mora na tela que já existia. Aqui fica o número e a porta:
+   quem procura o horário do professor procura no cadastro do professor,
+   e o que faltava não era a tela — era achá-la.
+   ------------------------------------------------------------------- */
+.eq-horarios-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.eq-horarios-resumo p {
+  margin: 2px 0 0;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--texto-apoio);
+  max-width: 62ch;
+}
+.eq-horarios-depois {
+  margin: 0;
+  padding: 10px var(--e-3);
+  border: 1px dashed var(--fio-forte);
+  border-radius: var(--raio-md);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--texto-apoio);
+}
+.eq-horarios-depois strong {
+  color: var(--texto);
+}

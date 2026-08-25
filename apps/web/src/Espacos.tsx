@@ -42,7 +42,7 @@ const PALETA = [
   '#4a6b8a',
 ];
 
-export function Espacos({ aoFechar }: { aoFechar: () => void }): ReactNode {
+export function Espacos({ aoFechar }: { aoFechar?: (() => void) | undefined }): ReactNode {
   const [salas, setSalas] = useState<api.Sala[] | null>(null);
   const [reservas, setReservas] = useState<api.Reserva[]>([]);
   const [erro, setErro] = useState<string | null>(null);
@@ -74,17 +74,23 @@ export function Espacos({ aoFechar }: { aoFechar: () => void }): ReactNode {
 
   return (
     <>
-      <div className="secao-cabecalho linha-cabecalho">
-        <div>
-          <h1>Espaços</h1>
-          <p>
-            Os lugares da academia — mezanino, hall, sala de bike — e o que ocupa cada um.
-          </p>
+      {/* O CABEÇALHO E O "VOLTAR" SÓ APARECEM quando esta tela foi
+          aberta a partir da Agenda. Dentro de "A academia" ela é uma ABA
+          — e uma aba com o próprio h1 e um botão de voltar para outro
+          lugar é o que faz o operador achar que se perdeu. */}
+      {aoFechar !== undefined && (
+        <div className="secao-cabecalho linha-cabecalho">
+          <div>
+            <h1>Espaços</h1>
+            <p>
+              Os lugares da academia — mezanino, hall, sala de bike — e o que ocupa cada um.
+            </p>
+          </div>
+          <button type="button" className="botao-secundario" onClick={aoFechar}>
+            ← Voltar para a agenda
+          </button>
         </div>
-        <button type="button" className="botao-secundario" onClick={aoFechar}>
-          ← Voltar para a agenda
-        </button>
-      </div>
+      )}
 
       {erro !== null && <Erro mensagem={erro} />}
 

@@ -14,6 +14,7 @@ import {
   type Academia as AcademiaDados,
 } from './api.js';
 import { prepararImagem } from './imagem.js';
+import { Espacos } from './Espacos.jsx';
 import { Carregando, Erro } from './ui.jsx';
 import {
   e164ParaMascara,
@@ -76,7 +77,7 @@ const VAZIO: Formulario = {
  * que precisou dela primeiro. É por isso que ninguém acha nenhuma. Esta
  * tela é o começo do endereço único; o que vier depois entra aqui.
  */
-type Secao = 'identidade' | 'valores';
+type Secao = 'identidade' | 'valores' | 'espacos';
 
 export function Academia(): ReactNode {
   const [secao, setSecao] = useState<Secao>('identidade');
@@ -108,9 +109,33 @@ export function Academia(): ReactNode {
         >
           Tabela de valores
         </button>
+        {/* ESPAÇOS ENTRA AQUI porque é isto: uma coisa DA ACADEMIA, do
+            mesmo tipo do endereço e da tabela de preços. Ele existia
+            como um botão secundário dentro da Agenda — que é onde o
+            espaço é USADO, e não onde ele é cadastrado. Quem procura
+            "onde eu cadastro os campos" procura em "A academia", e a
+            resposta estava a dois cliques de distância na tela errada.
+
+            O botão da Agenda continua lá: quem está montando a semana e
+            percebe que falta uma sala não deveria ter de sair do que
+            estava fazendo. */}
+        <button
+          type="button"
+          className={`acad-aba ${secao === 'espacos' ? 'ativa' : ''}`}
+          aria-current={secao === 'espacos' ? 'true' : undefined}
+          onClick={() => setSecao('espacos')}
+        >
+          Espaços
+        </button>
       </nav>
 
-      {secao === 'identidade' ? <Identidade /> : <TabelaDeValores />}
+      {secao === 'identidade' ? (
+        <Identidade />
+      ) : secao === 'espacos' ? (
+        <Espacos />
+      ) : (
+        <TabelaDeValores />
+      )}
     </>
   );
 }
