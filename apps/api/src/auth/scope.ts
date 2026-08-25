@@ -1,4 +1,4 @@
-import { permissionScope, type Permission, type Role } from '@stabilize/shared';
+import { scopeComAreas, type Permission, type Role } from '@stabilize/shared';
 import { forbidden } from '../http/errors.js';
 
 /**
@@ -24,6 +24,15 @@ export interface Principal {
   readonly role: Role;
   /** Preenchido quando o usuário é um aluno com acesso ao app. */
   readonly studentId?: string | undefined;
+  /**
+   * Áreas marcadas para esta pessoa. Ausente = o papel inteiro.
+   *
+   * O recorte é aplicado AQUI, no mesmo lugar onde o papel é conferido —
+   * e não na tela. Esconder a seção no menu não protege rota nenhuma: uma
+   * área que só existisse no front seria enfeite, e quem chamasse a rota
+   * direto entraria.
+   */
+  readonly areas?: readonly string[] | undefined;
 }
 
 /**
@@ -31,7 +40,7 @@ export interface Principal {
  * Lança 403 se o papel não tem a permissão.
  */
 export function resolveScope(principal: Principal, permission: Permission): AccessScope {
-  const declared = permissionScope(principal.role, permission);
+  const declared = scopeComAreas(principal.role, principal.areas ?? null, permission);
 
   if (declared === null) {
     throw forbidden('Seu perfil não tem acesso a esta funcionalidade.');

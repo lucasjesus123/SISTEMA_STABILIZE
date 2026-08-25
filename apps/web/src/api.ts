@@ -21,6 +21,18 @@ export interface Principal {
   role: string;
   roleLabel: string;
   permissions: string[];
+  /**
+   * As seções marcadas para esta pessoa, ou `null` para "tudo o que o
+   * papel permite".
+   *
+   * O MENU SE DESENHA POR AQUI quando existe recorte, e não só pelas
+   * permissões: duas seções podem compartilhar a mesma permissão — o
+   * Financeiro lista alunos para dizer de quem é a cobrança, e é
+   * `student:read` que abre a seção Alunos —, então marcar "só
+   * Financeiro" deixaria "Alunos" no menu. O servidor continua barrando
+   * pela interseção com o papel; isto aqui é o que a pessoa vê.
+   */
+  areas?: string[] | null;
   /** O fuso da ACADEMIA — é nele que o servidor valida a agenda. */
   timezone?: string;
   /** Entrou com senha provisória e precisa trocar antes de usar. */
@@ -1286,6 +1298,8 @@ export interface UsuarioDaEquipe {
   papel: PapelDaEquipe;
   telefone: string | null;
   cor: string | null;
+  /** Seções marcadas; `null` significa tudo o que o papel permite. */
+  areas: string[] | null;
   ativo: boolean;
   ultimoAcesso: string | null;
   precisaTrocarSenha: boolean;
@@ -1298,6 +1312,8 @@ export interface DadosDeUsuario {
   papel: PapelDaEquipe;
   telefone?: string | null;
   cor?: string | null;
+  /** `null` = tudo o que o papel permite. Lista = só essas seções. */
+  areas?: string[] | null;
 }
 
 export const criarUsuario = (dados: DadosDeUsuario & { email: string }) =>

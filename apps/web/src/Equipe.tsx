@@ -2,6 +2,13 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import * as api from './api.js';
 import { Carregando, Erro, Vazio } from './ui.jsx';
 import type { Principal } from './api.js';
+import {
+  AREAS,
+  AREA_DESCRICOES,
+  AREA_LABELS,
+  AREA_PERMISSIONS,
+  permissionsOf,
+} from '@stabilize/shared';
 
 /**
  * A equipe da academia — cadastrar, editar, desligar.
@@ -103,7 +110,7 @@ export function Equipe({ principal }: { principal: Principal }): ReactNode {
           <p>
             {lista === null
               ? 'Quem trabalha na academia e o que cada um alcança.'
-              : `${lista.filter((u) => u.ativo).length} ativos de ${lista.length} · o papel decide o que cada um enxerga, e a cor é como ele aparece na agenda.`}
+              : `${lista.filter((u) => u.ativo).length} ativos de ${lista.length} · o papel é o teto do que cada um pode, e as seções marcadas são o que ele enxerga.`}
           </p>
         </div>
         <button type="button" className="botao-acao" onClick={() => setEditando('novo')}>
@@ -325,8 +332,26 @@ function Formulario({
   const [papel, setPapel] = useState<api.PapelDaEquipe>(usuario?.papel ?? 'PROFESSIONAL');
   const [telefone, setTelefone] = useState(usuario?.telefone ?? '');
   const [cor, setCor] = useState(usuario?.cor ?? PALETA[0]!);
+  /* NULO É "TUDO DO PAPEL", que é o padrão e o que todo mundo que já
+     existia tem. A tela guarda os dois estados separados de propósito:
+     "não recortei" e "recortei para nenhuma" são coisas diferentes, e a
+     segunda é um erro que o formulário impede. */
+  const [recortar, setRecortar] = useState(usuario?.areas != null);
+  const [areas, setAreas] = useState<string[]>(usuario?.areas ?? []);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+
+  /* As seções que o PAPEL escolhido alcança. Mostrar as outras seria
+     oferecer o que o servidor recusaria: a conta é interseção, e marcar
+     "Financeiro" para uma recepção não daria financeiro a ninguém —
+     daria uma caixa marcada sem efeito, que é pior do que não oferecer. */
+  const permitidasDoPapel = permissionsOf(papel);
+  const areasDoPapel = AREAS.filter((a) =>
+    AREA_PERMISSIONS[a].some((p) => permitidasDoPapel.includes(p)),
+  );
+
+  const alternar = (a: string): void =>
+    setAreas((atual) => (atual.includes(a) ? atual.filter((x) => x !== a) : [...atual, a]));
 
   /* Um administrador não vê a opção "Dono" na lista: o servidor recusaria
      e a mensagem de erro depois de preencher o formulário inteiro é uma
@@ -336,10 +361,20 @@ function Formulario({
 
   const enviar = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
+    if (recortar && areas.length === 0) {
+      setErro('Marque ao menos uma seção — ou deixe "tudo do papel" para não recortar.');
+      return;
+    }
     setErro(null);
     setEnviando(true);
     try {
-      const dados = { nome, papel, telefone: telefone || null, cor };
+      const dados = {
+        nome,
+        papel,
+        telefone: telefone || null,
+        cor,
+        areas: recortar ? areas : null,
+      };
       if (novo) {
         const r = await api.criarUsuario({ ...dados, email: email.trim() });
         aoSalvar({ nome, senha: r.data.senhaProvisoria });
@@ -436,6 +471,74 @@ function Formulario({
           <span className="campo-dica">
             É por ela que os horários desta pessoa são reconhecidos no calendário.
           </span>
+        </fieldset>
+
+        {/* ==================================================
+            O QUE ESTA PESSOA ENXERGA
+
+            O papel diz o que ela PODE; aqui se diz o que ela FAZ. Quem
+            cuida do financeiro não abre prontuário de aluno, e até
+            agora a única forma de conseguir isso era não dar acesso
+            nenhum.
+
+            A conta é sempre interseção com o papel — marcar uma seção
+            nunca dá permissão que o papel não tenha —, e o corte vale no
+            servidor, não só no menu: a pessoa não vê e também não
+            alcança pela URL.
+            ================================================== */}
+        <fieldset className="campo campo-cheia eq-acessos">
+          <legend className="campo-rotulo">O que esta pessoa enxerga</legend>
+
+          <label className="eq-tudo">
+            <input
+              type="radio"
+              name="recorte"
+              checked={!recortar}
+              onChange={() => setRecortar(false)}
+            />
+            <span>
+              <strong>Tudo o que o papel permite</strong>
+              <span className="campo-dica">
+                {escolhido?.descricao ?? 'O alcance completo do papel escolhido.'}
+              </span>
+            </span>
+          </label>
+
+          <label className="eq-tudo">
+            <input
+              type="radio"
+              name="recorte"
+              checked={recortar}
+              onChange={() => setRecortar(true)}
+            />
+            <span>
+              <strong>Só as seções que eu marcar</strong>
+              <span className="campo-dica">
+                O resto some do menu e deixa de responder, mesmo pelo endereço direto.
+              </span>
+            </span>
+          </label>
+
+          {recortar && (
+            <div className="eq-areas">
+              {areasDoPapel.map((a) => (
+                <label key={a} className={`eq-area ${areas.includes(a) ? 'ativa' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={areas.includes(a)}
+                    onChange={() => alternar(a)}
+                  />
+                  <span>
+                    <strong>{AREA_LABELS[a]}</strong>
+                    <span className="campo-dica">{AREA_DESCRICOES[a]}</span>
+                  </span>
+                </label>
+              ))}
+              {areasDoPapel.length === 0 && (
+                <p className="campo-dica">Este papel não tem seções para recortar.</p>
+              )}
+            </div>
+          )}
         </fieldset>
 
         {erro !== null && (

@@ -129,7 +129,7 @@ export async function crmRoutes(app: FastifyInstance): Promise<void> {
    * há atraso, mas também não há compromisso — e um interessado sem
    * data é justamente o que se perde.
    * ---------------------------------------------------------------- */
-  app.get('/fila', { preHandler: [app.authorize('student:write')] }, async (request) => {
+  app.get('/fila', { preHandler: [app.authorize('crm:write')] }, async (request) => {
     const { responsavelId } = z
       .object({ responsavelId: z.string().uuid().optional() })
       .parse(request.query);
@@ -150,7 +150,7 @@ export async function crmRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * GET /api/crm — a lista completa, com filtro por status
    * ---------------------------------------------------------------- */
-  app.get('/', { preHandler: [app.authorize('student:write')] }, async (request) => {
+  app.get('/', { preHandler: [app.authorize('crm:write')] }, async (request) => {
     const { status, busca } = z
       .object({
         status: z.enum(STATUS).optional(),
@@ -174,7 +174,7 @@ export async function crmRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * GET /api/crm/funil — quantos em cada etapa, e a taxa de conversão
    * ---------------------------------------------------------------- */
-  app.get('/funil', { preHandler: [app.authorize('student:write')] }, async (request) => {
+  app.get('/funil', { preHandler: [app.authorize('crm:write')] }, async (request) => {
     const { dias } = z
       .object({ dias: z.coerce.number().int().min(1).max(730).optional() })
       .parse(request.query);
@@ -212,7 +212,7 @@ export async function crmRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * GET /api/crm/:id — com o histórico da conversa
    * ---------------------------------------------------------------- */
-  app.get('/:id', { preHandler: [app.authorize('student:write')] }, async (request) => {
+  app.get('/:id', { preHandler: [app.authorize('crm:write')] }, async (request) => {
     const { id } = idParam.parse(request.params);
 
     return inTenant(request, async (client) => {
@@ -251,7 +251,7 @@ export async function crmRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * POST /api/crm
    * ---------------------------------------------------------------- */
-  app.post('/', { preHandler: [app.authorize('student:write')] }, async (request, reply) => {
+  app.post('/', { preHandler: [app.authorize('crm:write')] }, async (request, reply) => {
     const corpo = leadSchema.parse(request.body);
 
     return inTenant(request, async (client, principal) => {
@@ -298,7 +298,7 @@ export async function crmRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * PUT /api/crm/:id
    * ---------------------------------------------------------------- */
-  app.put('/:id', { preHandler: [app.authorize('student:write')] }, async (request) => {
+  app.put('/:id', { preHandler: [app.authorize('crm:write')] }, async (request) => {
     const { id } = idParam.parse(request.params);
     const corpo = leadSchema.parse(request.body);
 
@@ -355,7 +355,7 @@ export async function crmRoutes(app: FastifyInstance): Promise<void> {
   /* ------------------------------------------------------------------
    * POST /api/crm/:id/contato — registra uma conversa
    * ---------------------------------------------------------------- */
-  app.post('/:id/contato', { preHandler: [app.authorize('student:write')] }, async (request, reply) => {
+  app.post('/:id/contato', { preHandler: [app.authorize('crm:write')] }, async (request, reply) => {
     const { id } = idParam.parse(request.params);
     const corpo = z
       .object({
@@ -422,7 +422,7 @@ export async function crmRoutes(app: FastifyInstance): Promise<void> {
    * ---------------------------------------------------------------- */
   app.post(
     '/:id/converter',
-    { preHandler: [app.authorize('student:write')] },
+    { preHandler: [app.authorize('crm:write')] },
     async (request, reply) => {
       const { id } = idParam.parse(request.params);
       const corpo = z

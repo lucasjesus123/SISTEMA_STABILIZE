@@ -31,6 +31,16 @@ export interface AccessTokenClaims extends JWTPayload {
   role: Role;
   /** id do aluno, quando o usuário é um aluno com acesso ao app */
   sid?: string;
+  /**
+   * Áreas do sistema que esta pessoa acessa. Ausente = o papel inteiro.
+   *
+   * VIAJA NO TOKEN, como o papel — e pelo mesmo motivo: o caminho de
+   * autorização não pode depender de uma consulta ao banco em toda
+   * requisição. A contrapartida é a mesma do papel: a mudança só vale no
+   * token seguinte. Por isso quem altera as áreas de alguém derruba as
+   * sessões daquela pessoa, e aí o corte é imediato.
+   */
+  ars?: string[];
 }
 
 const ISSUER = 'stabilize';
@@ -45,6 +55,7 @@ export async function signAccessToken(claims: {
   tenantId: string;
   role: Role;
   studentId?: string | undefined;
+  areas?: string[] | null | undefined;
 }): Promise<{ token: string; expiresIn: number }> {
   const ttl = env().JWT_ACCESS_TTL_SECONDS;
 
@@ -52,6 +63,12 @@ export async function signAccessToken(claims: {
     tid: claims.tenantId,
     role: claims.role,
     ...(claims.studentId !== undefined ? { sid: claims.studentId } : {}),
+    /* Array vazio NÃO entra: vazio e ausente significam a mesma coisa
+       aqui — "sem recorte" — e deixar os dois no token seria pedir que
+       cada leitor lembrasse disso. */
+    ...(claims.areas !== undefined && claims.areas !== null && claims.areas.length > 0
+      ? { ars: claims.areas }
+      : {}),
   })
     /* Algoritmo fixado na assinatura E na verificação. Aceitar o
        algoritmo declarado no cabeçalho do próprio token é a

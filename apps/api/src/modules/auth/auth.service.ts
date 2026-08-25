@@ -52,9 +52,34 @@ export interface LoginResult {
     readonly id: string;
     readonly name: string;
     readonly role: Role;
+    /** Áreas marcadas; `null` significa o papel inteiro. */
+    readonly areas: string[] | null;
     readonly tenantId: string;
     readonly mustChangePassword: boolean;
   };
+}
+
+/**
+ * As áreas marcadas para a pessoa, ou `null` para "o papel inteiro".
+ *
+ * Consulta PRÓPRIA em vez de mais uma coluna no retorno de
+ * `auth_lookup_user`: mudar o tipo de retorno daquela função exige
+ * derrubá-la e recriá-la, e ela é a porta de entrada do sistema —
+ * derrubá-la durante uma atualização, ainda que por instantes, é risco
+ * gratuito para poupar uma consulta que acontece uma vez por sessão.
+ *
+ * Sem contexto de tenant porque no login ainda não se sabe qual é: a
+ * função é SECURITY DEFINER e pertence a `stabilize_auth`, o mesmo papel
+ * das outras do login.
+ */
+async function lerAreas(userId: string): Promise<string[] | null> {
+  return withoutTenantContext('login', async (client) => {
+    const { rows } = await client.query<{ areas: string[] | null }>(
+      'SELECT auth_areas_do_usuario($1) AS areas',
+      [userId],
+    );
+    return rows[0]?.areas ?? null;
+  });
 }
 
 export async function login(input: LoginInput): Promise<LoginResult> {
@@ -130,12 +155,14 @@ export async function login(input: LoginInput): Promise<LoginResult> {
   }
 
   const studentId = await resolveStudentId(tenantId, userId, role);
+  const areas = await lerAreas(userId);
 
   const { token: accessToken, expiresIn } = await signAccessToken({
     userId,
     tenantId,
     role,
     studentId,
+    areas,
   });
 
   const refresh = createRefreshToken();
@@ -161,6 +188,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
       id: userId,
       name: lookup.full_name ?? '',
       role,
+      areas,
       tenantId,
       mustChangePassword: lookup.must_change_password === true,
     },
@@ -257,12 +285,18 @@ export async function refresh(
   }
 
   const studentId = await resolveStudentId(sessao.tenant_id, sessao.user_id, sessao.role);
+  /* LIDO A CADA ROTAÇÃO, e não só no login: é o que faz uma mudança de
+     áreas valer em minutos em vez de esperar a sessão inteira expirar.
+     Quando a mudança precisa ser imediata, quem altera derruba as
+     sessões da pessoa. */
+  const areas = await lerAreas(sessao.user_id);
 
   const { token: accessToken, expiresIn } = await signAccessToken({
     userId: sessao.user_id,
     tenantId: sessao.tenant_id,
     role: sessao.role,
     studentId,
+    areas,
   });
 
   // Mantém a família: é ela que amarra a cadeia de rotações.

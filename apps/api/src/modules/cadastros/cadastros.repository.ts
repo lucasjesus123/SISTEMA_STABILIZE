@@ -332,6 +332,7 @@ export interface LinhaUsuario {
   role: string;
   phone: string | null;
   cor: string | null;
+  areas: string[] | null;
   is_active: boolean;
   last_login_at: Date | null;
   must_change_password: boolean;
@@ -341,7 +342,7 @@ export async function listarUsuarios(client: TenantClient): Promise<LinhaUsuario
   const { rows } = await client.query<LinhaUsuario>(
     /* O ALUNO NÃO ENTRA NESTA LISTA. Ele tem login, mas não é equipe —
        misturá-los faria a tela de RH mostrar trezentos alunos. */
-    `SELECT id, full_name, email, role::text AS role, phone, cor, is_active,
+    `SELECT id, full_name, email, role::text AS role, phone, cor, areas, is_active,
             last_login_at, must_change_password
        FROM users
       WHERE role <> 'STUDENT'
@@ -359,6 +360,7 @@ export async function criarUsuario(
     papel: string;
     telefone: string | null;
     cor: string | null;
+    areas: string[] | null;
     hash: string;
   },
 ): Promise<{ id: string }> {
@@ -366,11 +368,20 @@ export async function criarUsuario(
     /* `must_change_password` sempre verdadeiro: quem cria a conta digita
        uma senha provisória e nunca fica sabendo a definitiva de
        ninguém. */
-    `INSERT INTO users (tenant_id, email, password_hash, full_name, role, phone, cor,
+    `INSERT INTO users (tenant_id, email, password_hash, full_name, role, phone, cor, areas,
                         must_change_password)
-     VALUES ($1,$2,$3,$4,$5::user_role,$6,$7,true)
+     VALUES ($1,$2,$3,$4,$5::user_role,$6,$7,$8,true)
      RETURNING id`,
-    [tenantId, dados.email, dados.hash, dados.nome, dados.papel, dados.telefone, dados.cor],
+    [
+      tenantId,
+      dados.email,
+      dados.hash,
+      dados.nome,
+      dados.papel,
+      dados.telefone,
+      dados.cor,
+      dados.areas,
+    ],
   );
   return rows[0]!;
 }
@@ -378,15 +389,45 @@ export async function criarUsuario(
 export async function atualizarUsuario(
   client: TenantClient,
   id: string,
-  dados: { nome: string; papel: string; telefone: string | null; cor: string | null },
+  dados: {
+    nome: string;
+    papel: string;
+    telefone: string | null;
+    cor: string | null;
+    areas: string[] | null;
+  },
 ): Promise<boolean> {
   const { rowCount } = await client.query(
     `UPDATE users
-        SET full_name = $2, role = $3::user_role, phone = $4, cor = $5
+        SET full_name = $2, role = $3::user_role, phone = $4, cor = $5, areas = $6
       WHERE id = $1 AND role <> 'STUDENT'`,
-    [id, dados.nome, dados.papel, dados.telefone, dados.cor],
+    [id, dados.nome, dados.papel, dados.telefone, dados.cor, dados.areas],
   );
   return (rowCount ?? 0) > 0;
+}
+
+/** As áreas marcadas hoje, para saber se a edição mexeu no acesso. */
+export async function areasDe(client: TenantClient, id: string): Promise<string[] | null> {
+  const { rows } = await client.query<{ areas: string[] | null }>(
+    `SELECT areas FROM users WHERE id = $1 AND role <> 'STUDENT'`,
+    [id],
+  );
+  return rows[0]?.areas ?? null;
+}
+
+/**
+ * Derruba as sessões abertas de alguém.
+ *
+ * Usado quando o ACESSO muda — recortar as áreas de uma pessoa só vale
+ * no token seguinte, e esperar a sessão rodar não é o que se espera de
+ * tirar o financeiro de alguém.
+ */
+export async function derrubarSessoes(client: TenantClient, id: string): Promise<void> {
+  await client.query(
+    `UPDATE user_sessions SET revoked_at = now(), revoked_reason = 'acesso alterado'
+      WHERE user_id = $1 AND revoked_at IS NULL`,
+    [id],
+  );
 }
 
 /**

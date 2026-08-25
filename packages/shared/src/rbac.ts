@@ -70,6 +70,18 @@ export const PERMISSIONS = [
   'commission:read',
   'commission:settle',
 
+  /* CRM e WhatsApp com permissão PRÓPRIA.
+     Antes o CRM andava em `student:write` e o WhatsApp em `user:write`,
+     emprestados de vizinhos por economia. Enquanto o papel era a única
+     unidade de acesso isso não tinha consequência — quem tinha um tinha
+     o outro. Passou a ter: com a escolha de áreas por pessoa, marcar só
+     "Interessados" entregaria junto o cadastro de alunos inteiro, e
+     marcar só "WhatsApp" entregaria a administração da academia. Uma
+     área que não consegue ser recortada sozinha não é uma área. */
+  'crm:read',
+  'crm:write',
+  'whatsapp:manage',
+
   // Administração da empresa
   'user:read',
   'user:write',
@@ -147,6 +159,9 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
       'student:write',
       'student:delete',
       'student:assign_professional',
+      'crm:read',
+      'crm:write',
+      'whatsapp:manage',
       'anamnesis:read',
       'anamnesis:write',
       'evolution:read',
@@ -237,6 +252,10 @@ const ROLE_GRANTS: Readonly<Record<Role, readonly Grant[]>> = {
       'attendance:read',
       'attendance:write',
       'pricing:read',
+      /* É a recepção quem atende quem liga perguntando preço, e é dela o
+         funil de interessados. */
+      'crm:read',
+      'crm:write',
     ),
   ],
 
@@ -292,9 +311,167 @@ export function hasPermission(role: Role, permission: Permission): boolean {
   return GRANT_INDEX[role].has(permission);
 }
 
-/** Todas as permissões de um papel — usado para montar o menu do front. */
-export function permissionsOf(role: Role): Permission[] {
-  return [...GRANT_INDEX[role].keys()].sort();
+/* =====================================================================
+ * ÁREAS
+ *
+ * O papel diz o que a pessoa PODE ser autorizada a fazer. A área diz o
+ * que ela de fato faz na academia — e é o que a administração da
+ * academia escolhe, uma pessoa de cada vez.
+ *
+ * A REGRA É ESTREITAR, NUNCA ALARGAR. O conjunto efetivo é a INTERSEÇÃO
+ * entre o papel e as áreas marcadas. Se marcar uma área pudesse
+ * acrescentar permissão fora do papel, a matriz acima deixaria de ser
+ * verdade — um administrador poderia dar `finance:report:read` a uma
+ * conta de recepção, e a resposta para "o que este papel enxerga?"
+ * passaria a ser "depende de quem foi marcado".
+ *
+ * Sem áreas marcadas (`null`), a pessoa tem o papel inteiro. É o padrão,
+ * e é o que todo mundo que já existia continua tendo.
+ * =================================================================== */
+
+export const AREAS = [
+  'recepcao',
+  'alunos',
+  'agenda',
+  'financeiro',
+  'interessados',
+  'equipe',
+  'whatsapp',
+  'academia',
+] as const;
+
+export type Area = (typeof AREAS)[number];
+
+export const AREA_LABELS: Readonly<Record<Area, string>> = {
+  recepcao: 'Recepção',
+  alunos: 'Alunos',
+  agenda: 'Agenda',
+  financeiro: 'Financeiro',
+  interessados: 'Interessados',
+  equipe: 'Usuários',
+  whatsapp: 'WhatsApp',
+  academia: 'A academia',
+};
+
+/** Uma frase por área, para quem está montando o acesso de alguém. */
+export const AREA_DESCRICOES: Readonly<Record<Area, string>> = {
+  recepcao: 'Registrar entrada de aluno no balcão.',
+  alunos: 'Cadastro, prontuário, anamnese, treino, medidas e triagem.',
+  agenda: 'Horários, bloqueios e disponibilidade.',
+  financeiro: 'Contas a receber e a pagar, pagamentos, comissões e relatórios.',
+  interessados: 'Funil de quem procurou a academia e ainda não é aluno.',
+  equipe: 'Cadastro dos usuários do sistema e histórico de acesso.',
+  whatsapp: 'Conexão do número e disparo de mensagens.',
+  academia: 'Identidade, tabela de valores, espaços e questionário de triagem.',
+};
+
+/**
+ * O que cada área precisa para funcionar.
+ *
+ * A conta é sempre INTERSEÇÃO com o papel, então listar aqui uma
+ * permissão que o papel não tem não a concede — só evita ter de repetir
+ * a matriz por papel.
+ *
+ * `student:read` aparece em `recepcao` E em `alunos` porque a recepção
+ * precisa ACHAR o aluno para registrar a entrada. Marcar só "Recepção"
+ * portanto não esconde a leitura do cadastro no servidor — esconde a
+ * seção no menu. É a única sobreposição que sobrou, e ela é real: não dá
+ * para atender no balcão sem procurar quem chegou.
+ */
+export const AREA_PERMISSIONS: Readonly<Record<Area, readonly Permission[]>> = {
+  recepcao: ['attendance:read', 'attendance:write', 'student:read'],
+  alunos: [
+    'student:read',
+    'student:write',
+    'student:delete',
+    'student:assign_professional',
+    'anamnesis:read',
+    'anamnesis:write',
+    'evolution:read',
+    'evolution:write',
+    'attachment:read',
+    'attachment:write',
+    'attachment:delete',
+    'workout:read',
+    'workout:write',
+    'exercise:read',
+    'exercise:write',
+    'pricing:read',
+  ],
+  agenda: [
+    'schedule:read',
+    'schedule:write',
+    'schedule:cancel',
+    'availability:read',
+    'availability:write',
+    'room:read',
+    'student:read',
+  ],
+  financeiro: [
+    'finance:receivable:read',
+    'finance:receivable:write',
+    'finance:payable:read',
+    'finance:payable:write',
+    'finance:recurring:write',
+    'finance:payment:write',
+    'finance:report:read',
+    'commission:read',
+    'commission:settle',
+    'student:read',
+    'pricing:read',
+  ],
+  interessados: ['crm:read', 'crm:write'],
+  equipe: ['user:read', 'user:write', 'user:delete', 'audit:read'],
+  whatsapp: ['whatsapp:manage'],
+  academia: ['tenant:settings', 'pricing:read', 'pricing:write', 'room:read', 'room:write'],
+};
+
+/**
+ * As permissões efetivas de uma pessoa.
+ *
+ * `areas` nulo ou vazio significa "o papel inteiro" — o padrão, e o que
+ * todo usuário que já existia continua tendo. Com áreas marcadas, o
+ * resultado é a interseção: nunca sai daqui uma permissão que o papel
+ * não tenha.
+ */
+export function permissionsOf(role: Role, areas?: readonly string[] | null): Permission[] {
+  const doPapel = [...GRANT_INDEX[role].keys()];
+  if (areas === undefined || areas === null || areas.length === 0) return doPapel.sort();
+
+  const permitidas = new Set<Permission>();
+  for (const a of areas) {
+    if (!ehArea(a)) continue;
+    for (const p of AREA_PERMISSIONS[a]) permitidas.add(p);
+  }
+  return doPapel.filter((p) => permitidas.has(p)).sort();
+}
+
+export function ehArea(v: string): v is Area {
+  return (AREAS as readonly string[]).includes(v);
+}
+
+/**
+ * O papel tem a permissão, DEPOIS de aplicadas as áreas?
+ *
+ * Devolve o escopo como `permissionScope`, e é esta função que a
+ * autorização do servidor usa: esconder a seção no menu não protege rota
+ * nenhuma, e uma área que só existisse na tela seria enfeite.
+ */
+export function scopeComAreas(
+  role: Role,
+  areas: readonly string[] | null | undefined,
+  permission: Permission,
+): Scope | null {
+  const escopo = GRANT_INDEX[role].get(permission) ?? null;
+  if (escopo === null) return null;
+  if (areas === undefined || areas === null || areas.length === 0) return escopo;
+
+  for (const a of areas) {
+    if (ehArea(a) && (AREA_PERMISSIONS[a] as readonly Permission[]).includes(permission)) {
+      return escopo;
+    }
+  }
+  return null;
 }
 
 /** `true` se o papel administra a empresa (dono ou admin). */

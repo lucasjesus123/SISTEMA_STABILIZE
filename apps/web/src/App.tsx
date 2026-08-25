@@ -369,6 +369,12 @@ function Sistema({
   principal: Principal;
   aoSair: () => void;
 }): ReactNode {
+  /* A PRIMEIRA ABA VISÍVEL, e não "painel" fixo.
+     O Painel depende de `finance:report:read` ou `commission:read`: uma
+     recepcionista nunca o teve no menu e mesmo assim caía nele ao
+     entrar — via o conteúdo de uma seção que o menu não oferece. Com o
+     recorte por áreas isso deixaria de ser um detalhe e viraria a regra:
+     quem tem só "Financeiro" abriria numa tela vazia. */
   const [aba, setAba] = useState<Aba>('painel');
   const [configAberta, setConfigAberta] = useState(false);
   const { efetivo, definir } = useTema();
@@ -494,7 +500,38 @@ function Sistema({
        manutenção em dobro e a certeza de que uma delas envelhece. */
     { id: 'perfil', nome: 'Minha conta', icone: <IconePerfil />, visivel: true, grupo: 'Administração' },
   ];
-  const visiveis = abas.filter((a) => a.visivel);
+  /* O RECORTE POR PESSOA, quando existe. `areas` nulo é o padrão e
+     significa "tudo o que o papel permite" — que é como o sistema
+     sempre funcionou e como continua para quem não foi recortado.
+     'perfil' fica sempre: não existe recorte que tire de alguém a
+     própria conta. */
+  const recorte = principal.areas ?? null;
+
+  /* Quase toda seção do menu é uma área de mesmo nome. As duas exceções
+     estão aqui, em vez de espalhadas em `if`s:
+
+       · 'painel' é a visão do mês — o resumo do que o Financeiro detalha,
+         e é gated pela mesma permissão. Quem marcou "Financeiro" espera
+         o painel junto; quem não marcou não tem o que resumir.
+       · 'perfil' é a própria pessoa, e não existe recorte que tire de
+         alguém a própria conta. */
+  const areaDaAba: Partial<Record<Aba, string>> = { painel: 'financeiro' };
+  const visiveis = abas
+    .filter((a) => a.visivel)
+    .filter(
+      (a) => recorte === null || a.id === 'perfil' || recorte.includes(areaDaAba[a.id] ?? a.id),
+    );
+
+  /* `aba` nasce em 'painel' e é corrigida aqui, uma vez, quando aquela
+     seção não pertence a esta pessoa. Fazer isto no `useState` inicial
+     não daria: a lista de abas depende das permissões, que só existem
+     depois do `principal`. */
+  useEffect(() => {
+    if (visiveis.length > 0 && !visiveis.some((a) => a.id === aba)) {
+      setAba(visiveis[0]!.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aba, visiveis.length]);
 
   return (
     <div className="sistema">

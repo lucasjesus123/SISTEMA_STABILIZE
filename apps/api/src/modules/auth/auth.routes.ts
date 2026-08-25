@@ -192,7 +192,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           role: resultado.user.role,
           roleLabel: ROLE_LABELS[resultado.user.role],
           mustChangePassword: resultado.user.mustChangePassword,
-          permissions: permissionsOf(resultado.user.role),
+          permissions: permissionsOf(resultado.user.role, resultado.user.areas),
+          areas: resultado.user.areas,
         },
       };
     },
@@ -266,8 +267,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           timezone: string;
           must_change_password: boolean;
           tenant_nome: string;
+          areas: string[] | null;
         }>(
-          `SELECT u.full_name, u.must_change_password, t.timezone, t.name AS tenant_nome
+          `SELECT u.full_name, u.must_change_password, u.areas, t.timezone, t.name AS tenant_nome
              FROM users u JOIN tenants t ON t.id = u.tenant_id
             WHERE u.id = $1`,
           [principal.userId],
@@ -279,7 +281,20 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       name: rows[0]?.full_name ?? '',
       role: principal.role,
       roleLabel: ROLE_LABELS[principal.role],
-      permissions: permissionsOf(principal.role),
+      /* DO BANCO, e não do token. O token carrega as áreas para a
+         AUTORIZAÇÃO ser barata; aqui é a tela que está perguntando o que
+         desenhar, e uma consulta por carregamento de página é barata.
+         A diferença aparece quando o administrador acabou de mexer no
+         acesso de alguém: o menu se corrige no próximo carregamento em
+         vez de esperar a sessão rodar. */
+      permissions: permissionsOf(principal.role, rows[0]?.areas ?? null),
+      /* AS ÁREAS VÃO JUNTO, e não só as permissões. Duas seções do menu
+         podem compartilhar a mesma permissão — o Financeiro precisa
+         listar alunos para dizer de quem é a cobrança, e é `student:read`
+         que abre a seção Alunos. Sem as áreas, marcar "só Financeiro"
+         deixaria "Alunos" no menu. A tela desenha o que está aqui; o
+         servidor continua barrando pela interseção com o papel. */
+      areas: rows[0]?.areas ?? null,
       /* O FUSO DA ACADEMIA, e não o do navegador.
          A agenda é validada no servidor contra a janela de atendimento
          convertida para ESTE fuso. Se a tela conferir a mesma coisa no

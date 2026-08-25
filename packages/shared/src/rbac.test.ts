@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AREAS,
   PERMISSIONS,
   ROLES,
   hasPermission,
   isTenantAdmin,
   permissionScope,
   permissionsOf,
+  scopeComAreas,
   type Permission,
   type Role,
 } from './rbac.js';
@@ -202,6 +204,87 @@ describe('regressão: permissões sensíveis nunca vazam para papéis não-admin
       for (const r of quemTem) {
         expect(isTenantAdmin(r)).toBe(true);
       }
+    }
+  });
+});
+
+/* =====================================================================
+ * Áreas — o recorte por pessoa
+ *
+ * A propriedade que estes testes guardam é uma só, e é a que torna o
+ * recurso seguro: ÁREA ESTREITA, NUNCA ALARGA. No dia em que marcar uma
+ * área puder acrescentar permissão fora do papel, a matriz de papéis
+ * deixa de responder "o que este papel enxerga?" e a resposta vira
+ * "depende de quem foi marcado".
+ * =================================================================== */
+
+describe('áreas do usuário', () => {
+  it('sem áreas, a pessoa tem o papel inteiro', () => {
+    for (const role of ROLES) {
+      expect(permissionsOf(role, null)).toEqual(permissionsOf(role));
+      expect(permissionsOf(role, [])).toEqual(permissionsOf(role));
+    }
+  });
+
+  it('marcar só o financeiro tira o resto do administrador', () => {
+    const so = permissionsOf('ADMIN', ['financeiro']);
+    expect(so).toContain('finance:report:read');
+    expect(so).toContain('commission:read');
+    /* O que o pedido dizia com todas as letras: quem cuida do dinheiro
+       não abre prontuário de aluno. */
+    expect(so).not.toContain('anamnesis:read');
+    expect(so).not.toContain('evolution:read');
+    expect(so).not.toContain('user:write');
+    expect(so).not.toContain('schedule:read');
+  });
+
+  it('NÃO ALARGA: marcar financeiro numa recepção não inventa financeiro', () => {
+    const recepcao = permissionsOf('RECEPTION', ['financeiro']);
+    expect(recepcao).not.toContain('finance:report:read');
+    expect(recepcao).not.toContain('finance:receivable:read');
+    /* O que sobra é a interseção: `student:read` e `pricing:read` a
+       recepção já tinha, e a área financeira também os pede. */
+    expect(recepcao.every((p) => permissionsOf('RECEPTION').includes(p))).toBe(true);
+  });
+
+  it('o recorte vale na autorização, e não só na montagem do menu', () => {
+    expect(scopeComAreas('ADMIN', null, 'student:read')).toBe('ALL');
+    expect(scopeComAreas('ADMIN', ['financeiro'], 'student:read')).toBe('ALL');
+    /* `student:read` está na área financeira porque o financeiro precisa
+       saber de quem é a cobrança. O que some é o resto do prontuário: */
+    expect(scopeComAreas('ADMIN', ['financeiro'], 'anamnesis:read')).toBeNull();
+    expect(scopeComAreas('ADMIN', ['financeiro'], 'user:write')).toBeNull();
+  });
+
+  it('área desconhecida é ignorada, e sozinha não dá nada', () => {
+    /* Um valor escrito errado não pode virar "tudo": o CHECK do banco
+       recusa a gravação, e se algum caminho escapar, aqui ele resulta em
+       conjunto vazio — que é falha fechada, não aberta. */
+    expect(permissionsOf('ADMIN', ['financiero'])).toEqual([]);
+    expect(scopeComAreas('ADMIN', ['financiero'], 'student:read')).toBeNull();
+  });
+
+  it('cada área é recortável sozinha — nenhuma arrasta a vizinha', () => {
+    /* Foi por isto que CRM e WhatsApp ganharam permissão própria: os dois
+       andavam emprestados de `student:write` e `user:write`, e marcar só
+       "Interessados" entregava o cadastro de alunos inteiro junto. */
+    const crm = permissionsOf('ADMIN', ['interessados']);
+    expect(crm).toContain('crm:write');
+    expect(crm).not.toContain('student:write');
+    expect(crm).not.toContain('student:delete');
+
+    const zap = permissionsOf('ADMIN', ['whatsapp']);
+    expect(zap).toContain('whatsapp:manage');
+    expect(zap).not.toContain('user:write');
+    expect(zap).not.toContain('tenant:settings');
+  });
+
+  it('toda área serve para alguma coisa em pelo menos um papel', () => {
+    /* Uma área cujo conjunto é vazio para todo mundo é uma caixa que
+       aparece na tela e não faz nada. */
+    for (const area of AREAS) {
+      const alguem = ROLES.some((r) => permissionsOf(r, [area]).length > 0);
+      expect(alguem, `área sem efeito: ${area}`).toBe(true);
     }
   });
 });

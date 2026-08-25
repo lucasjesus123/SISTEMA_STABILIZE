@@ -21,7 +21,7 @@ import { enviarAniversariosDoDia } from './aniversarios.js';
 
 export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
   /* Estado atual da conexão. */
-  app.get('/', { preHandler: [app.authorize('user:write')] }, async (request) => {
+  app.get('/', { preHandler: [app.authorize('whatsapp:manage')] }, async (request) => {
     return inTenant(request, async (client) => {
       const { rows } = await client.query<{
         id: string;
@@ -77,7 +77,7 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /* Cria a instância e devolve o QR para escanear. */
-  app.post('/conectar', { preHandler: [app.authorize('user:write')] }, async (request) => {
+  app.post('/conectar', { preHandler: [app.authorize('whatsapp:manage')] }, async (request) => {
     return inTenant(request, async (client, principal) => {
       const existente = await client.query<{ id: string; token_encrypted: string | null }>(
         `SELECT id, token_encrypted FROM whatsapp_instances ORDER BY created_at LIMIT 1`,
@@ -126,7 +126,7 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /* Envio manual, para testar a conexão. */
-  app.post('/testar', { preHandler: [app.authorize('user:write')] }, async (request) => {
+  app.post('/testar', { preHandler: [app.authorize('whatsapp:manage')] }, async (request) => {
     const { numero, texto } = z
       .object({
         numero: z.string().trim().regex(/^\+[1-9][0-9]{7,14}$/, 'Use o formato +5531999998888'),
@@ -157,7 +157,7 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /* Histórico do que o sistema mandou. */
-  app.get('/mensagens', { preHandler: [app.authorize('user:write')] }, async (request) => {
+  app.get('/mensagens', { preHandler: [app.authorize('whatsapp:manage')] }, async (request) => {
     return inTenant(request, async (client) => {
       const { rows } = await client.query<{
         id: string;
@@ -196,7 +196,7 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
      Existe para o dia em que alguém precisa conferir se está funcionando
      sem esperar as 9h — e é seguro justamente porque a idempotência mora
      no banco: chamar dez vezes manda uma mensagem. */
-  app.post('/aniversarios/executar', { preHandler: [app.authorize('user:write')] }, async (request) => {
+  app.post('/aniversarios/executar', { preHandler: [app.authorize('whatsapp:manage')] }, async (request) => {
     const resultado = await enviarAniversariosDoDia(request.log);
     return { data: resultado };
   });
@@ -209,7 +209,7 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
    * ninguém — a academia ficava com o padrão para sempre e sem saber
    * que havia padrão.
    * ---------------------------------------------------------------- */
-  app.get('/avisos', { preHandler: [app.authorize('user:write')] }, async (request) =>
+  app.get('/avisos', { preHandler: [app.authorize('whatsapp:manage')] }, async (request) =>
     inTenant(request, async (client) => {
       const { rows } = await client.query<{ confirmar: boolean; horas: number }>(
         `SELECT wa_confirmar_agendamento AS confirmar, wa_lembrete_horas AS horas
@@ -225,7 +225,7 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
     }),
   );
 
-  app.put('/avisos', { preHandler: [app.authorize('user:write')] }, async (request) => {
+  app.put('/avisos', { preHandler: [app.authorize('whatsapp:manage')] }, async (request) => {
     const body = z
       .object({
         confirmarAgendamento: z.boolean(),

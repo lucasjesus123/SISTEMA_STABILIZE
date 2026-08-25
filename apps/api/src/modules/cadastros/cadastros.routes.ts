@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { formatCents, reaisToCents, MoneyError } from '@stabilize/shared';
+import { ehArea, formatCents, reaisToCents, MoneyError } from '@stabilize/shared';
 import { inTenant, requireScope } from '../../http/plugins/authenticate.js';
 import { writeAudit } from '../../audit/audit.js';
 import { conflict, forbidden, notFound, unprocessable } from '../../http/errors.js';
@@ -178,6 +178,26 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
     papel: z.enum(PAPEIS),
     telefone: z.string().trim().max(40).nullish().transform((v) => v || null),
     cor: corSchema,
+    /**
+     * As seções do sistema que esta pessoa acessa.
+     *
+     * VAZIO E AUSENTE SIGNIFICAM O PAPEL INTEIRO, e viram `null` aqui: o
+     * banco tem CHECK proibindo array vazio, justamente para que os dois
+     * estados não passem a querer dizer a mesma coisa em lugares
+     * diferentes do código.
+     *
+     * O recorte é sempre INTERSEÇÃO com o papel — marcar uma área nunca
+     * dá permissão que o papel não tenha. É `scopeComAreas` quem impõe
+     * isso, no mesmo lugar onde o papel é conferido.
+     */
+    areas: z
+      .array(z.string())
+      .nullish()
+      .transform((v) => {
+        if (v === undefined || v === null) return null;
+        const validas = [...new Set(v.filter(ehArea))];
+        return validas.length === 0 ? null : validas;
+      }),
   });
 
   app.get('/usuarios', { preHandler: [app.authorize('user:read')] }, async (request) =>
@@ -191,6 +211,7 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
           papel: u.role,
           telefone: u.phone,
           cor: u.cor,
+          areas: u.areas,
           ativo: u.is_active,
           ultimoAcesso: u.last_login_at?.toISOString() ?? null,
           precisaTrocarSenha: u.must_change_password,
@@ -217,6 +238,7 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
           papel: body.papel,
           telefone: body.telefone,
           cor: body.cor,
+          areas: body.areas,
           hash: await hashPassword(senha),
         })
         .catch((e: unknown) => {
@@ -233,7 +255,7 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
         actorId: principal.userId,
         actorRole: principal.role,
         ip: request.ip,
-        metadata: { papel: body.papel },
+        metadata: { papel: body.papel, areas: body.areas },
       });
 
       void reply.status(201);
@@ -259,8 +281,27 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
       if (id === principal.userId && body.papel !== principal.role) {
         throw forbidden('Você não pode trocar o próprio papel. Peça a outro administrador.');
       }
+      /* NEM SE TRANCAR FORA. Um administrador que recortasse as próprias
+         áreas e deixasse "Usuários" de fora perderia a tela que devolve
+         o acesso — e a saída seria um chamado. É a mesma família de
+         regra do "ninguém se rebaixa", logo acima. */
+      if (id === principal.userId && body.areas !== null && !body.areas.includes('equipe')) {
+        throw forbidden(
+          'Você ficaria sem a seção Usuários e sem como voltar atrás. Peça a outro administrador para recortar o seu acesso.',
+        );
+      }
 
+      const areasAntes = await repo.areasDe(client, id);
       if (!(await repo.atualizarUsuario(client, id, body))) throw notFound('Usuário');
+
+      /* MUDOU O ACESSO, CAI A SESSÃO. As áreas viajam no token para a
+         autorização não custar uma consulta por requisição; a
+         contrapartida é que a mudança só valeria no token seguinte.
+         Derrubar a sessão faz o corte ser imediato, que é o que se
+         espera de tirar o financeiro de alguém. */
+      if (JSON.stringify(areasAntes) !== JSON.stringify(body.areas) && id !== principal.userId) {
+        await repo.derrubarSessoes(client, id);
+      }
 
       await writeAudit(client, principal.tenantId, {
         action: 'user.update',
@@ -269,7 +310,7 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
         actorId: principal.userId,
         actorRole: principal.role,
         ip: request.ip,
-        metadata: { papel: body.papel },
+        metadata: { papel: body.papel, areas: body.areas },
       });
       return { ok: true };
     });

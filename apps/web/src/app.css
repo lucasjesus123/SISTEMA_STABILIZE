@@ -5909,3 +5909,68 @@
   padding-top: var(--e-4);
   border-top: 1px solid var(--fio);
 }
+
+/* ---------------------------------------------------------------------
+   O QUE CADA PESSOA ENXERGA — o quadro de acessos do cadastro de equipe
+   ------------------------------------------------------------------- */
+.eq-acessos {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-lg);
+  background: var(--superficie-alta);
+}
+.eq-acessos legend {
+  padding: 0 4px;
+}
+
+.eq-tudo,
+.eq-area {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  padding: 10px var(--e-3);
+  border: 1px solid transparent;
+  border-radius: var(--raio-md);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.eq-tudo:hover,
+.eq-area:hover {
+  background: var(--superficie-realce);
+}
+.eq-tudo input,
+.eq-area input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.eq-tudo strong,
+.eq-area strong {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--texto);
+}
+.eq-tudo .campo-dica,
+.eq-area .campo-dica {
+  display: block;
+  margin-top: 1px;
+}
+
+/* AS SEÇÕES EM COLUNAS, e recuadas: elas pertencem à escolha de cima —
+   "só as que eu marcar" — e um bloco alinhado com as duas opções faria
+   parecer uma terceira. */
+.eq-areas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 2px;
+  margin-left: calc(18px + var(--e-3));
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--fio);
+}
+.eq-area.ativa {
+  border-color: color-mix(in srgb, var(--teal) 45%, transparent);
+  background: color-mix(in srgb, var(--teal) 8%, transparent);
+}

@@ -63,6 +63,7 @@ async function authenticate(request: FastifyRequest): Promise<void> {
     tenantId: claims.tid,
     role: claims.role,
     studentId: claims.sid,
+    areas: claims.ars,
   };
 
   marcarPresenca(request);
