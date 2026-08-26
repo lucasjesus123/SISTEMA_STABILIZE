@@ -127,6 +127,7 @@ export async function cadastrosRoutes(app: FastifyInstance): Promise<void> {
           papel: p.role,
           cor: p.color,
           ativo: p.is_active,
+          atende: p.atende,
         })),
       };
     }),

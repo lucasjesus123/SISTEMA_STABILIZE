@@ -635,6 +635,12 @@ function Formulario({
             papel: usuario.papel,
             ativo: true,
             cor: usuario.cor,
+            /* `atende` só serve para ESCOLHER entre profissionais, e
+               aqui não há escolha: é a tela de definir os horários desta
+               pessoa. Quem chega aqui vem justamente porque ela ainda
+               não tem — dizer `false` seria uma afirmação que esta tela
+               não precisa fazer nem consultou. */
+            atende: false,
           },
         ]}
         salas={salas}

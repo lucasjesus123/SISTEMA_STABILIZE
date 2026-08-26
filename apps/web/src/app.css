@@ -7710,3 +7710,77 @@
     min-height: 44px;
   }
 }
+
+/* ---------------------------------------------------------------------
+   O PERÍODO E AS SETAS, JUNTOS
+
+   As setas de navegação moravam do outro lado da barra, a seiscentos
+   pixels do nome do mês, entre "Mês" e "Espaços". Quem lia "Agosto de
+   2026" não tinha nada por perto dizendo que dava para avançar — e a
+   conclusão de quem usou foi "faltou a opção de ver os próximos meses".
+   A opção existia. O que faltava era ela estar onde a pergunta nasce.
+   ------------------------------------------------------------------ */
+.ag-periodo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-1);
+  margin-top: 2px;
+}
+
+.ag-periodo p {
+  /* Largura mínima para o texto não fazer as setas dançarem ao trocar
+     de "Maio de 2026" para "Setembro de 2026". */
+  min-width: 13rem;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ag-passo {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--raio);
+  color: var(--texto-apoio);
+  font-size: 1.25rem;
+  line-height: 1;
+  transition:
+    background var(--rapido) var(--saida),
+    color var(--rapido) var(--saida);
+}
+.ag-passo:hover {
+  background: var(--superficie-realce);
+  color: var(--texto);
+}
+
+/* Área de toque de 44px sem inchar a seta — mesmo recurso do botão de
+   tema. Duas setas coladas não podem virar dois quadrados grandes. */
+@media (pointer: coarse) {
+  .ag-passo {
+    position: relative;
+  }
+  .ag-passo::after {
+    content: '';
+    position: absolute;
+    inset: -7px;
+  }
+}
+
+.ag-voltar-hoje {
+  margin-left: var(--e-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--teal);
+  padding: 4px var(--e-2);
+  border-radius: var(--raio);
+}
+.ag-voltar-hoje:hover {
+  background: var(--superficie-realce);
+}
+@media (pointer: coarse) {
+  .ag-voltar-hoje {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}

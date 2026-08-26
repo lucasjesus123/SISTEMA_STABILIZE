@@ -17,6 +17,8 @@ export interface LinhaProfissional {
   role: string;
   color: string | null;
   is_active: boolean;
+  /** Tem faixa de horário cadastrada — sem isso não recebe marcação. */
+  atende: boolean;
 }
 
 /**
@@ -33,10 +35,25 @@ export async function listarProfissionais(client: TenantClient): Promise<LinhaPr
     /* A coluna chama `cor`, e não `color`: a migration que a criou é
        posterior ao esquema em inglês e seguiu o vocabulário do resto do
        projeto. O apelido aqui mantém a resposta da API estável. */
-    `SELECT id, full_name, role::text AS role, cor AS color, is_active
-       FROM users
-      WHERE role IN ('OWNER','ADMIN','PROFESSIONAL')
-      ORDER BY is_active DESC, full_name`,
+    /* `atende` DIZ QUEM PODE RECEBER MARCAÇÃO.
+
+       Sem esta coluna, a tela de marcar abria com o profissional que
+       estava logado — normalmente o dono, que administra e não atende —
+       e QUALQUER horário escolhido era recusado com "este horário não
+       está disponível". A mensagem estava certa e era inútil: o motivo
+       não era o horário, era a pessoa. Quem usa conclui que a agenda
+       está quebrada.
+
+       É um EXISTS, que para no primeiro acerto: o custo é o de um
+       índice, não o de contar as faixas de cada um. */
+    `SELECT u.id, u.full_name, u.role::text AS role, u.cor AS color, u.is_active,
+            EXISTS (
+              SELECT 1 FROM availability_rules r
+               WHERE r.professional_id = u.id AND r.tenant_id = u.tenant_id
+            ) AS atende
+       FROM users u
+      WHERE u.role IN ('OWNER','ADMIN','PROFESSIONAL')
+      ORDER BY u.is_active DESC, u.full_name`,
   );
   return rows;
 }

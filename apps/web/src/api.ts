@@ -1234,6 +1234,9 @@ export interface Profissional {
   papel: string;
   cor: string | null;
   ativo: boolean;
+  /** Tem horário de atendimento cadastrado. Quem não tem não recebe
+   *  marcação — e a tela precisa saber disso ANTES de deixar escolher. */
+  atende: boolean;
 }
 
 export const buscarProfissionais = () =>
@@ -1418,6 +1421,41 @@ export interface FaixaDeHorario {
 export const buscarHorarios = (profissionalId: string) =>
   api<{ data: (FaixaDeHorario & { id: string })[] }>(
     `/api/cadastros/profissionais/${profissionalId}/horarios`,
+  );
+
+/**
+ * OS HORÁRIOS LIVRES, calculados pelo servidor.
+ *
+ * Existe endpoint para isto e a conta NÃO deve ser refeita no navegador
+ * — tentei, e as duas armadilhas apareceram na mesma tarde:
+ *
+ *   · FUSO. As faixas são horas locais da ACADEMIA ("13:00"), e o
+ *     servidor as resolve no fuso dela. O navegador da recepção pode
+ *     estar em outro. Calculando aqui, "13:00" virava 13:00 do
+ *     navegador — três horas fora, e todo horário oferecido era
+ *     recusado no envio.
+ *   · DURAÇÃO. O servidor exige que INÍCIO E FIM batam exatamente com
+ *     um slot gerado, e o tamanho do slot vem da faixa (`slot_minutes`),
+ *     não da vontade de quem marca.
+ *
+ * Uma fonte só, do lado que sabe as duas coisas.
+ */
+export const buscarSlots = (de: Date, ate: Date, profissionalId: string) =>
+  api<{ data: { inicio: string; fim: string; salaId: string | null }[] }>(
+    `/api/schedule/slots?de=${encodeURIComponent(de.toISOString())}&ate=${encodeURIComponent(ate.toISOString())}&professionalId=${profissionalId}`,
+  );
+
+/**
+ * Os pedaços JÁ OCUPADOS de um profissional num período.
+ *
+ * Serve para a tela de marcar não oferecer um horário que o servidor vai
+ * recusar. Junta atendimento marcado e bloqueio de agenda — para quem
+ * está escolhendo, os dois significam a mesma coisa: não dá.
+ */
+export const buscarOcupacao = (de: Date, ate: Date, profissionalId?: string) =>
+  api<{ data: { inicio: string; fim: string }[] }>(
+    `/api/schedule/ocupacao?de=${encodeURIComponent(de.toISOString())}&ate=${encodeURIComponent(ate.toISOString())}` +
+      (profissionalId === undefined ? '' : `&professionalId=${profissionalId}`),
   );
 
 export const salvarHorarios = (profissionalId: string, faixas: FaixaDeHorario[]) =>

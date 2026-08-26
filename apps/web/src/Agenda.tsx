@@ -80,7 +80,15 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [selecionado, setSelecionado] = useState<api.CompromissoDetalhado | null>(null);
-  const [novo, setNovo] = useState<{ inicio: Date; fim: Date } | null>(null);
+  /* `escolherQuando` distingue as DUAS portas de marcar: clicar num vão
+     da grade já sabe o dia e a hora, e perguntar de novo seria burrice;
+     o botão "Marcar" não sabe nada, e é ele que abre os campos de data
+     e hora. Um sinalizador só, em vez de dois formulários. */
+  const [novo, setNovo] = useState<{
+    inicio: Date;
+    fim: Date;
+    escolherQuando?: boolean;
+  } | null>(null);
   const [horarios, setHorarios] = useState(false);
   const [versao, setVersao] = useState(0);
 
@@ -206,6 +214,32 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
     setSemana(s);
   };
 
+  /* "Hoje" volta os DOIS relógios: quem estava em dezembro e clica aqui
+     espera ver esta semana, e trocar de modo depois não pode reabrir o
+     mês onde ele tinha parado. */
+  const voltarParaHoje = (): void => {
+    setSemana(segundaDa(new Date()));
+    setAncora(new Date());
+  };
+
+  /* Se já se está no período de hoje, o botão não tem o que fazer. */
+  const estaNoPresente =
+    modo === 'mes'
+      ? ancora.getFullYear() === new Date().getFullYear() &&
+        ancora.getMonth() === new Date().getMonth()
+      : mesmoDia(semana, segundaDa(new Date()));
+
+  /* A HORA QUE O FORMULÁRIO ABRE JÁ PREENCHIDA. Começa na próxima hora
+     cheia, e não "agora": ninguém marca atendimento para 14h37. */
+  const proximoHorarioCheio = (): { inicio: Date; fim: Date } => {
+    const inicio = new Date();
+    inicio.setMinutes(0, 0, 0);
+    inicio.setHours(inicio.getHours() + 1);
+    const fim = new Date(inicio);
+    fim.setHours(fim.getHours() + 1);
+    return { inicio, fim };
+  };
+
   if (horarios) {
     return (
       <Horarios
@@ -226,6 +260,7 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
       <Marcacao
         inicio={novo.inicio}
         fim={novo.fim}
+        escolherQuando={novo.escolherQuando === true}
         equipe={equipe.filter((p) => p.ativo)}
         salas={salas}
         principal={principal}
@@ -265,13 +300,48 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
       <div className="secao-cabecalho ag-cabecalho">
         <div>
           <h1>Agenda</h1>
-          <p>
-            {modo === 'mes'
-              ? capitalizarMes(
-                  mes.referencia.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
-                )
-              : `${dias[0]!.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} a ${dias[6]!.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`}
-          </p>
+          {/* AS SETAS MORAM AO LADO DO PERÍODO, e isto não é arranjo
+              estético — era um defeito de uso.
+
+              Elas ficavam a seiscentos pixels daqui, do outro lado da
+              barra, entre "Mês" e "Espaços". Quem olhava "Agosto de
+              2026" não tinha nada por perto dizendo que dava para
+              trocar de mês, e a conclusão era a que o dono do sistema
+              teve: "faltou a opção de ver os próximos meses". A opção
+              existia; o que faltava era ela estar onde a pergunta
+              nasce. Calendário se navega pelo nome do mês. */}
+          <div className="ag-periodo">
+            <button
+              type="button"
+              className="ag-passo"
+              onClick={() => andar(-1)}
+              aria-label={modo === 'mes' ? 'Mês anterior' : 'Semana anterior'}
+            >
+              ‹
+            </button>
+            <p aria-live="polite">
+              {modo === 'mes'
+                ? capitalizarMes(
+                    mes.referencia.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+                  )
+                : `${dias[0]!.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} a ${dias[6]!.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+            </p>
+            <button
+              type="button"
+              className="ag-passo"
+              onClick={() => andar(1)}
+              aria-label={modo === 'mes' ? 'Próximo mês' : 'Próxima semana'}
+            >
+              ›
+            </button>
+            {!estaNoPresente && (
+              /* "Hoje" só aparece quando há para onde voltar. Um botão
+                 que não faz nada ensina que botão pode não fazer nada. */
+              <button type="button" className="ag-voltar-hoje" onClick={voltarParaHoje}>
+                Hoje
+              </button>
+            )}
+          </div>
         </div>
         <div className="ag-navegacao">
           {/* O SELETOR DE MODO VEM ANTES DAS SETAS, porque ele muda o
@@ -303,35 +373,23 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
             </button>
           </div>
 
-          <button
-            type="button"
-            className="botao-secundario"
-            onClick={() => andar(-1)}
-            aria-label={modo === 'mes' ? 'Mês anterior' : 'Semana anterior'}
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            className="botao-secundario"
-            onClick={() => {
-              /* "Hoje" volta os DOIS: quem estava em setembro e clica
-                 aqui espera ver esta semana, e trocar de modo depois
-                 não pode reabrir o mês onde ele estava. */
-              setSemana(segundaDa(new Date()));
-              setAncora(new Date());
-            }}
-          >
-            Hoje
-          </button>
-          <button
-            type="button"
-            className="botao-secundario"
-            onClick={() => andar(1)}
-            aria-label={modo === 'mes' ? 'Próximo mês' : 'Próxima semana'}
-          >
-            ›
-          </button>
+          {podeEscrever && (
+            /* MARCAR SEM PROCURAR UM VÃO VAZIO.
+
+               Antes, agendar exigia navegar até a semana certa e achar
+               um espaço livre na grade. Para "semana que vem" tudo bem;
+               para uma reavaliação em três meses, não — a pessoa
+               desiste antes de chegar lá, e o combinado vira papel na
+               recepção. Aqui a data é um campo, e o mês futuro deixa de
+               ser um caminho a percorrer. */
+            <button
+              type="button"
+              className="botao-primario"
+              onClick={() => setNovo({ ...proximoHorarioCheio(), escolherQuando: true })}
+            >
+              Marcar
+            </button>
+          )}
           {podeEscrever && (
             <button type="button" className="botao-secundario" onClick={() => setEspacos(true)}>
               Espaços
@@ -355,6 +413,10 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
             {equipe.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nome}
+                {/* DITO NA PRÓPRIA LISTA, e não só depois de escolher: a
+                    recepção precisa ver de quem NÃO adianta tentar antes
+                    de gastar o clique. */}
+                {p.atende ? '' : ' — sem horário cadastrado'}
               </option>
             ))}
           </select>
@@ -423,7 +485,20 @@ export function Agenda({ principal }: { principal: Principal }): ReactNode {
           carregando={carregando}
           podeMarcar={podeEscrever}
           aoAbrir={setSelecionado}
-          aoVago={(inicio, fim) => setNovo({ inicio, fim })}
+          /* CLICAR NUM VÃO TAMBÉM ABRE A LISTA REAL.
+
+             A grade pinta TODO intervalo de trinta minutos como livre —
+             ela não sabe quem atende quando, e com o filtro em "Todos"
+             nem teria como saber de quem seria o horário. Resultado
+             medido: clicar às 14:30 numa faixa que começa de hora em
+             hora era recusado no envio, e clicar fora do expediente
+             também.
+
+             Passando `escolherQuando`, o dia e a hora clicados viram o
+             ponto de partida e o formulário mostra os horários que
+             aquele profissional realmente tem naquele dia. O clique
+             continua valendo como atalho; deixa é de ser uma aposta. */
+          aoVago={(inicio, fim) => setNovo({ inicio, fim, escolherQuando: true })}
         />
       )}
 
@@ -806,6 +881,7 @@ function Marcacao({
   salas,
   principal,
   podeEscolherProfissional,
+  escolherQuando,
   aoSair,
   aoMarcar,
 }: {
@@ -815,15 +891,34 @@ function Marcacao({
   salas: api.Sala[];
   principal: Principal;
   podeEscolherProfissional: boolean;
+  /** Veio do botão "Marcar", sem dia nem hora: os campos aparecem. */
+  escolherQuando: boolean;
   aoSair: () => void;
   aoMarcar: () => void;
 }): ReactNode {
   const [alunos, setAlunos] = useState<api.Aluno[]>([]);
   const [busca, setBusca] = useState('');
   const [aluno, setAluno] = useState('');
-  const [profissional, setProfissional] = useState(
-    () => equipe.find((p) => p.id === principal.id)?.id ?? equipe[0]?.id ?? '',
-  );
+  /* O PADRÃO É QUEM ATENDE, e não quem está logado.
+
+     Antes o formulário abria com o próprio usuário. Para um professor
+     está certo — é a agenda dele. Para o DONO, que administra e não
+     atende, o resultado era uma recusa garantida: escolhia-se o dia, a
+     hora, o aluno, clicava-se em Marcar, e voltava "este horário não
+     está disponível". A mensagem estava correta e não ajudava em nada,
+     porque o problema não era o horário: era que aquela pessoa não tem
+     faixa de atendimento nenhuma.
+
+     A ordem de preferência: eu mesmo, se eu atendo; senão o primeiro da
+     equipe que atende; e só então o primeiro da lista — para o caso de
+     a academia ainda não ter cadastrado horário de ninguém, onde
+     qualquer escolha leva ao mesmo aviso e o importante é a tela não
+     abrir vazia. */
+  const [profissional, setProfissional] = useState(() => {
+    const eu = equipe.find((p) => p.id === principal.id);
+    if (eu?.atende === true) return eu.id;
+    return equipe.find((p) => p.atende)?.id ?? eu?.id ?? equipe[0]?.id ?? '';
+  });
   const [sala, setSala] = useState('');
   const [duracao, setDuracao] = useState(60);
   const [observacao, setObservacao] = useState('');
@@ -842,6 +937,113 @@ function Marcacao({
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
+  /* DIA E HORA COMO TEXTO, no formato que o `<input type="date">` e o
+     `type="time"` falam. Guardar `Date` aqui obrigaria a converter nos
+     dois sentidos a cada tecla, e é onde nasce o fuso trocado: `new
+     Date('2026-12-15')` é MEIA-NOITE EM UTC, que no Brasil é dia 14 às
+     21h. Montando a data a partir dos números, o dia é o que a pessoa
+     digitou. */
+  /* O fuso da ACADEMIA. Sem ele, tudo cai no do navegador — e a
+     recepção que abrir o sistema de outro estado veria outra agenda. */
+  const fuso = principal.timezone;
+
+  const [dia, setDia] = useState(() => comoData(inicio));
+  const [hora, setHora] = useState(
+    () => `${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`,
+  );
+
+  /* O começo real do atendimento: dos campos quando eles existem, do
+     vão clicado quando não. */
+  const comeco = ((): Date => {
+    if (!escolherQuando) return inicio;
+    const [ano, mes, d] = dia.split('-').map(Number);
+    const [h, m] = hora.split(':').map(Number);
+    if (ano === undefined || mes === undefined || d === undefined) return inicio;
+    return new Date(ano, mes - 1, d, h ?? 0, m ?? 0, 0, 0);
+  })();
+
+  /* OS HORÁRIOS LIVRES VÊM DO SERVIDOR, não de uma conta feita aqui.
+
+     Sem isto, escolher a hora era adivinhar: a grade da semana pinta
+     TODO vão de trinta minutos como livre, sem olhar a faixa de
+     atendimento de ninguém, e a recusa só aparecia depois do formulário
+     inteiro preenchido — "este horário não está disponível", sem dizer
+     quais estão. Para marcar em março do ano que vem é pior, porque não
+     há grade nenhuma para consultar antes.
+
+     A conta é do servidor porque só ele sabe as duas coisas que a
+     derrubam: o FUSO da academia (as faixas são horas locais dela, e o
+     navegador da recepção pode estar em outro) e o TAMANHO DO SLOT, que
+     vem da faixa. Refazer isso aqui foi tentado e produziu horários que
+     o próprio servidor recusava.
+
+     Se a consulta falhar — falta de permissão, rede — o campo volta a
+     ser digitável. Uma tela que para de funcionar por causa de uma
+     conveniência é pior que a tela sem a conveniência. */
+  const [slots, setSlots] = useState<{ inicio: string; fim: string }[] | null>(null);
+
+  useEffect(() => {
+    if (!escolherQuando || profissional === '' || dia === '') {
+      setSlots(null);
+      return;
+    }
+    let vivo = true;
+    setSlots(null);
+    const [ano, m, d] = dia.split('-').map(Number);
+    if (ano === undefined || m === undefined || d === undefined) return;
+    /* Um dia inteiro com folga dos dois lados: o servidor devolve em
+       UTC e o dia da academia pode começar antes ou depois do daqui. */
+    const de = new Date(ano, m - 1, d - 1);
+    const ate = new Date(ano, m - 1, d + 2);
+    api
+      .buscarSlots(de, ate, profissional)
+      .then((r) => {
+        if (!vivo) return;
+        /* Só os que caem no dia pedido, lidos no fuso da ACADEMIA — que
+           é o fuso em que a pessoa pensa quando escolhe "18 de março". */
+        /* Compara pela DATA FORMATADA no fuso da academia, e não
+           remontando um `Date`: reconstruir a partir de texto localizado
+           é onde nasce o erro de um dia. `en-CA` dá "AAAA-MM-DD", que é
+           exatamente o formato do campo. */
+        const naData = new Intl.DateTimeFormat('en-CA', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          ...(fuso === undefined ? {} : { timeZone: fuso }),
+        });
+        setSlots(r.data.filter((sl) => naData.format(new Date(sl.inicio)) === dia));
+      })
+      .catch(() => vivo && setSlots(null));
+
+    return () => {
+      vivo = false;
+    };
+  }, [escolherQuando, profissional, dia, fuso]);
+
+  /* Quantos minutos o slot escolhido realmente ocupa. */
+  const duracaoDoSlot = ((): number => {
+    const sl = slots?.[0];
+    if (sl === undefined) return duracao;
+    return Math.round((new Date(sl.fim).getTime() - new Date(sl.inicio).getTime()) / 60_000);
+  })();
+
+  /* Os começos oferecidos, escritos no fuso da academia. */
+  const horasLivres = (slots ?? []).map((sl) =>
+    new Date(sl.inicio).toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(fuso === undefined ? {} : { timeZone: fuso }),
+    }),
+  );
+
+  /* A hora escolhida deixou de existir — trocou-se o dia ou o
+     profissional. Cair no primeiro livre é melhor que manter uma hora
+     que já se sabe que será recusada. */
+  useEffect(() => {
+    if (slots === null || horasLivres.length === 0) return;
+    if (!horasLivres.includes(hora)) setHora(horasLivres[0]!);
+  }, [slots]);
+
   useEffect(() => {
     const t = setTimeout(() => {
       api
@@ -858,14 +1060,31 @@ function Marcacao({
       setErro('Escolha o aluno.');
       return;
     }
+    if (escolherQuando && (dia === '' || hora === '')) {
+      setErro('Escolha o dia e a hora.');
+      return;
+    }
+    if (escolherQuando && Number.isNaN(comeco.getTime())) {
+      setErro('Data ou hora inválida.');
+      return;
+    }
     setErro(null);
     setEnviando(true);
+    /* O SLOT MANDA NO FIM, e não a lista de duração.
+
+       O servidor exige que início e fim batam EXATAMENTE com um slot
+       gerado, e o tamanho do slot vem da faixa do profissional
+       (`slot_minutes`). Enviar 30 minutos onde a faixa é de 60 é
+       recusado — e a mensagem que voltava, "este horário não está
+       disponível", apontava para o horário quando o problema era a
+       duração. Havendo slot escolhido, ele decide os dois lados. */
+    const escolhido = slots?.[horasLivres.indexOf(hora)];
     const comum = {
       studentId: aluno,
       professionalId: profissional,
       ...(sala !== '' ? { roomId: sala } : {}),
-      inicio: inicio.toISOString(),
-      fim: new Date(inicio.getTime() + duracao * 60_000).toISOString(),
+      inicio: escolhido?.inicio ?? comeco.toISOString(),
+      fim: escolhido?.fim ?? new Date(comeco.getTime() + duracao * 60_000).toISOString(),
       ...(observacao !== '' ? { observacao } : {}),
     };
     try {
@@ -897,16 +1116,76 @@ function Marcacao({
       <div className="secao-cabecalho">
         <h1>Marcar horário</h1>
         <p>
-          {inicio.toLocaleDateString('pt-BR', {
+          {comeco.toLocaleDateString('pt-BR', {
             weekday: 'long',
             day: '2-digit',
             month: 'long',
+            year: 'numeric',
           })}{' '}
-          às {HORA.format(inicio)}
+          às {HORA.format(comeco)}
         </p>
       </div>
 
       <form className="formulario" onSubmit={(e) => void enviar(e)} noValidate>
+        {escolherQuando && (
+          /* OS CAMPOS DE QUANDO VÊM PRIMEIRO, antes do aluno. É a ordem
+             da conversa real na recepção — "pode ser dia 15 de março?" —
+             e não a ordem em que os dados entram no banco. */
+          <>
+            <label className="campo campo-meia">
+              <span className="campo-rotulo">Dia</span>
+              <input
+                type="date"
+                value={dia}
+                onChange={(e) => setDia(e.target.value)}
+                /* `min` de hoje: marcar no passado não é um pedido, é um
+                   engano de digitação. O servidor também recusa — isto
+                   só evita a viagem. */
+                min={comoData(new Date())}
+                required
+              />
+            </label>
+            <label className="campo campo-meia">
+              <span className="campo-rotulo">Hora</span>
+              {slots === null ? (
+                /* Ainda carregando, ou não deu para consultar: digitável,
+                   como sempre foi. */
+                <input
+                  type="time"
+                  value={hora}
+                  onChange={(e) => setHora(e.target.value)}
+                  step={900}
+                  required
+                />
+              ) : horasLivres.length === 0 ? (
+                <>
+                  <input type="time" value={hora} disabled />
+                  <span className="campo-dica jan-alerta">
+                    {equipe.find((p) => p.id === profissional)?.atende === true
+                      ? 'Este profissional não atende neste dia. Escolha outro dia ou outro profissional.'
+                      : 'Este profissional não tem horário cadastrado. Defina em Agenda → Horários de atendimento.'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <select value={hora} onChange={(e) => setHora(e.target.value)} required>
+                    {horasLivres.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="campo-dica">
+                    {horasLivres.length === 1
+                      ? 'Só resta um horário neste dia.'
+                      : `${horasLivres.length} horários livres neste dia.`}
+                  </span>
+                </>
+              )}
+            </label>
+          </>
+        )}
+
         <label className="campo campo-cheia">
           <span className="campo-rotulo">Procurar aluno</span>
           <input
@@ -948,23 +1227,51 @@ function Marcacao({
           ) : (
             <JanelaDeAtendimento
               profissionalId={profissional}
-              dia={`${inicio.getFullYear()}-${String(inicio.getMonth() + 1).padStart(2, '0')}-${String(inicio.getDate()).padStart(2, '0')}`}
-              hora={`${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`}
+              /* `comeco`, e não `inicio`: quando a data é um campo, o
+                 aviso precisa acompanhar o que está sendo digitado. Preso
+                 a `inicio`, ele diria "atende nesse horário" sobre a hora
+                 em que o formulário abriu, e a recusa só apareceria depois
+                 de enviar. */
+              dia={comoData(comeco)}
+              hora={`${String(comeco.getHours()).padStart(2, '0')}:${String(comeco.getMinutes()).padStart(2, '0')}`}
               {...(principal.timezone !== undefined ? { fuso: principal.timezone } : {})}
             />
           )}
         </label>
 
-        <label className="campo campo-meia">
-          <span className="campo-rotulo">Duração</span>
-          <select value={duracao} onChange={(e) => setDuracao(Number(e.target.value))}>
-            {[30, 45, 60, 90, 120].map((m) => (
-              <option key={m} value={m}>
-                {m} minutos
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* A DURAÇÃO NÃO É UMA ESCOLHA DE QUEM MARCA — é do horário.
+
+            Este seletor oferecia 30, 45, 60, 90 e 120 minutos, e o
+            servidor recusava tudo que não fosse o tamanho de slot da
+            faixa do profissional. Medido: com faixa de 60, o pedido de
+            60 volta 201; o de 30 e o de 90 voltam 422 "este horário não
+            está disponível" — mensagem que aponta para o horário quando
+            o problema era a duração. Um campo que parece uma escolha e
+            é recusado em quatro dos cinco valores não é um campo, é uma
+            armadilha.
+
+            Havendo horário escolhido da lista, ele decide os dois lados
+            e o campo mostra o que vai acontecer. O seletor só reaparece
+            no caminho de exceção, quando não foi possível consultar os
+            horários e a marcação volta a ser manual. */}
+        {slots !== null && horasLivres.length > 0 ? (
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Duração</span>
+            <input value={`${duracaoDoSlot} minutos`} disabled />
+            <span className="campo-dica">Definida no horário de atendimento do profissional.</span>
+          </label>
+        ) : (
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Duração</span>
+            <select value={duracao} onChange={(e) => setDuracao(Number(e.target.value))}>
+              {[30, 45, 60, 90, 120].map((m) => (
+                <option key={m} value={m}>
+                  {m} minutos
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {salas.length > 0 && (
           <label className="campo campo-meia">
