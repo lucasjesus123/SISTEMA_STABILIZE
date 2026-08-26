@@ -6,6 +6,7 @@ import { conflict, notFound, unprocessable } from '../../http/errors.js';
 import { hashPassword } from '../../auth/password.js';
 import { assertStudentInScope } from './students.repository.js';
 import type { TenantClient } from '../../db/pool.js';
+import { cpfEhValido } from '../../dominio/documentos.js';
 
 /**
  * Liberar o acesso do aluno ao aplicativo.
@@ -32,27 +33,10 @@ const idParam = z.object({ id: z.string().uuid('Identificador inválido') });
 /** Só os dígitos. Quem digita com ponto e quem digita sem é a mesma pessoa. */
 const soDigitos = (v: string): string => v.replace(/\D/g, '');
 
-/**
- * Confere os dígitos verificadores do CPF.
- *
- * NÃO é frescura de validação: o CPF vira o LOGIN, e um dígito trocado
- * cria uma conta que o aluno nunca consegue acessar — ele digita o CPF
- * certo e o sistema diz "não existe". O erro só aparece semanas depois,
- * quando alguém tenta usar, e a essa altura ninguém lembra do cadastro.
- */
-function cpfEhValido(cpf: string): boolean {
-  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
-  for (const [tamanho, posicao] of [
-    [9, 10],
-    [10, 11],
-  ] as const) {
-    let soma = 0;
-    for (let i = 0; i < tamanho; i += 1) soma += Number(cpf[i]) * (posicao - i);
-    const resto = (soma * 10) % 11 % 10;
-    if (resto !== Number(cpf[tamanho])) return false;
-  }
-  return true;
-}
+/* A conferência de CPF mudou de casa: agora mora em `documento.ts` e é
+   aplicada TAMBÉM no cadastro do aluno, que é onde o erro de digitação
+   nasce. Aqui ela continua valendo como última barreira antes de o CPF
+   virar login. */
 
 interface LinhaDoAluno {
   full_name: string;

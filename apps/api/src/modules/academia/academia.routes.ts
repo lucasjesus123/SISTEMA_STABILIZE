@@ -11,6 +11,7 @@ import {
   identidade,
   removerLogo,
 } from './academia.repository.js';
+import { documentoDaEmpresaEhAceitavel } from '../../dominio/documentos.js';
 
 /**
  * A identidade da academia.
@@ -62,7 +63,16 @@ function tenantDe(request: FastifyRequest): string {
 
 const identidadeSchema = z.object({
   nome: z.string().trim().min(2, 'O nome da academia é obrigatório').max(120),
-  documento: z.string().trim().max(20).optional(),
+  /* CNPJ (ou CPF, para MEI e autônomo) com dígito verificador
+     conferido. Sai impresso no papel timbrado, na carteirinha e na
+     cobrança: um dígito errado não quebra nada e invalida tudo o que a
+     academia entregar — e só aparece quando um contador confere. */
+  documento: z
+    .string()
+    .trim()
+    .max(20)
+    .refine((v) => documentoDaEmpresaEhAceitavel(v), 'CNPJ ou CPF inválido — confira os números.')
+    .optional(),
   telefone: z
     .string()
     .trim()

@@ -61,8 +61,22 @@ export async function listStudents(
 
   if (params.search !== undefined && params.search.trim() !== '') {
     /* Busca parametrizada. O termo entra como VALOR, nunca concatenado
-       no texto da query — o `%` faz parte do parâmetro, não do SQL. */
-    values.push(`%${params.search.trim()}%`);
+       no texto da query — o `%` faz parte do parâmetro, não do SQL.
+
+       OS CURINGAS DO PRÓPRIO `ILIKE` PRECISAM SER ESCAPADOS, e isso é
+       outra coisa: não é injeção — o parâmetro está seguro — é o `%` e
+       o `_` digitados pela recepção sendo lidos como "qualquer coisa"
+       em vez de como o caractere que ela digitou. Medido antes: buscar
+       `%` devolvia a base inteira, e `_` também. Numa lista de duzentos
+       alunos isso não parece um bug, parece que a busca não funciona.
+
+       `\\` é o escape padrão do `LIKE`, e a barra também precisa ser
+       escapada primeiro — senão ela escaparia o caractere seguinte. */
+    const termo = params.search
+      .trim()
+      .replace(/\\/g, '\\\\')
+      .replace(/[%_]/g, (c) => `\\${c}`);
+    values.push(`%${termo}%`);
     conditions.push(`(s.full_name ILIKE $${values.length} OR s.email ILIKE $${values.length})`);
   }
 

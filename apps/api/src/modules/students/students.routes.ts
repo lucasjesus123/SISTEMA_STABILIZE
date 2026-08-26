@@ -11,6 +11,7 @@ import {
 import { hasPermission } from '@stabilize/shared';
 import { notFound } from '../../http/errors.js';
 import { auditDenied, writeAudit } from '../../audit/audit.js';
+import { documentoEhAceitavel, nascimentoEhPlausivel } from '../../dominio/documentos.js';
 
 /**
  * Rotas de alunos.
@@ -61,8 +62,22 @@ const dadosAlunoSchema = z.object({
     .regex(/^\+[1-9][0-9]{7,14}$/, 'Use o formato +5531999998888')
     .optional()
     .or(z.literal('')),
-  dataNascimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
-  documento: z.string().trim().max(20).optional().or(z.literal('')),
+  dataNascimento: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((v) => nascimentoEhPlausivel(v), 'Confira a data de nascimento.')
+    .optional()
+    .or(z.literal('')),
+  /* Onze dígitos é CPF, e CPF errado vira aluno que não entra no
+     aplicativo. Ver `documento.ts` — a conferência existia e rodava
+     tarde demais. */
+  documento: z
+    .string()
+    .trim()
+    .max(20)
+    .refine((v) => documentoEhAceitavel(v), 'CPF inválido — confira os números.')
+    .optional()
+    .or(z.literal('')),
   status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED', 'LEAD']).optional(),
   observacoes: z.string().trim().max(2000).optional().or(z.literal('')),
   cep: z.string().trim().max(12).optional().or(z.literal('')),

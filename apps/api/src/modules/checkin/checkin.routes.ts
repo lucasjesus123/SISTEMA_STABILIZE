@@ -125,14 +125,27 @@ export async function checkinRoutes(app: FastifyInstance): Promise<void> {
                digitou número nenhum. */
             ($1 <> '' AND s.codigo::text = $1)
             OR ($2 <> '' AND regexp_replace(COALESCE(s.document, ''), '\\D', '', 'g') = $2)
+            /* ESCAPE explícito porque o % e o _ que a recepção
+               digitar precisam valer como caractere, e não como
+               curinga. Sem isto, buscar "%" devolvia a base inteira — o
+               que numa lista de duzentos alunos não parece um bug,
+               parece que a busca não funciona. O termo já chega
+               escapado do lado do Node. */
             OR translate(lower(s.full_name), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn')
                LIKE '%' || translate(lower($3), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn') || '%'
+               ESCAPE '\\'
           ORDER BY
             ($1 <> '' AND s.codigo::text = $1) DESC,
             (s.status = 'ACTIVE') DESC,
             s.full_name
           LIMIT 12`,
-        [digitos.length > 0 && digitos.length < 11 ? digitos : '', digitos.length === 11 ? digitos : '', termo],
+        [
+          digitos.length > 0 && digitos.length < 11 ? digitos : '',
+          digitos.length === 11 ? digitos : '',
+          /* A barra sai primeiro: escapá-la depois faria ela escapar o
+             caractere seguinte. */
+          termo.replace(/\\/g, '\\\\').replace(/[%_]/g, (c) => `\\${c}`),
+        ],
       );
 
       const { rows: config } = await client.query<{ bloquear: number; exigir_triagem: boolean }>(
