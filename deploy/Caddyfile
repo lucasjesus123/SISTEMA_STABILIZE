@@ -62,7 +62,36 @@
 		#
 		# `frame-ancestors 'none'` é o X-Frame-Options em versão que os
 		# navegadores atuais realmente consultam.
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+		#
+		# `img-src` PRECISA DE `blob:`, e a falta dele derrubou TODA foto
+		# do sistema em produção — e só em produção.
+		#
+		# A causa está no desenho do acesso: o token de acesso vive em
+		# MEMÓRIA, e o carregador de imagem do navegador não manda
+		# cabeçalho nenhum. Um `<img src="/api/perfil/foto">` chegaria
+		# sem autenticação e voltaria 401. Por isso toda foto é buscada
+		# por `fetch` — que manda o Authorization — e exibida como
+		# `URL.createObjectURL(blob)`. Ou seja: no Stabilize, foto de
+		# perfil, foto de aluno, foto de exercício e logo da academia são
+		# TODAS `blob:`.
+		#
+		# Por que só quebrava em produção: o servidor de desenvolvimento
+		# não aplica esta CSP. Local funcionava, no ar não — e a
+		# mensagem que sobrava para quem usava era "Não consegui abrir a
+		# imagem. Envie outra", que manda trocar de arquivo quando o
+		# arquivo nunca foi o problema.
+		#
+		# Medido, servindo a mesma página sob as duas CSPs:
+		#   img-src 'self' data:        -> "Refused to load the image
+		#                                   'blob:...' because it
+		#                                   violates ... CSP"
+		#   img-src 'self' data: blob:  -> a imagem carrega, 600x600
+		#
+		# `blob:` NÃO afrouxa o que interessa: é a própria página que
+		# cria o blob, a partir de bytes que ela já buscou de `'self'`.
+		# Não abre origem externa nenhuma, e `script-src` continua
+		# fechado — que é o que impede XSS de virar execução.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 	}
 
 	# --- API ---
