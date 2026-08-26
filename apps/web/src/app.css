@@ -7784,3 +7784,16 @@
     align-items: center;
   }
 }
+
+/* Juros/desconto na baixa: uma linha discreta, abaixo das formas de
+   pagamento, para não competir com o campo que a recepção usa sempre. */
+.fin-ajuste {
+  border-top: 1px dashed var(--fio);
+  padding-top: var(--e-3);
+  margin-top: var(--e-2);
+}
+.fin-baixa-aviso {
+  margin: var(--e-2) 0 0;
+  font-size: var(--t-sm);
+  color: var(--erro);
+}

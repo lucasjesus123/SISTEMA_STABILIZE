@@ -125,6 +125,9 @@ export interface CriarLancamentoInput {
   readonly fornecedor?: string | undefined;
   readonly observacao?: string | undefined;
   readonly criadoPor: string;
+  /** Qual parcela é esta, quando o lançamento foi parcelado. */
+  readonly parcelaNumero?: number | undefined;
+  readonly parcelaTotal?: number | undefined;
 }
 
 export async function criarLancamento(
@@ -135,8 +138,9 @@ export async function criarLancamento(
   const r = await client.query<{ id: string }>(
     `INSERT INTO finance_entries
        (tenant_id, direction, description, category, amount_cents, due_date,
-        competence_date, student_id, professional_id, supplier_name, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        competence_date, student_id, professional_id, supplier_name, notes, created_by,
+        installment_no, installment_total)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      RETURNING id`,
     [
       tenantId,
@@ -151,6 +155,8 @@ export async function criarLancamento(
       input.fornecedor ?? null,
       input.observacao ?? null,
       input.criadoPor,
+      input.parcelaNumero ?? null,
+      input.parcelaTotal ?? null,
     ],
   );
   return r.rows[0]!;
@@ -177,12 +183,18 @@ export async function registrarPagamento(
     pagoEm?: Date | undefined;
     referencia?: string | undefined;
     registradoPor: string;
+    /** Quanto do valor recebido é juros/multa. Entra no caixa e NÃO
+     *  abate a dívida original — ver a migração 036. */
+    acrescimoCentavos?: Cents | undefined;
+    /** Quanto foi perdoado. NÃO entra no caixa e abate a dívida. */
+    descontoCentavos?: Cents | undefined;
   },
 ): Promise<{ id: string }> {
   const r = await client.query<{ id: string }>(
     `INSERT INTO finance_payments
-       (tenant_id, entry_id, amount_cents, method, paid_at, reference, recorded_by)
-     VALUES ($1,$2,$3,$4::payment_method,COALESCE($5, now()),$6,$7)
+       (tenant_id, entry_id, amount_cents, method, paid_at, reference, recorded_by,
+        acrescimo_cents, desconto_cents)
+     VALUES ($1,$2,$3,$4::payment_method,COALESCE($5, now()),$6,$7,$8,$9)
      RETURNING id`,
     [
       tenantId,
@@ -192,6 +204,8 @@ export async function registrarPagamento(
       input.pagoEm ?? null,
       input.referencia ?? null,
       input.registradoPor,
+      input.acrescimoCentavos ?? 0,
+      input.descontoCentavos ?? 0,
     ],
   );
   return r.rows[0]!;
@@ -257,7 +271,21 @@ export async function baseDeComissao(
             e.student_id,
             e.appointment_id,
             e.amount_cents             AS valor_centavos,
-            COALESCE(SUM(p.amount_cents), 0)::bigint AS recebido_centavos,
+            /* A COMISSÃO NÃO INCIDE SOBRE JUROS E MULTA.
+
+               amount_cents é o dinheiro que entrou, e desde a
+               migração 036 ele pode conter multa por atraso. Multa é
+               indenização da academia pelo atraso — não é pagamento do
+               atendimento, e o professor não atendeu mais por causa
+               dela. Somá-la aqui daria ao profissional uma parte de um
+               dinheiro que não é da prestação de serviço.
+
+               O DESCONTO, ao contrário, é subtraído: entrou menos, e a
+               comissão acompanha o que entrou. É uma escolha de
+               negócio, não uma verdade contábil — a academia pode
+               decidir absorver o desconto sozinha, e nesse dia esta é
+               a linha que muda. */
+            COALESCE(SUM(p.amount_cents - p.acrescimo_cents), 0)::bigint AS recebido_centavos,
             COALESCE(c.commission_bp, 0)            AS aliquota_bp
        FROM finance_entries e
        JOIN finance_payments p ON p.entry_id = e.id

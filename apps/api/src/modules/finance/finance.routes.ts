@@ -96,13 +96,32 @@ const criarLancamentoSchema = z.object({
   professionalId: idSchema.optional(),
   fornecedor: z.string().trim().max(160).optional(),
   observacao: z.string().trim().max(500).optional(),
+  /* PARCELAS. O banco já sabia guardar `installment_no`/`installment_total`
+     desde o primeiro esquema, e a lista já mostrava "2/6" — mas nenhuma
+     rota criava as parcelas. Era metade de uma funcionalidade: o banco
+     sabia, a API não escrevia, e quem quisesse parcelar um equipamento
+     em seis lançava seis vezes na mão.
+
+     O teto de 60 não é arbitrário: acima disso não é parcelamento, é
+     recorrência — e para isso existe conta fixa, que não tem fim. */
+  parcelas: z.coerce.number().int().min(1).max(60).default(1),
 });
 
 const pagamentoSchema = z.object({
+  /* O DINHEIRO QUE ENTROU, sempre. Com juros, é o valor cheio que o
+     aluno pagou; com desconto, é o que ele pagou de fato. Ver a
+     migração 036 para as duas contas que saem daqui. */
   valor: valorSchema,
   metodo: z.enum(['PIX', 'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'BANK_TRANSFER', 'BOLETO', 'OTHER']),
   pagoEm: z.coerce.date().optional(),
   referencia: z.string().trim().max(120).optional(),
+  /* Quanto do valor recebido é juros/multa. Entra no caixa e não abate
+     a mensalidade — senão a comissão do professor incidiria sobre a
+     multa, que não é dele. */
+  acrescimo: valorSchema.optional(),
+  /* Quanto foi perdoado. Não entra no caixa e abate como se tivesse
+     entrado, para a conta ficar quitada em vez de eternamente parcial. */
+  desconto: valorSchema.optional(),
 });
 
 const periodoSchema = z.object({
@@ -189,19 +208,51 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
       const body = criarLancamentoSchema.parse(request.body);
 
       return inTenant(request, async (client, principal) => {
-        const criado = await criarLancamento(client, principal.tenantId, {
-          direcao: body.direcao,
-          descricao: body.descricao,
-          categoria: body.categoria,
-          valorCentavos: body.valor,
-          vencimento: body.vencimento,
-          competencia: body.competencia,
-          studentId: body.studentId,
-          professionalId: body.professionalId,
-          fornecedor: body.fornecedor,
-          observacao: body.observacao,
-          criadoPor: principal.userId,
-        });
+        /* A SOBRA DE CENTAVOS VAI NA PRIMEIRA PARCELA.
+
+           R$ 100,00 em 3 dá 33,33 + 33,33 + 33,33 = 99,99: um centavo
+           some. Dividir por igual e "arredondar" faz o total do
+           parcelamento não bater com o valor da compra, e é o tipo de
+           diferença que aparece meses depois, na conciliação, sem
+           ninguém saber de onde veio.
+
+           Na PRIMEIRA, e não na última, porque a primeira é a que a
+           pessoa confere na hora de lançar. */
+        const total = body.parcelas;
+        const base = Math.floor(body.valor / total);
+        const sobra = body.valor - base * total;
+
+        const ids: string[] = [];
+        for (let n = 1; n <= total; n += 1) {
+          /* Cada parcela vence um mês depois da anterior. `setMonth` já
+             resolve o dia 31 em mês de 30 — vira o dia 1º do mês
+             seguinte, que é o comportamento que o banco também usaria. */
+          const vence = new Date(body.vencimento);
+          vence.setMonth(vence.getMonth() + (n - 1));
+          const competencia =
+            body.competencia === undefined ? undefined : new Date(body.competencia);
+          if (competencia !== undefined) competencia.setMonth(competencia.getMonth() + (n - 1));
+
+          const criadoAgora = await criarLancamento(client, principal.tenantId, {
+            direcao: body.direcao,
+            /* O NÚMERO DA PARCELA NÃO ENTRA NA DESCRIÇÃO. Ele tem coluna
+               própria, e repeti-lo no texto faria a busca por "Aluguel"
+               deixar de achar "Aluguel (2/6)". */
+            descricao: body.descricao,
+            categoria: body.categoria,
+            valorCentavos: (base + (n === 1 ? sobra : 0)) as typeof body.valor,
+            vencimento: vence,
+            competencia,
+            studentId: body.studentId,
+            professionalId: body.professionalId,
+            fornecedor: body.fornecedor,
+            observacao: body.observacao,
+            criadoPor: principal.userId,
+            ...(total > 1 ? { parcelaNumero: n, parcelaTotal: total } : {}),
+          });
+          ids.push(criadoAgora.id);
+        }
+        const criado = { id: ids[0]! };
 
         await writeAudit(client, principal.tenantId, {
           action: 'finance.entry.create',
@@ -212,11 +263,17 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
           ip: request.ip,
           // Valor entra no log: é registro contábil, e quem lê a
           // auditoria precisa saber a ordem de grandeza do lançamento.
-          metadata: { direcao: body.direcao, valorCentavos: body.valor },
+          metadata: {
+            direcao: body.direcao,
+            valorCentavos: body.valor,
+            ...(total > 1 ? { parcelas: total } : {}),
+          },
         });
 
         void reply.status(201);
-        return { data: { id: criado.id } };
+        /* `id` continua sendo o da primeira parcela, para não quebrar
+           quem já consome esta resposta; `ids` é novo e traz todas. */
+        return { data: { id: criado.id, ids } };
       });
     },
   );
@@ -338,6 +395,8 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
           pagoEm: body.pagoEm,
           referencia: body.referencia,
           registradoPor: principal.userId,
+          acrescimoCentavos: body.acrescimo,
+          descontoCentavos: body.desconto,
         });
 
         await writeAudit(client, principal.tenantId, {

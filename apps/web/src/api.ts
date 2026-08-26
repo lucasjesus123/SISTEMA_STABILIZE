@@ -1158,6 +1158,8 @@ export interface NovoLancamento {
   professionalId?: string;
   fornecedor?: string;
   observacao?: string;
+  /** Em quantas vezes. 1 (o padrão) cria um lançamento só. */
+  parcelas?: number;
 }
 
 export const alterarLancamento = (
@@ -1181,7 +1183,7 @@ export const excluirLancamento = (id: string) =>
   api<{ ok: true }>(`/api/finance/lancamentos/${id}`, { method: 'DELETE' });
 
 export const criarLancamento = (dados: NovoLancamento) =>
-  api<{ data: { id: string } }>('/api/finance/lancamentos', {
+  api<{ data: { id: string; ids: string[] } }>('/api/finance/lancamentos', {
     method: 'POST',
     body: JSON.stringify(dados),
   });
@@ -1197,7 +1199,17 @@ export type MetodoPagamento =
 
 export const darBaixa = (
   lancamentoId: string,
-  dados: { valor: string; metodo: MetodoPagamento; pagoEm?: string; referencia?: string },
+  dados: {
+    /** O dinheiro que entrou — com juros, é o valor cheio que a pessoa pagou. */
+    valor: string;
+    metodo: MetodoPagamento;
+    pagoEm?: string;
+    referencia?: string;
+    /** Quanto do valor recebido é juros/multa. Entra no caixa e não abate a conta. */
+    acrescimo?: string;
+    /** Quanto foi perdoado. Não entra no caixa e abate como se tivesse entrado. */
+    desconto?: string;
+  },
 ) =>
   api<{ data: { id: string } }>(`/api/finance/lancamentos/${lancamentoId}/pagamentos`, {
     method: 'POST',

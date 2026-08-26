@@ -888,14 +888,36 @@ function FormularioDeBaixa({
   });
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  /* JUROS/MULTA E DESCONTO ficam FECHADOS por padrão.
+
+     A baixa comum é a esmagadora maioria: o aluno paga o que deve. Dois
+     campos a mais visíveis o tempo todo transformariam a operação de
+     dois cliques da recepção numa conferência de quatro campos, e o
+     custo disso é cobrado em todo pagamento para atender uma minoria. */
+  const [ajuste, setAjuste] = useState(false);
+  const [acrescimo, setAcrescimo] = useState('');
+  const [desconto, setDesconto] = useState('');
 
   const emCentavos = (v: string): number =>
     Math.round(Number(v.replace(/\./g, '').replace(',', '.')) * 100);
 
   const total = linhas.reduce((s, x) => s + (Number.isFinite(emCentavos(x.valor)) ? emCentavos(x.valor) : 0), 0);
   const todasValidas = linhas.every((x) => Number.isFinite(emCentavos(x.valor)) && emCentavos(x.valor) > 0);
-  const valido = todasValidas && total > 0;
-  const restante = valido ? l.saldoCentavos - total : l.saldoCentavos;
+
+  const num = (v: string): number => {
+    const c = emCentavos(v);
+    return v.trim() === '' || !Number.isFinite(c) ? 0 : c;
+  };
+  const acrescimoCents = ajuste ? num(acrescimo) : 0;
+  const descontoCents = ajuste ? num(desconto) : 0;
+
+  /* QUANTO DA DÍVIDA ESTE PAGAMENTO ABATE — a mesma conta do servidor
+     (migração 036): o dinheiro que entrou, menos o que é multa, mais o
+     que foi perdoado. É por ela que a tela consegue dizer se a conta
+     ficará quitada ANTES de enviar. */
+  const abatido = total - acrescimoCents + descontoCents;
+  const valido = todasValidas && total > 0 && acrescimoCents <= total && abatido > 0;
+  const restante = valido ? l.saldoCentavos - abatido : l.saldoCentavos;
 
   const dividir = (): void => {
     const falta = Math.max(0, l.saldoCentavos - total);
@@ -919,11 +941,27 @@ function FormularioDeBaixa({
       if (linhas.length === 1) {
         /* Uma forma só continua indo pela rota antiga: é o caminho
            exercitado por todo o resto e não há por que mudá-lo. */
-        await api.darBaixa(l.id, { valor: linhas[0]!.valor, metodo: linhas[0]!.metodo, pagoEm: quando });
+        await api.darBaixa(l.id, {
+          valor: linhas[0]!.valor,
+          metodo: linhas[0]!.metodo,
+          pagoEm: quando,
+          ...(acrescimoCents > 0 ? { acrescimo } : {}),
+          ...(descontoCents > 0 ? { desconto } : {}),
+        });
       } else {
+        /* O AJUSTE VAI NA PRIMEIRA FORMA, e não repartido. Juros e
+           desconto são do PAGAMENTO, não da forma: dividir R$ 5 de
+           multa entre PIX e dinheiro não significa nada para quem lê o
+           extrato depois. */
         await api.darBaixaEmLote(
           l.id,
-          linhas.map((x) => ({ valor: x.valor, metodo: x.metodo, pagoEm: quando })),
+          linhas.map((x, i) => ({
+            valor: x.valor,
+            metodo: x.metodo,
+            pagoEm: quando,
+            ...(i === 0 && acrescimoCents > 0 ? { acrescimo } : {}),
+            ...(i === 0 && descontoCents > 0 ? { desconto } : {}),
+          })),
         );
       }
       aoBaixar();
@@ -992,6 +1030,59 @@ function FormularioDeBaixa({
           )}
         </div>
       ))}
+
+      {/* JUROS E DESCONTO — atrás de um link, não na tela toda.
+          Ver o comentário do estado `ajuste`. */}
+      {!ajuste ? (
+        <button type="button" className="botao-texto fin-baixa-dividir" onClick={() => setAjuste(true)}>
+          + Juros, multa ou desconto
+        </button>
+      ) : (
+        <div className="fin-baixa-campos fin-ajuste">
+          <label className="campo">
+            <span className="campo-rotulo">Juros e multa</span>
+            <input
+              inputMode="decimal"
+              value={acrescimo}
+              onChange={(e) => setAcrescimo(e.target.value)}
+              placeholder="0,00"
+              autoFocus
+            />
+            <span className="campo-dica">Já incluído no valor recebido.</span>
+          </label>
+          <label className="campo">
+            <span className="campo-rotulo">Desconto</span>
+            <input
+              inputMode="decimal"
+              value={desconto}
+              onChange={(e) => setDesconto(e.target.value)}
+              placeholder="0,00"
+            />
+            <span className="campo-dica">Perdoado — abate sem entrar no caixa.</span>
+          </label>
+          <button
+            type="button"
+            className="fin-baixa-tirar"
+            onClick={() => {
+              setAjuste(false);
+              setAcrescimo('');
+              setDesconto('');
+            }}
+          >
+            Remover
+          </button>
+        </div>
+      )}
+
+      {acrescimoCents > total && (
+        /* Dito na hora, e não depois de enviar: o servidor recusa isso
+           com um 422 genérico, e "os dados não atendem às regras" não
+           conta a ninguém que o problema é a multa ser maior que o
+           valor recebido. */
+        <p className="fin-baixa-aviso">
+          A multa não pode ser maior que o valor recebido — ela já faz parte dele.
+        </p>
+      )}
 
       {/* Seis é onde uma baixa dividida deixa de ser uma baixa dividida.
           O servidor recusa acima disso; o botão some antes, para que a
@@ -1077,6 +1168,12 @@ function NovoLancamento({
      mês, porque era o que a tela oferecia. No mês seguinte, de novo. A
      recorrência tem de nascer onde a conta nasce — é aqui que a pessoa
      está quando sabe a resposta. */
+  /* PARCELAS. Fica ao lado do vencimento e não junto da recorrência,
+     porque são coisas opostas que se confundem: parcelar tem FIM (seis
+     vezes e acabou), a conta fixa não tem (aluguel, todo mês, para
+     sempre). Quem lança um equipamento em 6x não quer uma conta fixa —
+     e vice-versa. */
+  const [parcelas, setParcelas] = useState(1);
   const [repete, setRepete] = useState(false);
   const [ciclo, setCiclo] = useState('MONTHLY');
   const [encerra, setEncerra] = useState('');
@@ -1165,6 +1262,7 @@ function NovoLancamento({
           ? { fornecedor: pagador.trim() }
           : {}),
         ...(!receber && quem !== '' ? { fornecedor: quem } : {}),
+        ...(parcelas > 1 ? { parcelas } : {}),
       });
       aoCriar();
     } catch (x) {
@@ -1228,6 +1326,28 @@ function NovoLancamento({
           {/* O que o sistema ENTENDEU, por extenso — ver dataPorExtenso. */}
           <span className="campo-dica">{dataPorExtenso(vencimento) ?? 'Escolha a data do vencimento.'}</span>
         </label>
+
+        {/* PARCELAR só faz sentido ao CRIAR. Numa conta que já existe,
+            mudar para "6x" teria de decidir o que fazer com as baixas já
+            dadas — e a resposta certa aí é cancelar e lançar de novo. */}
+        {lancamento === null || lancamento === undefined ? (
+          <label className="campo campo-meia">
+            <span className="campo-rotulo">Em quantas vezes</span>
+            <select value={parcelas} onChange={(e) => setParcelas(Number(e.target.value))}>
+              <option value={1}>À vista</option>
+              {[2, 3, 4, 5, 6, 8, 10, 12].map((n) => (
+                <option key={n} value={n}>
+                  {n}x
+                </option>
+              ))}
+            </select>
+            <span className="campo-dica">
+              {parcelas === 1
+                ? 'Um lançamento só, nesta data.'
+                : `${parcelas} lançamentos, um por mês a partir desta data. A sobra de centavos vai na primeira.`}
+            </span>
+          </label>
+        ) : null}
 
         {/* O VÍNCULO COM O ALUNO NÃO SE EDITA. A ficha dele já mostra
             esta cobrança, e trocá-la de dono por aqui moveria dinheiro de

@@ -78,8 +78,14 @@ WITH
 pago_bate AS (
   SELECT count(*) AS n
   FROM finance_entries e
+  /* A MESMA FÓRMULA DO GATILHO, e não `sum(amount_cents)` puro.
+     Desde a migração 036, `paid_cents` guarda a DÍVIDA ABATIDA:
+     dinheiro que entrou, menos juros/multa, mais desconto perdoado.
+     Este verificador ficou com a fórmula antiga por uma rodada e
+     acusou como defeito toda baixa com juros ou desconto — ele mesmo
+     pegou a divergência, que é o que se espera dele. */
   WHERE e.paid_cents <> (
-    SELECT coalesce(sum(p.amount_cents), 0)
+    SELECT coalesce(sum(p.amount_cents - p.acrescimo_cents + p.desconto_cents), 0)
       FROM finance_payments p
      WHERE p.entry_id = e.id
   )
@@ -252,10 +258,14 @@ SELECT * FROM (
 
 \echo ''
 \echo 'Contas cujo pago nao bate com a soma das baixas:'
-SELECT e.id, e.description AS descricao, e.amount_cents AS valor, e.paid_cents AS pago_gravado,
-       (SELECT coalesce(sum(p.amount_cents),0) FROM finance_payments p WHERE p.entry_id = e.id) AS soma_real
+SELECT e.id, e.description AS descricao, e.amount_cents AS valor, e.paid_cents AS abatido_gravado,
+       (SELECT coalesce(sum(p.amount_cents - p.acrescimo_cents + p.desconto_cents),0)
+          FROM finance_payments p WHERE p.entry_id = e.id) AS abatido_real,
+       (SELECT coalesce(sum(p.amount_cents),0)
+          FROM finance_payments p WHERE p.entry_id = e.id) AS entrou_no_caixa
 FROM finance_entries e
-WHERE e.paid_cents <> (SELECT coalesce(sum(p.amount_cents),0) FROM finance_payments p WHERE p.entry_id = e.id)
+WHERE e.paid_cents <> (SELECT coalesce(sum(p.amount_cents - p.acrescimo_cents + p.desconto_cents),0)
+                         FROM finance_payments p WHERE p.entry_id = e.id)
 LIMIT 10;
 
 \echo ''
