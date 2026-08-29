@@ -9,6 +9,7 @@ import {
   GRUPOS_MUSCULARES,
   adicionarItem,
   alternarExercicio,
+  alterarExercicio,
   ativarTreino,
   buscarTreino,
   chaveDaFotoDoExercicio,
@@ -243,13 +244,55 @@ export async function exercisesRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  /* ------------------------------------------------------------------
+   * CORRIGIR UM EXERCÍCIO
+   *
+   * ESTA ROTA SÓ SABIA LIGAR E DESLIGAR. O catálogo nascia, ganhava foto
+   * e podia ser desativado — e mais nada. Quem digitou "Remada curvda"
+   * ou deixou as instruções pela metade não tinha conserto: criava outro
+   * e desativava o errado, e a busca de todo mundo ficava com dois nomes
+   * quase iguais para sempre.
+   *
+   * `ativo` CONTINUA OPCIONAL E SOZINHO: o botão que desativa manda só
+   * ele, como sempre mandou, e não precisa saber que a rota cresceu.
+   * ---------------------------------------------------------------- */
   app.patch('/:id', { preHandler: [app.authorize('exercise:write')] }, async (request) => {
     const { id } = idParam.parse(request.params);
-    const { ativo } = z.object({ ativo: z.boolean() }).parse(request.body);
+    const body = z
+      .object({ ativo: z.boolean().optional() })
+      .merge(exercicioSchema.partial())
+      .parse(request.body);
+
+    const { ativo, ...edicao } = body;
+    /* '' É LIMPAR, e não "não mexer". O `semVazios` do resto do arquivo
+       transforma vazio em ausente, que é o certo na CRIAÇÃO — mas aqui
+       apagaria a única forma de esvaziar um campo já preenchido. */
+    const campos = Object.fromEntries(
+      Object.entries(edicao).map(([k, v]) => [k, v === '' ? null : v]),
+    );
+
+    if (ativo === undefined && Object.keys(campos).length === 0) {
+      throw badRequest('Nada para alterar.');
+    }
 
     return inTenant(request, async (client, principal) => {
-      const ok = await alternarExercicio(client, id, ativo);
-      if (!ok) throw notFound('Exercício');
+      try {
+        if (Object.keys(campos).length > 0) {
+          const ok = await alterarExercicio(client, id, campos);
+          if (!ok) throw notFound('Exercício');
+        }
+        if (ativo !== undefined) {
+          const ok = await alternarExercicio(client, id, ativo);
+          if (!ok) throw notFound('Exercício');
+        }
+      } catch (erro) {
+        /* Renomear para um nome que já existe. Mesma mensagem da
+           criação, porque para quem está na tela é o mesmo problema. */
+        if ((erro as { code?: string }).code === '23505') {
+          throw conflict(`Já existe um exercício chamado "${String(campos['nome'])}".`);
+        }
+        throw erro;
+      }
 
       await writeAudit(client, principal.tenantId, {
         action: 'exercise.write',
@@ -258,7 +301,10 @@ export async function exercisesRoutes(app: FastifyInstance): Promise<void> {
         actorId: principal.userId,
         actorRole: principal.role,
         ip: request.ip,
-        metadata: { ativo },
+        metadata: {
+          ...(ativo === undefined ? {} : { ativo }),
+          ...(Object.keys(campos).length > 0 ? { campos: Object.keys(campos) } : {}),
+        },
       });
 
       return { ok: true };

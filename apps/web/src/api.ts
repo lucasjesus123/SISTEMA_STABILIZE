@@ -692,6 +692,32 @@ export const buscarExercicios = (busca?: string, grupo?: string) => {
   return api<{ data: Exercicio[] }>(`/api/exercises?${q.toString()}`);
 };
 
+/**
+ * Corrige um exercício do catálogo.
+ *
+ * ANTES SÓ DAVA PARA DESATIVAR. Quem escreveu o nome errado criava outro
+ * e desativava o antigo — e a busca de todo mundo ficava com dois nomes
+ * quase iguais. A correção alcança as prescrições antigas porque o item
+ * do treino guarda o id, não uma cópia do nome.
+ *
+ * String vazia é LIMPAR o campo; ausente é não mexer.
+ */
+export const alterarExercicio = (
+  id: string,
+  campos: {
+    nome?: string;
+    grupo?: string;
+    equipamento?: string;
+    instrucoes?: string;
+    video?: string;
+    ativo?: boolean;
+  },
+) =>
+  api<{ ok: true }>(`/api/exercises/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(campos),
+  });
+
 export const buscarTreinos = (alunoId: string) =>
   api<{ data: Omit<Treino, 'itens'>[] }>(`/api/students/${alunoId}/treinos`);
 
@@ -1235,6 +1261,36 @@ export const darBaixaEmLote = (lancamentoId: string, pagamentos: FormaDePagament
     `/api/finance/lancamentos/${lancamentoId}/pagamentos/lote`,
     { method: 'POST', body: JSON.stringify({ pagamentos }) },
   );
+
+/* --------------------------------------------------------------------
+ * AS BAIXAS JÁ REGISTRADAS, E COMO DESFAZER UMA
+ *
+ * O estorno existia na API e não existia no sistema: sem a lista, a tela
+ * nunca soube o `id` de um pagamento, e o botão não tinha o que chamar.
+ * ------------------------------------------------------------------ */
+
+export interface PagamentoRegistrado {
+  id: string;
+  valorCentavos: number;
+  acrescimoCentavos: number;
+  descontoCentavos: number;
+  /** Quanto este pagamento abateu da dívida — difere do valor quando
+   *  houve juros ou desconto. */
+  abatidoCentavos: number;
+  valorFormatado: string;
+  metodo: MetodoPagamento;
+  pagoEm: string;
+  referencia: string | null;
+  registradoPor: string | null;
+}
+
+export const listarPagamentos = (lancamentoId: string) =>
+  api<{ data: PagamentoRegistrado[] }>(
+    `/api/finance/lancamentos/${lancamentoId}/pagamentos`,
+  );
+
+export const estornarPagamento = (pagamentoId: string) =>
+  api<{ ok: true }>(`/api/finance/pagamentos/${pagamentoId}`, { method: 'DELETE' });
 
 /* ====================================================================
  * CADASTROS — equipe, espaços e contrato do aluno
@@ -2333,6 +2389,32 @@ export const baixarOcupacao = (de: Date, ate: Date) =>
 
 export const baixarInadimplencia = () =>
   baixarRelatorio('/api/relatorios/inadimplencia', 'inadimplencia.pdf');
+
+/* --------------------------------------------------------------------
+ * TRÊS PDFs QUE EXISTIAM E NÃO TINHAM BOTÃO
+ *
+ * Estavam prontos e timbrados na API desde o começo, e nenhuma tela os
+ * chamava: relação de alunos, financeiro do período e a frequência de um
+ * aluno. Não foram apagados porque não são código morto — são documentos
+ * que a academia pede, e o que faltava era o caminho até eles.
+ * ------------------------------------------------------------------ */
+
+/** A lista da academia em papel — a que se leva para a reunião. */
+export const baixarRelacaoDeAlunos = () =>
+  baixarRelatorio('/api/relatorios/alunos', 'alunos.pdf');
+
+/** O extrato do período em PDF timbrado. O CSV ao lado é para o contador
+ *  abrir na planilha; este é o que se assina e se arquiva. */
+export const baixarFinanceiroDoPeriodo = (de: Date, ate: Date) =>
+  baixarRelatorio(
+    `/api/relatorios/financeiro?de=${iso(de)}&ate=${iso(ate)}`,
+    `financeiro-${iso(de)}.pdf`,
+  );
+
+/** A frequência de UM aluno — o papel que se entrega a quem pergunta
+ *  quantas vezes veio, e o que o convênio costuma exigir. */
+export const baixarFrequenciaDoAluno = (alunoId: string, nome: string) =>
+  baixarRelatorio(`/api/relatorios/frequencia/${alunoId}`, `frequencia-${nome}.pdf`);
 
 /** O papel que vai junto com o pagamento do profissional. */
 export const baixarFechamentoDoProfissional = (profissionalId: string, mes: Date) => {

@@ -827,18 +827,27 @@ function Linha({
             <button type="button" className="botao-texto" onClick={aoEditar}>
               Editar
             </button>
-            {!quitado && (
-              <button type="button" className="fin-botao-baixa" onClick={aoAbrir}>
-                {aberta ? 'Fechar' : 'Dar baixa'}
-              </button>
-            )}
+            {/* A CONTA QUITADA TAMBÉM ABRE, e antes não abria.
+
+                O botão sumia assim que a conta era paga, e com ele sumia
+                o único caminho até as baixas — inclusive a que foi
+                lançada errada. Quem digitou um zero a mais ficava com o
+                erro no caixa para sempre, porque não havia tela nenhuma
+                que mostrasse o pagamento, muito menos que o desfizesse.
+
+                O rótulo muda com o que há para fazer ali dentro: em
+                aberto se dá baixa, quitada se confere o que entrou. */}
+            <button type="button" className="fin-botao-baixa" onClick={aoAbrir}>
+              {aberta ? 'Fechar' : quitado ? 'Baixas' : 'Dar baixa'}
+            </button>
           </span>
         </td>
       </tr>
       {aberta && (
         <tr className="fin-linha-baixa">
           <td colSpan={6} className="fin-baixa-celula">
-            <FormularioDeBaixa lancamento={l} aoBaixar={aoBaixar} />
+            {!quitado && <FormularioDeBaixa lancamento={l} aoBaixar={aoBaixar} />}
+            {l.pagoCentavos > 0 && <Baixas lancamento={l} aoEstornar={aoBaixar} />}
           </td>
         </tr>
       )}
@@ -1113,6 +1122,121 @@ function FormularioDeBaixa({
         </p>
       )}
     </form>
+  );
+}
+
+/**
+ * As baixas já registradas de um lançamento — e o estorno.
+ *
+ * POR QUE ISTO PRECISAVA EXISTIR: a rota que apaga um pagamento está na
+ * API desde o começo e nenhuma tela do sistema chegava até ela, porque
+ * nenhuma tela sabia o `id` de uma baixa. Na prática, um financeiro em
+ * que a recepção erra o valor e não tem como desfazer — o conserto saía
+ * do banco de dados, à mão.
+ *
+ * A CONFIRMAÇÃO É OBRIGATÓRIA e diz o valor. Estornar é apagar uma linha
+ * de caixa: o `confirm` do navegador é feio, mas é a única coisa que
+ * separa um clique errado de um buraco no fechamento do mês. O texto
+ * repete quanto e quando, porque é isso que a pessoa confere.
+ *
+ * DEPOIS DO ESTORNO A LISTA INTEIRA É RECARREGADA pelo pai, e não
+ * remendada aqui: o saldo e o status do lançamento são recalculados por
+ * um gatilho no banco, e a tela não tem como adivinhar o resultado sem
+ * perguntar.
+ */
+function Baixas({
+  lancamento: l,
+  aoEstornar,
+}: {
+  lancamento: api.Lancamento;
+  aoEstornar: () => void;
+}): ReactNode {
+  const [itens, setItens] = useState<api.PagamentoRegistrado[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [estornando, setEstornando] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    void (async () => {
+      try {
+        const r = await api.listarPagamentos(l.id);
+        if (!cancelado) setItens(r.data);
+      } catch {
+        if (!cancelado) setErro('Não foi possível carregar as baixas desta conta.');
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [l.id, l.pagoCentavos]);
+
+  const estornar = async (p: api.PagamentoRegistrado): Promise<void> => {
+    const quando = new Date(p.pagoEm).toLocaleDateString('pt-BR');
+    if (
+      !window.confirm(
+        `Estornar a baixa de ${p.valorFormatado} de ${quando}?\n\n` +
+          'O valor sai do caixa e a conta volta a dever. Não dá para desfazer o estorno.',
+      )
+    ) {
+      return;
+    }
+    setEstornando(p.id);
+    setErro(null);
+    try {
+      await api.estornarPagamento(p.id);
+      aoEstornar();
+    } catch (x) {
+      setErro(x instanceof api.ApiError ? x.message : 'Não foi possível estornar a baixa.');
+      setEstornando(null);
+    }
+  };
+
+  if (itens === null && erro === null) return <p className="fin-baixas-vazio">Carregando…</p>;
+
+  return (
+    <div className="fin-baixas">
+      <h4 className="fin-baixas-titulo">
+        {itens !== null && itens.length === 1 ? 'Baixa registrada' : 'Baixas registradas'}
+      </h4>
+
+      {erro !== null && (
+        <p className="mensagem-erro" role="alert">
+          {erro}
+        </p>
+      )}
+
+      {itens !== null && itens.length === 0 ? (
+        <p className="fin-baixas-vazio">Nenhuma baixa registrada nesta conta.</p>
+      ) : (
+        <ul className="fin-baixas-lista">
+          {(itens ?? []).map((p) => (
+            <li key={p.id} className="fin-baixa-item">
+              <span className="fin-baixa-item-valor dinheiro">{p.valorFormatado}</span>
+              <span className="fin-baixa-item-meta">
+                {new Date(p.pagoEm).toLocaleDateString('pt-BR')}
+                {' · '}
+                {METODOS.find((m) => m.valor === p.metodo)?.nome ?? p.metodo}
+                {/* JUROS E DESCONTO PRECISAM APARECER AQUI. Sem eles,
+                    uma baixa de R$ 110 numa conta de R$ 100 parece um
+                    superpagamento — e quem confere estorna a linha certa
+                    achando que é erro. */}
+                {p.acrescimoCentavos > 0 && ` · ${formatCents(p.acrescimoCentavos)} de juros/multa`}
+                {p.descontoCentavos > 0 && ` · ${formatCents(p.descontoCentavos)} de desconto`}
+                {p.registradoPor !== null && ` · por ${p.registradoPor}`}
+              </span>
+              <button
+                type="button"
+                className="botao-texto-perigo"
+                disabled={estornando !== null}
+                onClick={() => void estornar(p)}
+              >
+                {estornando === p.id ? 'Estornando…' : 'Estornar'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -3270,6 +3394,45 @@ function PapelTimbrado({ de, ate, mes }: { de: Date; ate: Date; mes: Date }): Re
               onClick={() => baixar('inadimplencia', () => api.baixarInadimplencia())}
             >
               {baixando === 'inadimplencia' ? 'Gerando…' : 'Baixar'}
+            </button>
+          </div>
+        </div>
+
+        {/* OS DOIS ABAIXO JÁ EXISTIAM PRONTOS NA API e não tinham botão
+            em tela nenhuma. Não eram código morto: são documentos que a
+            academia pede — o que faltava era o caminho até eles. */}
+        <div className="rel-pdf-item">
+          <h3>Extrato do período</h3>
+          <p>
+            Todo lançamento do período em PDF timbrado, com o que foi pago. O{' '}
+            <strong>CSV</strong> ao lado é para o contador abrir na planilha; este é o que se
+            arquiva.
+          </p>
+          <div className="rel-pdf-acoes">
+            <button
+              type="button"
+              className="botao-secundario"
+              disabled={baixando !== null}
+              onClick={() =>
+                baixar('extrato', () => api.baixarFinanceiroDoPeriodo(de, ate))
+              }
+            >
+              {baixando === 'extrato' ? 'Gerando…' : 'Baixar'}
+            </button>
+          </div>
+        </div>
+
+        <div className="rel-pdf-item">
+          <h3>Relação de alunos</h3>
+          <p>A lista da academia em papel, com situação, WhatsApp e nascimento.</p>
+          <div className="rel-pdf-acoes">
+            <button
+              type="button"
+              className="botao-secundario"
+              disabled={baixando !== null}
+              onClick={() => baixar('alunos', () => api.baixarRelacaoDeAlunos())}
+            >
+              {baixando === 'alunos' ? 'Gerando…' : 'Baixar'}
             </button>
           </div>
         </div>

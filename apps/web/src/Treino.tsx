@@ -40,6 +40,11 @@ const GRUPOS: { valor: string; rotulo: string }[] = [
   { valor: 'OMBRO', rotulo: 'Ombro' },
   { valor: 'BICEPS', rotulo: 'Bíceps' },
   { valor: 'TRICEPS', rotulo: 'Tríceps' },
+  /* ANTEBRACO EXISTE NO BANCO e faltava aqui. O `enum` do PostgreSQL o
+     aceita e a API o valida: um exercício de antebraço criado por outro
+     caminho não aparecia em filtro nenhum e saía rotulado "antebraco",
+     sem acento, pelo `rotuloGrupo`. */
+  { valor: 'ANTEBRACO', rotulo: 'Antebraço' },
   { valor: 'ABDOMEN', rotulo: 'Abdômen' },
   { valor: 'LOMBAR', rotulo: 'Lombar' },
   { valor: 'GLUTEO', rotulo: 'Glúteo' },
@@ -57,9 +62,16 @@ const rotuloGrupo = (v: string): string =>
 export function AbaTreino({
   alunoId,
   podeEscrever,
+  podeCatalogo,
 }: {
   alunoId: string;
   podeEscrever: boolean;
+  /* MEXER NO CATÁLOGO É OUTRA PERMISSÃO, e não a de prescrever.
+     Escrever um treino para o próprio aluno é rotina do professor;
+     corrigir o nome de um exercício muda o vocabulário de toda a
+     academia, e é de quem administra. Sem esta separação a tela
+     ofereceria um botão que o servidor recusa. */
+  podeCatalogo: boolean;
 }): ReactNode {
   const [lista, setLista] = useState<Omit<Treino, 'itens'>[]>([]);
   const [aberto, setAberto] = useState<Treino | null>(null);
@@ -234,6 +246,7 @@ export function AbaTreino({
           alunoId={alunoId}
           treino={aberto}
           podeEscrever={podeEscrever}
+          podeCatalogo={podeCatalogo}
           aoMudar={() => void recarregarAberto()}
           aoPublicar={() => void publicar()}
           aoNovo={criando ? null : () => setCriando(true)}
@@ -331,6 +344,7 @@ function DetalheTreino({
   alunoId,
   treino,
   podeEscrever,
+  podeCatalogo,
   aoMudar,
   aoPublicar,
   aoNovo,
@@ -338,6 +352,7 @@ function DetalheTreino({
   alunoId: string;
   treino: Treino;
   podeEscrever: boolean;
+  podeCatalogo: boolean;
   aoMudar: () => void;
   aoPublicar: () => void;
   aoNovo: (() => void) | null;
@@ -449,6 +464,7 @@ function DetalheTreino({
               <SeletorExercicio
                 alunoId={alunoId}
                 treinoId={treino.id}
+                podeCatalogo={podeCatalogo}
                 dia={bloco.dia}
                 proximaPosicao={bloco.itens.length}
                 aoFechar={() => setAdicionandoEm(null)}
@@ -468,7 +484,14 @@ function DetalheTreino({
             ))}
         </div>
       ))}
-      {podeEscrever && <NovoDia alunoId={alunoId} treinoId={treino.id} aoAdicionar={aoMudar} />}
+      {podeEscrever && (
+        <NovoDia
+          alunoId={alunoId}
+          treinoId={treino.id}
+          podeCatalogo={podeCatalogo}
+          aoAdicionar={aoMudar}
+        />
+      )}
       </div>
     </>
   );
@@ -486,10 +509,12 @@ const DIAS_DA_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sába
 function NovoDia({
   alunoId,
   treinoId,
+  podeCatalogo,
   aoAdicionar,
 }: {
   alunoId: string;
   treinoId: string;
+  podeCatalogo: boolean;
   aoAdicionar: () => void;
 }): ReactNode {
   const [abrindo, setAbrindo] = useState(false);
@@ -538,6 +563,7 @@ function NovoDia({
         <SeletorExercicio
           alunoId={alunoId}
           treinoId={treinoId}
+          podeCatalogo={podeCatalogo}
           dia={nome.trim()}
           proximaPosicao={0}
           aoFechar={() => {
@@ -560,6 +586,7 @@ function NovoDia({
 function SeletorExercicio({
   alunoId,
   treinoId,
+  podeCatalogo,
   dia,
   proximaPosicao,
   aoFechar,
@@ -567,6 +594,7 @@ function SeletorExercicio({
 }: {
   alunoId: string;
   treinoId: string;
+  podeCatalogo: boolean;
   dia: string;
   proximaPosicao: number;
   aoFechar: () => void;
@@ -576,6 +604,7 @@ function SeletorExercicio({
   const [grupo, setGrupo] = useState('');
   const [opcoes, setOpcoes] = useState<Exercicio[]>([]);
   const [escolhido, setEscolhido] = useState<Exercicio | null>(null);
+  const [editando, setEditando] = useState(false);
   /* Um contador que sobe a cada envio. Sem ele a `<FotoDoExercicio>`
      mantém o blob antigo em cache e a pessoa envia a imagem certa,
      recebe 201 e continua vendo a errada — o que se lê como "não
@@ -688,15 +717,30 @@ function SeletorExercicio({
       ) : (
         <>
           <div className="seletor-escolhido">
-            <QuadroDaFoto exercicio={escolhido} aoEnviar={aoTrocarFoto} versao={versaoDaFoto} />
+            <QuadroDaFoto
+              exercicio={escolhido}
+              podeEnviar={podeCatalogo}
+              aoEnviar={aoTrocarFoto}
+              versao={versaoDaFoto}
+            />
             <div className="seletor-escolhido-texto">
               <p className="seletor-escolhido-nome">
                 <strong>{escolhido.nome}</strong>
                 <button type="button" className="botao-texto" onClick={() => setEscolhido(null)}>
                   trocar
                 </button>
+                {/* CORRIGIR FICA ONDE O ERRO É VISTO. É aqui, montando o
+                    treino, que alguém lê "Remada curvda" — mandar essa
+                    pessoa procurar uma tela de biblioteca é o que faz o
+                    erro ficar no catálogo para sempre. Mesmo raciocínio
+                    do envio da foto, logo abaixo. */}
+                {podeCatalogo && !editando && (
+                  <button type="button" className="botao-texto" onClick={() => setEditando(true)}>
+                    corrigir
+                  </button>
+                )}
               </p>
-              {escolhido.instrucoes !== null && (
+              {!editando && escolhido.instrucoes !== null && (
                 <p className="seletor-instrucao">{escolhido.instrucoes}</p>
               )}
               {/* O ENVIO DA FOTO FICA AQUI, e não numa tela de
@@ -707,6 +751,29 @@ function SeletorExercicio({
                   nenhuma para sempre. */}
             </div>
           </div>
+
+          {/* O FORMULÁRIO FICA FORA DA COLUNA DE TEXTO, e não ao lado da
+              foto. Naquele espaço — pouco mais de uma dúzia de
+              caracteres — "Grupo muscular" e "Equipamento" lado a lado
+              viram duas colunas ilegíveis. Aqui ele tem a largura do
+              seletor inteiro, que é a mesma dos campos de prescrição
+              logo abaixo. */}
+          {editando && (
+            <CorrigirExercicio
+              exercicio={escolhido}
+              aoFechar={() => setEditando(false)}
+              aoSalvar={(atualizado) => {
+                setEditando(false);
+                setEscolhido(atualizado);
+                /* A LISTA TAMBÉM PRECISA MUDAR: quem corrigir o nome e
+                   clicar em "trocar" veria o nome antigo de volta, e
+                   concluiria que não salvou. */
+                setOpcoes((atual) =>
+                  atual.map((x) => (x.id === atualizado.id ? atualizado : x)),
+                );
+              }}
+            />
+          )}
 
           <div className="formulario seletor-prescricao">
             <label className="campo campo-terco">
@@ -754,6 +821,146 @@ function SeletorExercicio({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Corrigir um exercício do catálogo.
+ *
+ * POR QUE ISTO FALTAVA DOER: o catálogo só sabia nascer, ganhar foto e
+ * ser desativado. Quem digitou "Remada curvda" criava outro exercício e
+ * desativava o errado — e a busca de todos os professores ficava com
+ * dois nomes quase iguais, um deles invisível mas ainda prescrito nos
+ * treinos antigos.
+ *
+ * A CORREÇÃO VALE PARA TRÁS, e é o comportamento certo: a prescrição
+ * guarda o id do movimento, não uma cópia do nome. O treino de março
+ * passa a mostrar a grafia certa porque é o mesmo exercício — o erro
+ * estava na etiqueta, não no que foi prescrito.
+ *
+ * SÓ MANDA O QUE MUDOU. Reenviar todos os campos faria uma correção de
+ * grafia sobrescrever um vídeo que outra pessoa acabou de cadastrar.
+ */
+function CorrigirExercicio({
+  exercicio: e,
+  aoFechar,
+  aoSalvar,
+}: {
+  exercicio: Exercicio;
+  aoFechar: () => void;
+  aoSalvar: (atualizado: Exercicio) => void;
+}): ReactNode {
+  const [nome, setNome] = useState(e.nome);
+  const [grupo, setGrupo] = useState(e.grupo);
+  const [equipamento, setEquipamento] = useState(e.equipamento ?? '');
+  const [instrucoes, setInstrucoes] = useState(e.instrucoes ?? '');
+  const [video, setVideo] = useState(e.video ?? '');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const salvar = async (): Promise<void> => {
+    if (nome.trim().length < 2) {
+      setErro('O nome precisa ter ao menos duas letras.');
+      return;
+    }
+    setSalvando(true);
+    setErro(null);
+
+    /* String vazia é LIMPAR o campo no servidor; ausente é não mexer. É
+       por isso que a comparação é com o valor que veio, e não com ''. */
+    const campos: Parameters<typeof api.alterarExercicio>[1] = {};
+    if (nome.trim() !== e.nome) campos.nome = nome.trim();
+    if (grupo !== e.grupo) campos.grupo = grupo;
+    if (equipamento.trim() !== (e.equipamento ?? '')) campos.equipamento = equipamento.trim();
+    if (instrucoes.trim() !== (e.instrucoes ?? '')) campos.instrucoes = instrucoes.trim();
+    if (video.trim() !== (e.video ?? '')) campos.video = video.trim();
+
+    if (Object.keys(campos).length === 0) {
+      aoFechar();
+      return;
+    }
+
+    try {
+      await api.alterarExercicio(e.id, campos);
+      aoSalvar({
+        ...e,
+        nome: nome.trim(),
+        grupo,
+        equipamento: equipamento.trim() === '' ? null : equipamento.trim(),
+        instrucoes: instrucoes.trim() === '' ? null : instrucoes.trim(),
+        video: video.trim() === '' ? null : video.trim(),
+      });
+    } catch (x) {
+      setErro(x instanceof ApiError ? x.message : 'Não foi possível salvar a correção.');
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="formulario seletor-corrigir">
+      {erro !== null && (
+        <p className="mensagem-erro campo-cheia" role="alert">
+          {erro}
+        </p>
+      )}
+      <label className="campo campo-cheia">
+        <span className="campo-rotulo">Nome</span>
+        <input value={nome} autoFocus onChange={(x) => setNome(x.target.value)} />
+      </label>
+      <label className="campo campo-meia">
+        <span className="campo-rotulo">Grupo muscular</span>
+        <select value={grupo} onChange={(x) => setGrupo(x.target.value)}>
+          {/* O "Todos" do filtro não é um grupo — ele filtra, não
+              classifica, e ofereceria salvar um exercício sem grupo. */}
+          {GRUPOS.filter((g) => g.valor !== '').map((g) => (
+            <option key={g.valor} value={g.valor}>
+              {g.rotulo}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="campo campo-meia">
+        <span className="campo-rotulo">Equipamento</span>
+        <input
+          value={equipamento}
+          placeholder="opcional"
+          onChange={(x) => setEquipamento(x.target.value)}
+        />
+      </label>
+      <label className="campo campo-cheia">
+        <span className="campo-rotulo">Instruções</span>
+        <textarea
+          value={instrucoes}
+          rows={3}
+          placeholder="Como executar o movimento"
+          onChange={(x) => setInstrucoes(x.target.value)}
+        />
+      </label>
+      <label className="campo campo-cheia">
+        <span className="campo-rotulo">Vídeo</span>
+        <input
+          value={video}
+          placeholder="https://…"
+          onChange={(x) => setVideo(x.target.value)}
+        />
+      </label>
+      <div className="formulario-acoes campo-cheia">
+        <button type="button" className="botao-secundario" onClick={aoFechar}>
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="botao-acao"
+          disabled={salvando}
+          onClick={() => void salvar()}
+        >
+          {salvando ? 'Salvando…' : 'Salvar correção'}
+        </button>
+      </div>
+      <p className="seletor-corrigir-nota campo-cheia">
+        A correção vale para os treinos já prescritos — é o mesmo exercício, com a etiqueta certa.
+      </p>
     </div>
   );
 }
@@ -852,10 +1059,15 @@ function FotoDoExercicio({
  */
 function QuadroDaFoto({
   exercicio,
+  podeEnviar,
   aoEnviar,
   versao = 0,
 }: {
   exercicio: Exercicio;
+  /* ENVIAR FOTO É MEXER NO CATÁLOGO — `exercise:write`, que o professor
+     não tem. A tela oferecia o envio a todo mundo e o servidor recusava:
+     quem prescreve treino via um botão que só sabia dar erro. */
+  podeEnviar: boolean;
   aoEnviar: () => void;
   versao?: number;
 }): ReactNode {
@@ -905,19 +1117,28 @@ function QuadroDaFoto({
           <FotoDoExercicio exercicio={exercicio} tamanho="grande" versao={versao} />
           <p className="ex-quadro-pe">
             <span>{rotuloGrupo(exercicio.grupo)}</span>
-            <label className="botao-texto">
-              {enviando ? 'Enviando…' : 'Trocar imagem'}
-              {campo}
-            </label>
+            {podeEnviar && (
+              <label className="botao-texto">
+                {enviando ? 'Enviando…' : 'Trocar imagem'}
+                {campo}
+              </label>
+            )}
           </p>
         </>
-      ) : (
+      ) : podeEnviar ? (
         <label className="ex-solta">
           <IconeImagem />
           <strong>{enviando ? 'Enviando…' : 'Adicionar imagem'}</strong>
           <span>JPG, PNG ou WEBP</span>
           {campo}
         </label>
+      ) : (
+        /* Sem foto e sem permissão para pôr uma: o vazio precisa ser
+           legível e não um convite que termina em erro. */
+        <div className="ex-solta ex-solta-inerte">
+          <IconeImagem />
+          <span>{rotuloGrupo(exercicio.grupo)}</span>
+        </div>
       )}
       {erro !== null && (
         <p className="mensagem-erro" role="alert">

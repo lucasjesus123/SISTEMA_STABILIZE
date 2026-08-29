@@ -204,6 +204,67 @@ export async function alternarExercicio(
   return (rowCount ?? 0) > 0;
 }
 
+/**
+ * Corrige um exercício do catálogo.
+ *
+ * FALTAVA, e o que faltava não era um botão. O catálogo só sabia nascer,
+ * ganhar foto e ser desativado: quem escreveu "Remada curvda" ou deixou
+ * as instruções pela metade não tinha conserto — criava outro e
+ * desativava o errado, deixando dois nomes quase iguais na busca de todo
+ * mundo para sempre.
+ *
+ * A CORREÇÃO ALCANÇA AS PRESCRIÇÕES ANTIGAS, e isso é o certo aqui. O
+ * item do treino guarda o `exercise_id`, não uma cópia do nome: corrigir
+ * a grafia conserta o treino de março junto, porque é o mesmo movimento
+ * — o erro estava na etiqueta, não no que foi prescrito. É diferente de
+ * apagar, que a FK recusa (ver `alternarExercicio`).
+ *
+ * O GRUPO MUSCULAR ENTRA na edição: errar "PEITO" por "COSTAS" some com
+ * o exercício do filtro que todo mundo usa para achá-lo.
+ */
+export interface EdicaoExercicio {
+  nome?: string | undefined;
+  grupo?: GrupoMuscular | undefined;
+  /* `null` é uma limpeza pedida; ausente é "não mexer". Os dois estados
+     precisam ser distinguíveis, e por isso o tipo não é
+     `Partial<DadosExercicio>`. */
+  equipamento?: string | null | undefined;
+  instrucoes?: string | null | undefined;
+  video?: string | null | undefined;
+}
+
+export async function alterarExercicio(
+  client: TenantClient,
+  exercicioId: string,
+  dados: EdicaoExercicio,
+): Promise<boolean> {
+  const campos: string[] = [];
+  const valores: unknown[] = [exercicioId];
+
+  const juntar = (coluna: string, valor: unknown, cast = ''): void => {
+    valores.push(valor);
+    campos.push(`${coluna} = $${valores.length}${cast}`);
+  };
+
+  if (dados.nome !== undefined) juntar('name', dados.nome);
+  if (dados.grupo !== undefined) juntar('muscle_group', dados.grupo, '::muscle_group');
+  /* CAMPO EM BRANCO VIRA NULL, e não fica de fora. A rota já converteu
+     '' para `undefined` no que é "não mexer"; o que chega aqui como
+     `null` é uma limpeza deliberada — quem apagou o equipamento quer o
+     campo vazio, não o valor anterior de volta. */
+  if (dados.equipamento !== undefined) juntar('equipment', dados.equipamento ?? null);
+  if (dados.instrucoes !== undefined) juntar('instructions', dados.instrucoes ?? null);
+  if (dados.video !== undefined) juntar('video_url', dados.video ?? null);
+
+  if (campos.length === 0) return true;
+
+  const { rowCount } = await client.query(
+    `UPDATE exercises SET ${campos.join(', ')} WHERE id = $1`,
+    valores,
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 /* ====================================================================
  * Prescrição
  * ================================================================== */

@@ -23,7 +23,7 @@ import {
   type ResumoFinanceiro,
 } from './api.js';
 import { Carregando, Erro, GraficoLinha, Indicador, Vazio, reais, type Ponto } from './ui.jsx';
-import { baixarRelatorio } from './api.js';
+import { baixarFrequenciaDoAluno, baixarRelatorio } from './api.js';
 import { Marca } from './Marca.jsx';
 import { AbaAnamnese, AbaAnexos, AbaEvolucao } from './Prontuario.jsx';
 import { AbaTreino } from './Treino.jsx';
@@ -1449,6 +1449,20 @@ function Ficha({
               Progresso em PDF
             </button>
           )}
+          {/* A FREQUÊNCIA É UM TERCEIRO DOCUMENTO, e existia na API sem
+              botão em lugar nenhum. É o papel que se entrega a quem
+              pergunta quantas vezes o aluno veio — e o que convênio e
+              empresa costumam exigir. Depende de `attendance:read`
+              porque é a lista de presenças, não o cadastro. */}
+          {pode('attendance:read') && (
+            <button
+              type="button"
+              className="botao-secundario"
+              onClick={() => void baixarFrequenciaDoAluno(f.id, f.nome)}
+            >
+              Frequência em PDF
+            </button>
+          )}
           <button type="button" className="botao-acao" onClick={aoEditar}>
             Editar
           </button>
@@ -1549,7 +1563,11 @@ function Ficha({
         <AbaMedidas alunoId={f.id} podeEscrever={pode('evolution:write')} />
       )}
       {secao === 'treino' && (
-        <AbaTreino alunoId={f.id} podeEscrever={pode('workout:write')} />
+        <AbaTreino
+          alunoId={f.id}
+          podeEscrever={pode('workout:write')}
+          podeCatalogo={pode('exercise:write')}
+        />
       )}
       {secao === 'anexos' && (
         <AbaAnexos

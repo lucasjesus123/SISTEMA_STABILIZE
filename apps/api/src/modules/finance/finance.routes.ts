@@ -22,6 +22,7 @@ import {
   criarLancamento,
   excluirContaFixa,
   estornarPagamento,
+  listarPagamentos,
   fluxoPorMes,
   inadimplentes,
   listarContasFixas,
@@ -477,6 +478,44 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  /* ------------------------------------------------------------------
+   * AS BAIXAS DE UM LANÇAMENTO
+   *
+   * A LEITURA EXISTE POR CAUSA DO ESTORNO. Sem ela a tela não tem como
+   * saber o `id` de um pagamento, e sem o `id` a rota de estornar logo
+   * abaixo era inalcançável: existia na API desde o começo e nenhum
+   * botão do sistema chegava até ela. Quem errou o valor no balcão
+   * ficava com o erro no caixa para sempre.
+   *
+   * PERMISSÃO DE LEITURA DE RECEBÍVEL, e não de escrita: conferir as
+   * baixas de uma conta é parte de olhar a conta. Quem só olha o
+   * financeiro pode ver o que entrou; estornar é outra permissão.
+   * ---------------------------------------------------------------- */
+  app.get(
+    '/lancamentos/:id/pagamentos',
+    { preHandler: [app.authorize('finance:receivable:read')] },
+    async (request) => {
+      const { id } = z.object({ id: idSchema }).parse(request.params);
+
+      return inTenant(request, async (client) => {
+        const itens = await listarPagamentos(client, id);
+        return {
+          data: itens.map((p) => ({
+            ...p,
+            pagoEm: p.pagoEm.toISOString(),
+            valorFormatado: formatCents(p.valorCentavos),
+            /* O QUE ABATEU A DÍVIDA, que não é o que entrou no caixa
+               quando houve juros ou desconto. É a mesma conta da
+               migração 036, e é a que explica por que uma conta de
+               R$ 100 continua devendo R$ 10 depois de uma baixa de
+               R$ 100 com R$ 10 de multa. */
+            abatidoCentavos: p.valorCentavos - p.acrescimoCentavos + p.descontoCentavos,
+          })),
+        };
+      });
+    },
+  );
+
   app.delete(
     '/pagamentos/:id',
     { preHandler: [app.authorize('finance:payment:write')] },
@@ -484,8 +523,8 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
       const { id } = z.object({ id: idSchema }).parse(request.params);
 
       return inTenant(request, async (client, principal) => {
-        const ok = await estornarPagamento(client, id);
-        if (!ok) throw notFound('Pagamento');
+        const apagado = await estornarPagamento(client, id);
+        if (apagado === null) throw notFound('Pagamento');
 
         await writeAudit(client, principal.tenantId, {
           action: 'finance.payment.delete',
@@ -494,6 +533,15 @@ export async function financeRoutes(app: FastifyInstance): Promise<void> {
           actorId: principal.userId,
           actorRole: principal.role,
           ip: request.ip,
+          /* O QUE FOI APAGADO ENTRA NO LOG. Depois deste DELETE a linha
+             não existe mais: este registro é a única prova de que
+             aquele dinheiro um dia foi lançado, e de qual conta ele
+             saiu. */
+          metadata: {
+            lancamentoId: apagado.entryId,
+            valorCentavos: apagado.valorCentavos,
+            metodo: apagado.metodo,
+          },
         });
 
         return { ok: true };

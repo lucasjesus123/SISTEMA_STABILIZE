@@ -211,13 +211,90 @@ export async function registrarPagamento(
   return r.rows[0]!;
 }
 
-/** Estorna uma baixa. O gatilho recalcula o saldo para trás. */
+export interface PagamentoRegistrado {
+  id: string;
+  valorCentavos: number;
+  acrescimoCentavos: number;
+  descontoCentavos: number;
+  metodo: string;
+  pagoEm: Date;
+  referencia: string | null;
+  registradoPor: string | null;
+}
+
+/**
+ * As baixas de um lançamento, da mais recente para a mais antiga.
+ *
+ * ISTO FALTAVA, e a falta não era de uma lista: era do ESTORNO. A rota
+ * que apaga um pagamento existe desde sempre e nenhuma tela a alcançava,
+ * porque nenhuma tela tinha como saber o `id` da baixa. Quem digitou o
+ * valor errado no balcão ficava com o erro no caixa para sempre.
+ *
+ * QUEM REGISTROU ENTRA NA LISTA porque é a primeira pergunta de quem
+ * encontra uma baixa estranha — e a resposta não deveria exigir abrir a
+ * auditoria.
+ */
+export async function listarPagamentos(
+  client: TenantClient,
+  entryId: string,
+): Promise<PagamentoRegistrado[]> {
+  const { rows } = await client.query<{
+    id: string;
+    amount_cents: string;
+    acrescimo_cents: string;
+    desconto_cents: string;
+    method: string;
+    paid_at: Date;
+    reference: string | null;
+    quem: string | null;
+  }>(
+    `SELECT p.id, p.amount_cents, p.acrescimo_cents, p.desconto_cents,
+            p.method::text AS method, p.paid_at, p.reference,
+            u.full_name AS quem
+       FROM finance_payments p
+       LEFT JOIN users u ON u.id = p.recorded_by
+      WHERE p.entry_id = $1
+      ORDER BY p.paid_at DESC, p.id DESC`,
+    [entryId],
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    valorCentavos: Number(r.amount_cents),
+    acrescimoCentavos: Number(r.acrescimo_cents),
+    descontoCentavos: Number(r.desconto_cents),
+    metodo: r.method,
+    pagoEm: r.paid_at,
+    referencia: r.reference,
+    registradoPor: r.quem,
+  }));
+}
+
+/**
+ * Estorna uma baixa. O gatilho recalcula o saldo para trás.
+ *
+ * DEVOLVE O QUE APAGOU, e não um `true`. Depois deste DELETE a linha não
+ * existe mais em lugar nenhum: a auditoria é o ÚNICO registro de que
+ * aquele dinheiro um dia entrou. Um log que diz apenas "estornou o
+ * pagamento tal" não responde a pergunta que se faz seis meses depois —
+ * de quanto era e de qual conta saiu.
+ */
 export async function estornarPagamento(
   client: TenantClient,
   paymentId: string,
-): Promise<boolean> {
-  const r = await client.query('DELETE FROM finance_payments WHERE id = $1', [paymentId]);
-  return (r.rowCount ?? 0) > 0;
+): Promise<{ entryId: string; valorCentavos: number; metodo: string } | null> {
+  const r = await client.query<{ entry_id: string; amount_cents: string; method: string }>(
+    `DELETE FROM finance_payments WHERE id = $1
+      RETURNING entry_id, amount_cents, method::text AS method`,
+    [paymentId],
+  );
+  const linha = r.rows[0];
+  if (linha === undefined) return null;
+  return {
+    entryId: linha.entry_id,
+    valorCentavos: Number(linha.amount_cents),
+    metodo: linha.method,
+  };
 }
 
 /* --------------------------------------------------------------------

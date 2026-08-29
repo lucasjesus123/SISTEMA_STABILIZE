@@ -1936,6 +1936,41 @@
   border-left: 2px solid var(--fio-forte);
   padding-left: var(--e-3);
 }
+
+/* ---- corrigir o exercício do catálogo ------------------------------ */
+
+/* Fica DENTRO do seletor, no lugar das instruções: a correção acontece
+   no instante em que se lê o nome errado montando o treino. */
+.seletor-corrigir {
+  margin-bottom: var(--e-4);
+  padding: var(--e-4);
+  border-radius: var(--raio-md);
+  background: var(--superficie-baixa);
+}
+.seletor-corrigir textarea {
+  resize: vertical;
+}
+.seletor-corrigir-nota {
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--texto-apoio);
+}
+
+/* Sem permissão para pôr imagem, o quadro vazio deixa de ser um convite
+   e vira só a etiqueta do grupo — nada de tracejado nem de cursor de
+   clique, que prometeriam uma ação que não existe para quem lê. */
+.ex-solta-inerte {
+  border-style: solid;
+  border-color: var(--fio);
+  cursor: default;
+  font-size: var(--t-sm);
+}
+.ex-solta-inerte:hover,
+.ex-solta-inerte:focus-within {
+  border-color: var(--fio);
+  background: var(--superficie-baixa);
+  color: var(--texto-apoio);
+}
 .seletor-prescricao { margin-top: var(--e-3); }
 
 @media (max-width: 700px) {
@@ -2387,6 +2422,99 @@
   color: var(--texto-apoio);
   font-variant-numeric: tabular-nums;
 }
+/* ---- as baixas já registradas, e o estorno -------------------------- */
+
+/* A LISTA VEM DEPOIS DO FORMULÁRIO e é visualmente mais quieta: dar
+   baixa é a ação da tela, conferir o que já entrou é conferência. */
+.fin-baixas {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-5);
+  border-top: 1px solid var(--fio);
+}
+.fin-baixa-celula > .fin-baixas:only-child {
+  border-top: 0;
+}
+.fin-baixas-titulo {
+  margin: 0;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-apoio);
+}
+.fin-baixas-vazio {
+  margin: 0;
+  padding: var(--e-5);
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+.fin-baixas-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--e-1);
+}
+.fin-baixa-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e-2);
+  flex-wrap: wrap;
+}
+.fin-baixa-item-valor {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* Empurra o "Estornar" para a direita, longe do valor: a distância é o
+   que impede o clique de reflexo numa lista de várias baixas. */
+.fin-baixa-item-meta {
+  flex: 1 1 12rem;
+  font-size: var(--t-sm);
+  color: var(--texto-apoio);
+}
+
+/* ---------------------------------------------------------------------
+   O PAINEL DA BAIXA NO CELULAR — medido em 390px
+
+   A tabela do financeiro rola de lado dentro de `.rolo`: 591px de
+   conteúdo numa janela de 324. Para chegar em "Baixas" a pessoa rola
+   até a direita — e o painel que abre mora numa célula de 591px de
+   largura, então o VALOR da baixa fica lá atrás, fora da vista. Sobrava
+   "· por Lucas Jesus   Estornar": o botão de apagar dinheiro sem dizer
+   qual dinheiro.
+
+   `position: sticky` com `left: 0` prende o painel à borda esquerda da
+   JANELA de rolagem, e não à célula. Role para onde rolar, ele
+   acompanha e aparece inteiro. `width: max-content` é o par necessário:
+   sem ele o painel herda os 591px da célula e a régua volta.
+   ------------------------------------------------------------------ */
+@media (max-width: 60rem) {
+  .fin-baixas,
+  .fin-baixa {
+    position: sticky;
+    left: 0;
+    width: max-content;
+    max-width: 100%;
+  }
+  /* Empilhado: valor, depois a linha de contexto, depois o botão. Em
+     uma coluna estreita a linha única espremia a data contra o
+     "Estornar". */
+  .fin-baixa-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: var(--e-2);
+    border-bottom: 1px solid var(--fio);
+  }
+  .fin-baixa-item:last-child {
+    border-bottom: 0;
+  }
+  .fin-baixa-item-meta {
+    flex: none;
+  }
+}
+
 .fin-baixa-campos {
   display: flex;
   align-items: flex-end;
